@@ -148,6 +148,7 @@ interface Props {
   recipe?: Recipe;
   recipeId: string;
   recipeScale?: number;
+  redirectOnDelete?: boolean;
 }
 const props = withDefaults(defineProps<Props>(), {
   useItems: () => ({
@@ -170,6 +171,7 @@ const props = withDefaults(defineProps<Props>(), {
   menuIcon: null,
   recipe: undefined,
   recipeScale: 1,
+  redirectOnDelete: true,
 });
 
 const emit = defineEmits<{
@@ -227,7 +229,7 @@ const defaultItems: { [key: string]: ContextMenuItem } = {
   delete: {
     title: i18n.t("general.delete"),
     icon: $globals.icons.delete,
-    color: undefined,
+    color: "error",
     event: "delete",
     isPublic: false,
   },
@@ -295,14 +297,23 @@ const recipeRefWithScale = computed(() =>
 );
 const isAdminAndNotOwner = computed(() => {
   return (
-    auth.user.value?.admin
+    !!recipeRef.value
+    && auth.user.value?.admin
     && auth.user.value?.id !== recipeRef.value?.userId
   );
 });
 const canDelete = computed(() => {
   const user = auth.user.value;
   const recipe = recipeRef.value;
-  return user && recipe && (user.admin || user.id === recipe.userId);
+  if (!user) {
+    return false;
+  }
+
+  if (!recipe) {
+    return isOwnGroup.value;
+  }
+
+  return user.admin || user.id === recipe.userId;
 });
 
 // Get Default Menu Items Specified in Props
@@ -350,11 +361,19 @@ async function executeRecipeAction(action: GroupRecipeActionOut) {
 }
 
 async function deleteRecipe() {
-  const { data } = await api.recipes.deleteOne(props.slug);
-  if (data?.slug) {
-    router.push(`/g/${groupSlug.value}`);
+  const { data, error } = await api.recipes.deleteOne(props.slug);
+  if (error) {
+    alert.error(i18n.t("recipe.unable-to-delete-recipe") as string);
+    return;
   }
-  emit("deleted", props.slug);
+
+  if (data?.slug) {
+    alert.success(i18n.t("events.recipe-deleted") as string);
+    emit("deleted", props.slug);
+    if (props.redirectOnDelete) {
+      router.push(`/g/${groupSlug.value}`);
+    }
+  }
 }
 
 const download = useDownloader();

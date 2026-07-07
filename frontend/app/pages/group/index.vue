@@ -109,6 +109,22 @@ async function handleAISettingsSubmit() {
 
 const { createOne, updateOne, deleteOne } = useAIProviders();
 
+function providerErrorMessage(error: unknown, fallback: string) {
+  const responseData = (error as { response?: { data?: { detail?: unknown } } })?.response?.data;
+  const detail = responseData?.detail;
+
+  if (typeof detail === "string") {
+    return detail;
+  }
+
+  if (detail && typeof detail === "object") {
+    const detailObject = detail as { message?: string; exception?: string };
+    return detailObject.exception || detailObject.message || fallback;
+  }
+
+  return fallback;
+}
+
 async function handleCreateProvider(data: AIProviderCreate) {
   const result = await createOne(data);
   if (result.data) {
@@ -116,7 +132,7 @@ async function handleCreateProvider(data: AIProviderCreate) {
     alert.success(i18n.t("group.ai-provider-settings.provider-created"));
   }
   else {
-    alert.error(i18n.t("group.ai-provider-settings.provider-create-failed"));
+    alert.error(providerErrorMessage(result.error, i18n.t("group.ai-provider-settings.provider-create-failed")));
   }
 }
 
@@ -127,7 +143,7 @@ async function handleUpdateProvider(id: string, data: AIProviderUpdate) {
     alert.success(i18n.t("group.ai-provider-settings.provider-updated"));
   }
   else {
-    alert.error(i18n.t("group.ai-provider-settings.provider-update-failed"));
+    alert.error(providerErrorMessage(result.error, i18n.t("group.ai-provider-settings.provider-update-failed")));
   }
 }
 

@@ -40,7 +40,7 @@
                     style="margin-top: -2px"
                     icon
                     size="small"
-                    @click="bulkUrls.splice(idx, 1)"
+                    @click="removeBulkUrl(idx)"
                   >
                     <v-icon>
                       {{ $globals.icons.delete }}
@@ -48,6 +48,15 @@
                   </v-btn>
                 </template>
               </v-text-field>
+            </v-col>
+            <v-col
+              cols="12"
+              class="pt-0 pb-2"
+            >
+              <RecipeVideoAssetUpload
+                v-model="bulkVideos[idx]"
+                :disabled="lockBulkImport"
+              />
             </v-col>
             <template v-if="state.showCatTags">
               <v-col
@@ -96,10 +105,7 @@
             <BaseButton
               class="mt-1 pr-4"
               delete
-              @click="
-                bulkUrls = [];
-                lockBulkImport = false;
-              "
+              @click="clearBulkUrls"
             >
               {{ $t('general.clear') }}
             </BaseButton>
@@ -107,7 +113,7 @@
             <BaseButton
               class="mr-1 mb-1"
               color="info"
-              @click="bulkUrls.push({ url: '', categories: [], tags: [] })"
+              @click="addBulkUrl"
             >
               <template #icon>
                 {{ $globals.icons.createAlt }}
@@ -177,15 +183,36 @@ whenever(
 const api = useUserApi();
 const i18n = useI18n();
 
-const bulkUrls = ref([{ url: "", categories: [], tags: [] }]);
+function createEmptyBulkUrl() {
+  return { url: "", categories: [], tags: [] };
+}
+
+const bulkUrls = ref([createEmptyBulkUrl()]);
+const bulkVideos = ref<(File | null)[]>([null]);
 const lockBulkImport = ref(false);
+
+function addBulkUrl() {
+  bulkUrls.value.push(createEmptyBulkUrl());
+  bulkVideos.value.push(null);
+}
+
+function removeBulkUrl(index: number) {
+  bulkUrls.value.splice(index, 1);
+  bulkVideos.value.splice(index, 1);
+}
+
+function clearBulkUrls() {
+  bulkUrls.value = [];
+  bulkVideos.value = [];
+  lockBulkImport.value = false;
+}
 
 async function bulkCreate() {
   if (bulkUrls.value.length === 0) {
     return;
   }
 
-  const { response } = await api.recipes.createManyByUrl({ imports: bulkUrls.value });
+  const { response } = await api.recipes.createManyByUrl({ imports: bulkUrls.value }, bulkVideos.value);
 
   if (response?.status === 202) {
     alert.success(i18n.t("recipe.bulk-import-process-has-started"));
@@ -224,5 +251,6 @@ fetchReports();
 
 function assignUrls(urls: string[]) {
   bulkUrls.value = urls.map(url => ({ url, categories: [], tags: [] }));
+  bulkVideos.value = urls.map(() => null);
 }
 </script>

@@ -20,6 +20,11 @@
           prepend-icon=""
           :prepend-inner-icon="$globals.icons.zip"
         />
+        <v-divider class="my-4" />
+        <RecipeVideoAssetUpload
+          v-model="videoFile"
+          :disabled="state.loading"
+        />
       </v-card-text>
       <v-card-actions class="justify-center">
         <div style="width: 250px">
@@ -50,14 +55,17 @@ const groupSlug = computed(() => route.params.groupSlug as string || auth.user.v
 
 const api = useUserApi();
 const router = useRouter();
+const { attachVideoToRecipe } = useRecipeVideoAsset();
 
 const newRecipeZip = ref<File | null>(null);
+const videoFile = ref<File | null>(null);
 const newRecipeZipFileName = "archive";
 
 async function createByZip() {
   if (!newRecipeZip.value) {
     return;
   }
+  state.loading = true;
   const formData = new FormData();
   formData.append(newRecipeZipFileName, newRecipeZip.value);
 
@@ -66,6 +74,7 @@ async function createByZip() {
     if (response?.status !== 201) {
       throw new Error("Failed to upload zip");
     }
+    await attachVideoToRecipe(response.data, videoFile.value);
     router.push(`/g/${groupSlug.value}/r/${response.data}`);
   }
   catch (error) {

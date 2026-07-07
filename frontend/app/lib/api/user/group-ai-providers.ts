@@ -5,6 +5,7 @@ const prefix = "/api/groups/ai-providers";
 
 const routes = {
   providers: `${prefix}/providers`,
+  validateProvider: `${prefix}/providers/validate`,
   providersId: (id: string) => `${prefix}/providers/${id}`,
 };
 
@@ -15,6 +16,10 @@ export class AIProvidersAPI extends BaseAPI {
 
   async createOne(payload: AIProviderCreate) {
     return await this.requests.post<AIProviderOut>(routes.providers, payload);
+  }
+
+  async validateOne(payload: AIProviderCreate) {
+    return await this.requests.post<{ message: string; error: boolean }>(routes.validateProvider, payload);
   }
 
   async updateOne(id: string, payload: AIProviderUpdate) {

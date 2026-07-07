@@ -1,0 +1,35 @@
+services:
+  mealie-dev-api:
+    container_name: mealie-dev-api
+    image: mealie-custom:dev
+    entrypoint:
+      - /opt/mealie/bin/python
+      - -m
+      - uvicorn
+    command:
+      - mealie.app:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "9000"
+      - --reload
+      - --reload-dir
+      - /opt/mealie/lib/python3.12/site-packages/mealie
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./mealie:/opt/mealie/lib/python3.12/site-packages/mealie
+      - mealie-custom-data:/app/data/
+    environment:
+      ALLOW_SIGNUP: "false"
+      API_DOCS: "true"
+      BASE_URL: "http://localhost:3000"
+      DB_ENGINE: "sqlite"
+      LOG_LEVEL: "DEBUG"
+      PRODUCTION: "true"
+      TZ: "Asia/Jerusalem"
+
+volumes:
+  mealie-custom-data:
+    external: true
+    name: mealie-source_mealie-custom-data

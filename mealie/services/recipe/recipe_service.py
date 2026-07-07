@@ -11,6 +11,7 @@ from zipfile import ZipFile
 
 import sqlalchemy as sa
 from fastapi import UploadFile
+from slugify import slugify
 
 from mealie.core import exceptions
 from mealie.core.dependencies.dependencies import get_temporary_path
@@ -21,12 +22,14 @@ from mealie.repos.repository_factory import AllRepositories
 from mealie.repos.repository_generic import RepositoryGeneric
 from mealie.schema.household.household import HouseholdInDB, HouseholdRecipeUpdate
 from mealie.schema.openai.recipe import OpenAIRecipe
+from mealie.schema.recipe.recipe_category import CategorySave, TagSave
 from mealie.schema.recipe.recipe import CreateRecipe, Recipe, create_recipe_slug
 from mealie.schema.recipe.recipe_ingredient import RecipeIngredient
 from mealie.schema.recipe.recipe_notes import RecipeNote
 from mealie.schema.recipe.recipe_settings import RecipeSettings
 from mealie.schema.recipe.recipe_step import RecipeStep
 from mealie.schema.recipe.recipe_timeline_events import RecipeTimelineEventCreate, TimelineEventType
+from mealie.schema.recipe.recipe_tool import RecipeToolSave
 from mealie.schema.recipe.request_helpers import RecipeDuplicate
 from mealie.schema.user.user import PrivateUser, UserRatingCreate
 from mealie.services._base_service import BaseService
@@ -355,6 +358,12 @@ class RecipeService(RecipeServiceBase):
                 data_service.write_image(f.read(), "webp")
             return recipe
 
+    async def create_from_text(self, text: str, translate_language: str | None = None) -> Recipe:
+        openai_recipe_service = OpenAIRecipeService(self.repos, self.user, self.household, self.translator)
+        recipe_data = await openai_recipe_service.build_recipe_from_text(text, translate_language)
+        recipe_data = cleaner.clean(recipe_data, self.translator)
+        return self.create_one(recipe_data)
+
     def duplicate_one(self, old_slug_or_id: str | UUID, dup_data: RecipeDuplicate) -> Recipe:
         """Duplicates a recipe and returns the new recipe."""
 
@@ -596,6 +605,64 @@ class RecipeService(RecipeServiceBase):
 
 
 class OpenAIRecipeService(RecipeServiceBase):
+    def _clean_organizer_names(self, names: list[str], max_items: int = 10) -> list[str]:
+        cleaned_names: list[str] = []
+        seen_slugs: set[str] = set()
+
+        for name in names:
+            cleaned_name = " ".join(str(name).split()).strip()
+            slug = slugify(cleaned_name)
+            if not cleaned_name or not slug or slug in seen_slugs:
+                continue
+
+            seen_slugs.add(slug)
+            cleaned_names.append(cleaned_name)
+
+            if len(cleaned_names) >= max_items:
+                break
+
+        return cleaned_names
+
+    def _get_or_create_categories(self, names: list[str]):
+        categories = []
+        for name in self._clean_organizer_names(names):
+            slug = slugify(name)
+            if db_category := self.repos.categories.get_one(slug, "slug"):
+                categories.append(db_category)
+                continue
+
+            categories.append(self.repos.categories.create(CategorySave(name=name, group_id=self.user.group_id)))
+
+        return categories
+
+    def _get_or_create_tags(self, names: list[str]):
+        tags = []
+        for name in self._clean_organizer_names(names):
+            slug = slugify(name)
+            if db_tag := self.repos.tags.get_one(slug, "slug"):
+                tags.append(db_tag)
+                continue
+
+            tags.append(self.repos.tags.create(TagSave(name=name, group_id=self.user.group_id)))
+
+        return tags
+
+    def _get_or_create_tools(self, names: list[str]):
+        tools = []
+        for name in self._clean_organizer_names(names):
+            slug = slugify(name)
+            if db_tool := self.repos.tools.get_one(slug, "slug"):
+                tools.append(db_tool)
+                continue
+
+            tools.append(
+                self.repos.tools.create(
+                    RecipeToolSave(name=name, group_id=self.user.group_id, households_with_tool=[]),
+                ),
+            )
+
+        return tools
+
     def _convert_recipe(self, openai_recipe: OpenAIRecipe) -> Recipe:
         return Recipe(
             user_id=self.user.id,
@@ -618,6 +685,9 @@ class OpenAIRecipeService(RecipeServiceBase):
                 for instruction in openai_recipe.instructions
                 if instruction.text
             ],
+            recipe_category=self._get_or_create_categories(openai_recipe.categories),
+            tags=self._get_or_create_tags(openai_recipe.tags),
+            tools=self._get_or_create_tools(openai_recipe.tools),
             notes=[RecipeNote(title=note.title or "", text=note.text) for note in openai_recipe.notes if note.text],
         )
 
@@ -654,5 +724,37 @@ class OpenAIRecipeService(RecipeServiceBase):
             recipe = self._convert_recipe(response)
         except Exception as e:
             raise ValueError("Unable to parse recipe from image") from e
+
+        return recipe
+
+    async def build_recipe_from_text(self, text: str, translate_language: str | None = None) -> Recipe:
+        openai_service = OpenAIService(self.repos)
+        if not (openai_service.provider_settings and openai_service.provider_settings.ai_enabled):
+            raise ValueError("OpenAI services are not available")
+
+        prompt = openai_service.get_prompt("recipes.parse-recipe-text")
+        message = "Please extract exactly one recipe from the pasted text below."
+
+        if translate_language:
+            message += f" Please translate the recipe to {translate_language}."
+
+        message += f"\n\nPasted recipe text:\n{text.strip()}"
+
+        try:
+            response = await openai_service.get_response(
+                prompt,
+                message,
+                response_schema=OpenAIRecipe,
+            )
+            if not response:
+                raise ValueError("Received empty response from OpenAI")
+
+        except Exception as e:
+            raise Exception("Failed to call OpenAI services") from e
+
+        try:
+            recipe = self._convert_recipe(response)
+        except Exception as e:
+            raise ValueError("Unable to parse recipe from text") from e
 
         return recipe

@@ -10,3 +10,12 @@ export interface SideBarLink {
 }
 
 export type SidebarLinks = Array<SideBarLink>;
+
+export type OrganizerSidebarSectionKey = "cookbooks" | "categories" | "tags";
+
+export interface OrganizerSidebarSection {
+  key: OrganizerSidebarSectionKey;
+  icon: string;
+  title: string;
+  links: SidebarLinks;
+}

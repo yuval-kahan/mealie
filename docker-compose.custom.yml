@@ -1,0 +1,24 @@
+services:
+  mealie-custom:
+    container_name: mealie-custom
+    image: mealie-custom:dev
+    build:
+      context: .
+      target: production
+      dockerfile: ./docker/Dockerfile
+      args:
+        COMMIT: local-custom
+    restart: unless-stopped
+    ports:
+      - "9092:9000"
+    volumes:
+      - mealie-custom-data:/app/data/
+    environment:
+      ALLOW_SIGNUP: "false"
+      LOG_LEVEL: "DEBUG"
+      DB_ENGINE: sqlite
+      BASE_URL: http://localhost:9092
+      TZ: Asia/Jerusalem
+
+volumes:
+  mealie-custom-data:

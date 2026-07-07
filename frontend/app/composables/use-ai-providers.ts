@@ -25,6 +25,16 @@ export function useAIProviders() {
     }
   }
 
+  async function validateOne(payload: AIProviderCreate) {
+    loading.value = true;
+    try {
+      return await api.aiProviders.validateOne(payload);
+    }
+    finally {
+      loading.value = false;
+    }
+  }
+
   async function updateOne(id: string, payload: AIProviderUpdate) {
     loading.value = true;
     try {
@@ -49,6 +59,7 @@ export function useAIProviders() {
     loading: readonly(loading),
     getOne,
     createOne,
+    validateOne,
     updateOne,
     deleteOne,
   };

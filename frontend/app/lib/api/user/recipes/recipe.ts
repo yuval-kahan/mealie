@@ -31,6 +31,11 @@ export interface CreateAsset {
   file: File;
 }
 
+export interface CreateRecipeFromText {
+  text: string;
+  translateLanguage?: string | null;
+}
+
 const prefix = "/api";
 
 const routes = {
@@ -40,8 +45,10 @@ const routes = {
   recipesTestScrapeUrl: `${prefix}/recipes/test-scrape-url`,
   recipesCreateUrl: `${prefix}/recipes/create/url/stream`,
   recipesCreateUrlBulk: `${prefix}/recipes/create/url/bulk`,
+  recipesCreateUrlBulkAssets: `${prefix}/recipes/create/url/bulk/assets`,
   recipesCreateFromZip: `${prefix}/recipes/create/zip`,
   recipesCreateFromImage: `${prefix}/recipes/create/image`,
+  recipesCreateFromText: `${prefix}/recipes/create/text`,
   recipesCreateFromHtmlOrJson: `${prefix}/recipes/create/html-or-json/stream`,
   recipesCategory: `${prefix}/recipes/category`,
   recipesParseIngredient: `${prefix}/parser/ingredient`,
@@ -211,7 +218,21 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
     return this.streamRecipeCreate(routes.recipesCreateUrl, { url, includeTags, includeCategories }, onProgress);
   }
 
-  async createManyByUrl(payload: CreateRecipeByUrlBulk) {
+  async createManyByUrl(payload: CreateRecipeByUrlBulk, videos: (File | null)[] = []) {
+    if (videos.some(Boolean)) {
+      const formData = new FormData();
+      formData.append("bulk", JSON.stringify(payload));
+      videos.forEach((video, index) => {
+        if (!video) {
+          return;
+        }
+        formData.append("video_indexes", index.toString());
+        formData.append("videos", video);
+      });
+
+      return await this.requests.post<string>(routes.recipesCreateUrlBulkAssets, formData);
+    }
+
     return await this.requests.post<string>(routes.recipesCreateUrlBulk, payload);
   }
 
@@ -228,6 +249,10 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
     }
 
     return await this.requests.post<string>(apiRoute, formData);
+  }
+
+  async createOneFromText(payload: CreateRecipeFromText) {
+    return await this.requests.post<string>(routes.recipesCreateFromText, payload);
   }
 
   async parseIngredients(parser: Parser, ingredients: Array<string>) {

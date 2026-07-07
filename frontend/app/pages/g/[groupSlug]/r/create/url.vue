@@ -39,6 +39,11 @@
             :hint="$t('new-recipe.url-form-hint')"
             persistent-hint
           />
+          <v-divider class="my-4" />
+          <RecipeVideoAssetUpload
+            v-model="videoFile"
+            :disabled="state.loading"
+          />
         </v-card-text>
         <v-checkbox
           v-model="importKeywordsAsTags"
@@ -167,6 +172,8 @@ const { group } = useGroupSelf();
 
 const router = useRouter();
 const tags = useTagStore();
+const videoFile = ref<File | null>(null);
+const { attachVideoToRecipe } = useRecipeVideoAsset();
 
 const {
   importKeywordsAsTags,
@@ -179,7 +186,7 @@ const {
 const bulkImporterTarget = computed(() => `/g/${groupSlug.value}/r/create/bulk`);
 const htmlOrJsonImporterTarget = computed(() => `/g/${groupSlug.value}/r/create/html`);
 
-function handleResponse(response: AxiosResponse<string> | null, refreshTags = false) {
+async function handleResponse(response: AxiosResponse<string> | null, refreshTags = false) {
   if (response?.status !== 201) {
     state.error = true;
     state.loading = false;
@@ -189,6 +196,7 @@ function handleResponse(response: AxiosResponse<string> | null, refreshTags = fa
     tags.actions.refresh();
   }
 
+  await attachVideoToRecipe(response.data, videoFile.value);
   navigateToRecipe(response.data, groupSlug.value, `/g/${groupSlug.value}/r/create/url`);
 }
 
@@ -278,7 +286,7 @@ async function createByUrl(url: string | null, importKeywordsAsTags: boolean, im
     (message: string) => createStatus.value = message,
   );
   createStatus.value = null;
-  handleResponse(response, importKeywordsAsTags);
+  await handleResponse(response, importKeywordsAsTags);
 }
 </script>
 

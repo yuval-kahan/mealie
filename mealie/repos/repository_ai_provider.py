@@ -27,7 +27,10 @@ class GroupRepositoryAIProvider(GroupRepositoryGeneric[AIProviderOut, AIProvider
 
     def update(self, match_value: str | int | UUID4, new_data: AIProviderCreate | dict):
         if isinstance(new_data, AIProviderCreate):
+            api_key = new_data.api_key
             new_data = new_data.model_dump()
+            if api_key:
+                new_data["api_key"] = api_key
 
         # Merge existing API key into new data
         if not new_data.get("api_key"):

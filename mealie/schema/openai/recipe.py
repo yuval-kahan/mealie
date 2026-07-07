@@ -87,3 +87,18 @@ class OpenAIRecipe(OpenAIBase):
         default_factory=list,
         description="List of notes, tips, or variations.",
     )
+
+    categories: list[str] = Field(
+        default_factory=list,
+        description="A short list of obvious recipe categories, such as Dinner, Dessert, Pasta, or Sauce.",
+    )
+
+    tags: list[str] = Field(
+        default_factory=list,
+        description="A short list of useful recipe tags, such as vegetarian, Italian, quick, baking, or holiday.",
+    )
+
+    tools: list[str] = Field(
+        default_factory=list,
+        description="A short list of required kitchen tools or equipment explicitly mentioned in the recipe.",
+    )

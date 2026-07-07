@@ -124,6 +124,7 @@
               :image="recipe.image!"
               :tags="recipe.tags!"
               :recipe-id="recipe.id!"
+              @delete="$emit('delete', $event)"
             />
           </v-col>
         </v-row>
@@ -148,6 +149,7 @@
               :image="recipe.image!"
               :tags="recipe.tags!"
               :recipe-id="recipe.id!"
+              @delete="$emit('delete', $event)"
             />
           </v-col>
         </v-row>
@@ -199,6 +201,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   replaceRecipes: [recipes: Recipe[]];
   appendRecipes: [recipes: Recipe[]];
+  delete: [slug: string];
 }>();
 
 const display = useDisplay();

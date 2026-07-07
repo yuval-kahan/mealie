@@ -102,9 +102,9 @@
                 :menu-icon="$globals.icons.dotsHorizontal"
                 :name="name"
                 :recipe-id="recipeId"
+                :redirect-on-delete="false"
                 class="ml-auto"
                 :use-items="{
-                  delete: false,
                   edit: false,
                   download: true,
                   mealplanner: true,
@@ -112,6 +112,7 @@
                   print: false,
                   printPreferences: false,
                   share: true,
+                  delete: true,
                 }"
                 @deleted="$emit('delete', slug)"
               />

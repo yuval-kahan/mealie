@@ -2,6 +2,7 @@ import { useLocalStorage, useSessionStorage } from "@vueuse/core";
 import { ActivityKey } from "~/lib/api/types/activity";
 import type { RegisteredParser, TimelineEventType } from "~/lib/api/types/recipe";
 import type { QueryFilterJSON } from "~/lib/api/types/non-generated";
+import type { OrganizerSidebarSectionKey } from "~/types/application-types";
 
 export interface UserPrintPreferences {
   imagePosition: string;
@@ -49,6 +50,13 @@ export interface UserParsingPreferences {
 
 export interface UserCookbooksPreferences {
   hideOtherHouseholds: boolean;
+}
+
+export interface UserOrganizerSidebarPreferences {
+  showCookbooks: boolean;
+  showCategories: boolean;
+  showTags: boolean;
+  sectionOrder: OrganizerSidebarSectionKey[];
 }
 
 export interface UserRecipeFinderPreferences {
@@ -190,6 +198,21 @@ export function useCookbookPreferences(): Ref<UserCookbooksPreferences> {
     "cookbook-preferences",
     {
       hideOtherHouseholds: false,
+    },
+    { mergeDefaults: true },
+  );
+
+  return fromStorage;
+}
+
+export function useOrganizerSidebarPreferences(): Ref<UserOrganizerSidebarPreferences> {
+  const fromStorage = useLocalStorage(
+    "organizer-sidebar-preferences",
+    {
+      showCookbooks: true,
+      showCategories: false,
+      showTags: false,
+      sectionOrder: ["cookbooks", "categories", "tags"],
     },
     { mergeDefaults: true },
   );

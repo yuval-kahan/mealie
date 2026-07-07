@@ -76,11 +76,15 @@
       :edit="isEditForm"
     />
     <RecipeAssets
-      v-if="recipe.settings.showAssets"
+      v-if="recipe.settings.showAssets || isEditForm || hasVideoAssets"
       v-model="recipe.assets"
       :edit="isEditForm"
       :slug="recipe.slug"
       :recipe-id="recipe.id"
+      hide-media-assets
+      :show-video-players="false"
+      :show-video-upload="false"
+      @asset-uploaded="recipe.settings.showAssets = true"
     />
   </div>
 </template>
@@ -96,4 +100,8 @@ import RecipeAssets from "@/components/Domain/Recipe/RecipeAssets.vue";
 
 const recipe = defineModel<NoUndefinedField<Recipe>>({ required: true });
 const { isEditForm } = usePageState(recipe.value.slug);
+
+const hasVideoAssets = computed(() => {
+  return recipe.value.assets?.some(asset => /\.(mp4|webm|mov|m4v|ogv)$/i.test(asset.fileName ?? "")) ?? false;
+});
 </script>

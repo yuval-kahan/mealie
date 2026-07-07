@@ -46,6 +46,7 @@ class AIProviderUpdate(AIProviderCreate): ...
 
 class AIProviderOut(AIProviderCreate):
     id: UUID4
+    api_key: str = ""
 
     model_config = ConfigDict(from_attributes=True)
 

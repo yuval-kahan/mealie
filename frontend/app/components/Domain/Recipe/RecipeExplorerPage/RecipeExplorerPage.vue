@@ -20,6 +20,7 @@
         @item-selected="onItemSelected"
         @replace-recipes="replaceRecipes"
         @append-recipes="appendRecipes"
+        @delete="removeRecipe"
       />
     </v-container>
   </v-container>
@@ -37,7 +38,7 @@ const route = useRoute();
 const { isOwnGroup } = useLoggedInState();
 const groupSlug = computed(() => route.params.groupSlug as string || auth.user.value?.groupSlug || "");
 
-const { recipes, appendRecipes, replaceRecipes } = useLazyRecipes(isOwnGroup.value ? null : groupSlug.value);
+const { recipes, appendRecipes, removeRecipe, replaceRecipes } = useLazyRecipes(isOwnGroup.value ? null : groupSlug.value);
 
 const ready = ref(false);
 const searchComponent = ref<InstanceType<typeof RecipeExplorerPageSearch>>();

@@ -13,9 +13,26 @@
 
     <AppSidebar
       v-model="sidebar"
+      v-model:organizer-preferences="organizerSidebarPreferences"
       :top-link="topLinks"
       :secondary-links="cookbookLinks || []"
+      :organizer-sections="organizerSidebarSections"
     >
+      <BaseDialog
+        v-model="quickTextRecipeDialog"
+        :title="$t('recipe.create-recipe-from-text')"
+        :icon="$globals.icons.textBoxCheckOutline"
+        width="880"
+        max-width="96vw"
+        disable-submit-on-enter
+      >
+        <RecipeCreateFromTextForm
+          :show-title="false"
+          :rows="10"
+          :return-to="route.path"
+          @created="quickTextRecipeDialog = false"
+        />
+      </BaseDialog>
       <v-menu
         offset-y
         nudge-bottom="5"
@@ -82,6 +99,23 @@
           </template>
         </v-list>
       </v-menu>
+      <v-btn
+        v-if="isOwnGroup"
+        rounded
+        size="default"
+        class="ml-2 mt-2 mb-2 quick-text-create-btn"
+        variant="tonal"
+        :color="$vuetify.theme.current.dark ? 'background-lighten-1' : 'background-darken-1'"
+        @click="quickTextRecipeDialog = true"
+      >
+        <v-icon
+          start
+          color="primary"
+        >
+          {{ $globals.icons.textBoxCheckOutline }}
+        </v-icon>
+        {{ $t("recipe.create-from-text") }}
+      </v-btn>
     </AppSidebar>
     <v-main class="pt-12">
       <v-scroll-x-transition>
@@ -95,11 +129,14 @@
 
 <script setup lang="ts">
 import { useLoggedInState } from "~/composables/use-logged-in-state";
-import type { SideBarLink } from "~/types/application-types";
+import type { OrganizerSidebarSection, SideBarLink } from "~/types/application-types";
 import { useGroupSelf } from "~/composables/use-groups";
-import { useCookbookPreferences } from "~/composables/use-users/preferences";
+import { useCookbookPreferences, useOrganizerSidebarPreferences } from "~/composables/use-users/preferences";
 import { useCookbookStore, usePublicCookbookStore } from "~/composables/store/use-cookbook-store";
+import { useCategoryStore, usePublicCategoryStore } from "~/composables/store/use-category-store";
+import { usePublicTagStore, useTagStore } from "~/composables/store/use-tag-store";
 import type { ReadCookBook } from "~/lib/api/types/cookbook";
+import type { RecipeCategory, RecipeTag } from "~/lib/api/types/recipe";
 
 const i18n = useI18n();
 const { $globals } = useNuxtApp();
@@ -112,14 +149,33 @@ const route = useRoute();
 const groupSlug = computed(() => route.params.groupSlug as string || auth.user.value?.groupSlug || "");
 
 const cookbookPreferences = useCookbookPreferences();
+const organizerSidebarPreferences = useOrganizerSidebarPreferences();
 const ownCookbookStore = computed(() => isOwnGroup.value ? useCookbookStore(i18n) : null);
+const ownCategoryStore = computed(() => isOwnGroup.value ? useCategoryStore(i18n) : null);
+const ownTagStore = computed(() => isOwnGroup.value ? useTagStore(i18n) : null);
 const publicCookbookStoreCache = ref<Record<string, ReturnType<typeof usePublicCookbookStore>>>({});
+const publicCategoryStoreCache = ref<Record<string, ReturnType<typeof usePublicCategoryStore>>>({});
+const publicTagStoreCache = ref<Record<string, ReturnType<typeof usePublicTagStore>>>({});
 
 function getPublicCookbookStore(slug: string) {
   if (!publicCookbookStoreCache.value[slug]) {
     publicCookbookStoreCache.value[slug] = usePublicCookbookStore(slug, i18n);
   }
   return publicCookbookStoreCache.value[slug];
+}
+
+function getPublicCategoryStore(slug: string) {
+  if (!publicCategoryStoreCache.value[slug]) {
+    publicCategoryStoreCache.value[slug] = usePublicCategoryStore(slug, i18n);
+  }
+  return publicCategoryStoreCache.value[slug];
+}
+
+function getPublicTagStore(slug: string) {
+  if (!publicTagStoreCache.value[slug]) {
+    publicTagStoreCache.value[slug] = usePublicTagStore(slug, i18n);
+  }
+  return publicTagStoreCache.value[slug];
 }
 
 const cookbooks = computed(() => {
@@ -133,9 +189,32 @@ const cookbooks = computed(() => {
   return [];
 });
 
+const categories = computed(() => {
+  if (ownCategoryStore.value) {
+    return ownCategoryStore.value.store.value;
+  }
+  else if (groupSlug.value) {
+    const publicStore = getPublicCategoryStore(groupSlug.value);
+    return unref(publicStore.store);
+  }
+  return [];
+});
+
+const tags = computed(() => {
+  if (ownTagStore.value) {
+    return ownTagStore.value.store.value;
+  }
+  else if (groupSlug.value) {
+    const publicStore = getPublicTagStore(groupSlug.value);
+    return unref(publicStore.store);
+  }
+  return [];
+});
+
 const showImageImport = computed(() => group.value?.aiProviderSettings?.imageProviderEnabled);
 
 const sidebar = ref<boolean>(false);
+const quickTextRecipeDialog = ref(false);
 onMounted(() => {
   sidebar.value = display.lgAndUp.value;
 });
@@ -148,6 +227,24 @@ function cookbookAsLink(cookbook: ReadCookBook): SideBarLink {
     to: `/g/${groupSlug.value}/cookbooks/${cookbook.slug || ""}`,
     restricted: false,
   };
+}
+
+function organizerItemAsLink(item: RecipeCategory | RecipeTag, queryKey: "categories" | "tags", icon: string): SideBarLink | null {
+  if (!item.id) {
+    return null;
+  }
+
+  return {
+    key: item.id,
+    icon,
+    title: item.name,
+    to: `/g/${groupSlug.value}?${queryKey}=${encodeURIComponent(item.id)}`,
+    restricted: false,
+  };
+}
+
+function sortByName<T extends { name: string }>(items: T[]) {
+  return [...items].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 const currentUserHouseholdId = computed(() => auth.user.value?.householdId);
@@ -192,6 +289,39 @@ const cookbookLinks = computed<SideBarLink[]>(() => {
     return [...ownLinks, ...links];
   }
 });
+
+const categoryLinks = computed<SideBarLink[]>(() => {
+  return sortByName(categories.value)
+    .map(category => organizerItemAsLink(category, "categories", $globals.icons.categories))
+    .filter((link): link is SideBarLink => !!link);
+});
+
+const tagLinks = computed<SideBarLink[]>(() => {
+  return sortByName(tags.value)
+    .map(tag => organizerItemAsLink(tag, "tags", $globals.icons.tags))
+    .filter((link): link is SideBarLink => !!link);
+});
+
+const organizerSidebarSections = computed<OrganizerSidebarSection[]>(() => [
+  {
+    key: "cookbooks",
+    icon: $globals.icons.book,
+    title: i18n.t("cookbook.cookbooks"),
+    links: cookbookLinks.value,
+  },
+  {
+    key: "categories",
+    icon: $globals.icons.categories,
+    title: i18n.t("category.categories"),
+    links: categoryLinks.value,
+  },
+  {
+    key: "tags",
+    icon: $globals.icons.tags,
+    title: i18n.t("tag.tags"),
+    links: tagLinks.value,
+  },
+]);
 
 const createLinks = computed(() => [
   {
@@ -287,3 +417,13 @@ const topLinks = computed<SideBarLink[]>(() => [
   },
 ]);
 </script>
+
+<style scoped>
+.quick-text-create-btn {
+  min-width: 170px;
+}
+
+.quick-text-create-btn :deep(.v-btn__content) {
+  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
+}
+</style>

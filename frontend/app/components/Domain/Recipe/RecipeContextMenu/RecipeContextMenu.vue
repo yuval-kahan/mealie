@@ -80,6 +80,7 @@ interface Props {
   recipe?: Recipe;
   recipeId: string;
   recipeScale?: number;
+  redirectOnDelete?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -103,6 +104,7 @@ const props = withDefaults(defineProps<Props>(), {
   menuIcon: null,
   recipe: undefined,
   recipeScale: 1,
+  redirectOnDelete: true,
 });
 
 defineEmits<{

@@ -70,6 +70,7 @@
     <GroupAIProviderDialog
       v-model="dialogOpen"
       :provider-id="editingProviderId ?? undefined"
+      :default-provider-id="local.defaultProviderId ?? undefined"
       @create="(data) => $emit('create', data)"
       @update="(id, data) => $emit('update', id, data)"
     />

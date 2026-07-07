@@ -1,6 +1,14 @@
-from .openai import OpenAIDataInjection, OpenAIImageExternal, OpenAILocalImage, OpenAINotEnabledException, OpenAIService
+from .openai import (
+    AIProviderValidationError,
+    OpenAIDataInjection,
+    OpenAIImageExternal,
+    OpenAILocalImage,
+    OpenAINotEnabledException,
+    OpenAIService,
+)
 
 __all__ = [
+    "AIProviderValidationError",
     "OpenAIDataInjection",
     "OpenAIImageExternal",
     "OpenAILocalImage",

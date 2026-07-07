@@ -83,6 +83,12 @@ const subpages = computed<MenuItem[]>(() => [
     hide: !group.value?.aiProviderSettings?.imageProviderEnabled,
   },
   {
+    icon: $globals.icons.textBoxCheckOutline,
+    text: i18n.t("recipe.create-from-text"),
+    value: "text",
+    hide: false,
+  },
+  {
     icon: $globals.icons.edit,
     text: i18n.t("recipe.create-recipe"),
     value: "new",

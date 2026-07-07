@@ -402,10 +402,19 @@ function createRecipeExplorerSearchState(groupSlug: ComputedRef<string>): Recipe
   // Watch for route query changes
   watch(
     () => route.query,
-    () => {
+    async () => {
+      if (!state.value.ready) {
+        return;
+      }
+
       if (!Object.keys(route.query).length) {
         reset();
+        passedQuery.value = calcPassedQuery();
+        return;
       }
+
+      await hydrateSearch();
+      passedQuery.value = calcPassedQuery();
     },
   );
 

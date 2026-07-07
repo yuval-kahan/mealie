@@ -26,6 +26,11 @@
           @keyup.enter="createByName(newRecipeName)"
         />
       </v-form>
+      <v-divider class="my-4" />
+      <RecipeVideoAssetUpload
+        v-model="videoFile"
+        :disabled="state.loading"
+      />
     </v-card-text>
     <v-card-actions class="justify-center">
       <div style="width: 250px">
@@ -42,7 +47,6 @@
 </template>
 
 <script setup lang="ts">
-import type { AxiosResponse } from "axios";
 import { useUserApi } from "~/composables/api";
 import { validators } from "~/composables/use-validators";
 import type { VForm } from "~/types/auto-forms";
@@ -57,24 +61,30 @@ const groupSlug = computed(() => route.params.groupSlug as string || auth.user.v
 
 const api = useUserApi();
 const router = useRouter();
+const { attachVideoToRecipe } = useRecipeVideoAsset();
 
-function handleResponse(response: AxiosResponse<string> | null, edit = false) {
-  if (response?.status !== 201) {
+const newRecipeName = ref("");
+const videoFile = ref<File | null>(null);
+const domCreateByName = ref<VForm | null>(null);
+
+async function createByName(name: string) {
+  const validation = await domCreateByName.value?.validate();
+  if (!validation?.valid || name === "") {
+    return;
+  }
+
+  state.loading = true;
+  const { response } = await api.recipes.createOne({ name });
+  if (response?.status !== 201 || !response.data) {
     state.error = true;
     state.loading = false;
     return;
   }
-  router.push(`/g/${groupSlug.value}/r/${response.data}?edit=${edit.toString()}`);
-}
 
-const newRecipeName = ref("");
-const domCreateByName = ref<VForm | null>(null);
-
-async function createByName(name: string) {
-  if (!domCreateByName.value?.validate() || name === "") {
-    return;
+  if (videoFile.value) {
+    await attachVideoToRecipe(response.data, videoFile.value);
   }
-  const { response } = await api.recipes.createOne({ name });
-  handleResponse(response as any, true);
+
+  router.push(`/g/${groupSlug.value}/r/${response.data}?edit=true`);
 }
 </script>

@@ -1,7 +1,33 @@
 <template>
+  <AppOrganizerSidebar
+    v-model="modelValue"
+    v-model:preferences="organizerPreferences"
+    :sections="organizerSections"
+  />
+
   <v-navigation-drawer v-model="modelValue" class="d-flex flex-column d-print-none position-fixed" touchless>
     <AnnouncementDialog v-model="showAnnouncementsDialog" />
     <LanguageDialog v-model="state.languageDialog" />
+    <BaseDialog
+      v-model="state.apiDialog"
+      title="API"
+      :icon="$globals.icons.robot"
+      width="720"
+      can-submit
+      :submit-text="$t('general.save')"
+      @submit="handleQuickApiSettingsSubmit"
+    >
+      <v-card-text v-if="group?.aiProviderSettings">
+        <GroupAIProviderSettingsEditor
+          v-model="group.aiProviderSettings"
+          hide-header
+          @create="handleQuickApiCreate"
+          @update="handleQuickApiUpdate"
+          @delete="handleQuickApiDelete"
+        />
+      </v-card-text>
+      <AppLoader v-else waiting-text="" />
+    </BaseDialog>
     <!-- User Profile -->
     <template v-if="loggedIn && sessionUser">
       <v-list-item lines="two" :to="userProfileLink" exact>
@@ -150,6 +176,12 @@
             <v-list-item v-if="isAdmin" :prepend-icon="$globals.icons.wrench" :title="$t('settings.admin-settings')" to="/admin/site-settings" />
           </v-list>
         </v-menu>
+        <v-list-item
+          v-if="canManage"
+          :prepend-icon="$globals.icons.robot"
+          title="API"
+          @click="openQuickApiDialog"
+        />
       </v-list>
     </template>
   </v-navigation-drawer>
@@ -157,11 +189,18 @@
 
 <script setup lang="ts">
 import { useLoggedInState } from "~/composables/use-logged-in-state";
-import type { SidebarLinks } from "~/types/application-types";
+import type { OrganizerSidebarSection, SidebarLinks } from "~/types/application-types";
 import AnnouncementDialog from "~/components/Domain/Announcement/AnnouncementDialog.vue";
 import UserAvatar from "~/components/Domain/User/UserAvatar.vue";
+import GroupAIProviderSettingsEditor from "~/components/Domain/Group/GroupAIProviderSettingsEditor.vue";
+import AppOrganizerSidebar from "~/components/Layout/LayoutParts/AppOrganizerSidebar.vue";
 import { useToggleDarkMode } from "~/composables/use-utils";
 import { useAnnouncements } from "~/composables/use-announcements";
+import { useGroupSelf } from "~/composables/use-groups";
+import { useAIProviders } from "~/composables/use-ai-providers";
+import { alert } from "~/composables/use-toast";
+import type { AIProviderCreate, AIProviderUpdate } from "~/lib/api/types/group";
+import type { UserOrganizerSidebarPreferences } from "~/composables/use-users/preferences";
 
 const props = defineProps({
   user: {
@@ -177,15 +216,30 @@ const props = defineProps({
     required: false,
     default: null,
   },
+  organizerSections: {
+    type: Array as () => OrganizerSidebarSection[],
+    required: false,
+    default: () => [],
+  },
 });
 
 const modelValue = defineModel<boolean>({ default: false });
+const organizerPreferences = defineModel<UserOrganizerSidebarPreferences>("organizerPreferences", {
+  default: () => ({
+    showCookbooks: true,
+    showCategories: false,
+    showTags: false,
+    sectionOrder: ["cookbooks", "categories", "tags"],
+  }),
+});
 
 const auth = useMealieAuth();
 const sessionUser = computed(() => auth.user.value);
 const { loggedIn, isOwnGroup } = useLoggedInState();
 const isAdmin = computed(() => auth.user.value?.admin);
 const canManage = computed(() => auth.user.value?.canManage);
+const { group, actions: groupActions } = useGroupSelf();
+const { createOne, updateOne, deleteOne } = useAIProviders();
 
 const userFavoritesLink = computed(() => auth.user.value ? `/user/${auth.user.value.id}/favorites` : undefined);
 const userProfileLink = computed(() => auth.user.value ? "/user/profile" : undefined);
@@ -200,6 +254,7 @@ const state = reactive({
   secondarySelected: null as string[] | null,
   bottomSelected: null as string[] | null,
   languageDialog: false as boolean,
+  apiDialog: false as boolean,
 });
 
 const allLinks = computed(() => [...props.topLink, ...(props.secondaryLinks || [])]);
@@ -207,6 +262,76 @@ function initDropdowns() {
   allLinks.value.forEach((link) => {
     state.dropDowns[link.title] = link.childrenStartExpanded || false;
   });
+}
+
+function openQuickApiDialog() {
+  state.apiDialog = true;
+}
+
+function providerErrorMessage(error: unknown, fallback: string) {
+  const responseData = (error as { response?: { data?: { detail?: unknown } } })?.response?.data;
+  const detail = responseData?.detail;
+
+  if (typeof detail === "string") {
+    return detail;
+  }
+
+  if (detail && typeof detail === "object") {
+    const detailObject = detail as { message?: string; exception?: string };
+    return detailObject.exception || detailObject.message || fallback;
+  }
+
+  return fallback;
+}
+
+async function handleQuickApiCreate(data: AIProviderCreate) {
+  const result = await createOne(data);
+  if (!result.data) {
+    alert.error(providerErrorMessage(result.error, "שמירת ה-API נכשלה"));
+    return;
+  }
+
+  await groupActions.refresh();
+
+  if (group.value?.aiProviderSettings && !group.value.aiProviderSettings.defaultProviderId) {
+    group.value.aiProviderSettings.defaultProviderId = result.data.id;
+    await groupActions.updateAIProviderSettings();
+  }
+
+  await groupActions.refresh();
+  alert.success("ה-API נשמר");
+}
+
+async function handleQuickApiUpdate(id: string, data: AIProviderUpdate) {
+  const result = await updateOne(id, data);
+  if (!result.data) {
+    alert.error(providerErrorMessage(result.error, "עדכון ה-API נכשל"));
+    return;
+  }
+
+  await groupActions.refresh();
+  alert.success("ה-API עודכן");
+}
+
+async function handleQuickApiDelete(id: string) {
+  const result = await deleteOne(id);
+  if (!result.data) {
+    alert.error(providerErrorMessage(result.error, "מחיקת ה-API נכשלה"));
+    return;
+  }
+
+  await groupActions.refresh();
+  alert.success("ה-API נמחק");
+}
+
+async function handleQuickApiSettingsSubmit() {
+  const data = await groupActions.updateAIProviderSettings();
+  if (data) {
+    alert.success("הגדרות ה-API נשמרו");
+  }
+  else {
+    alert.error("שמירת הגדרות ה-API נכשלה");
+  }
 }
 watch(
   () => allLinks,

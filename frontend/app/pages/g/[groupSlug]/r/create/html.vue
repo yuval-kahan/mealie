@@ -58,6 +58,11 @@
           clearable
           rounded
         />
+        <v-divider class="my-4" />
+        <RecipeVideoAssetUpload
+          v-model="videoFile"
+          :disabled="state.loading"
+        />
         <v-checkbox
           v-model="importKeywordsAsTags"
           color="primary"
@@ -121,9 +126,11 @@ const auth = useMealieAuth();
 const route = useRoute();
 const groupSlug = computed(() => route.params.groupSlug as string || auth.user.value?.groupSlug || "");
 const domUrlForm = ref<VForm | null>(null);
+const videoFile = ref<File | null>(null);
 
 const api = useUserApi();
 const tags = useTagStore();
+const { attachVideoToRecipe } = useRecipeVideoAsset();
 
 const {
   importKeywordsAsTags,
@@ -133,7 +140,7 @@ const {
   navigateToRecipe,
 } = useNewRecipeOptions();
 
-function handleResponse(response: AxiosResponse<string> | null, refreshTags = false) {
+async function handleResponse(response: AxiosResponse<string> | null, refreshTags = false) {
   if (response?.status !== 201) {
     state.error = true;
     state.loading = false;
@@ -143,6 +150,7 @@ function handleResponse(response: AxiosResponse<string> | null, refreshTags = fa
     tags.actions.refresh();
   }
 
+  await attachVideoToRecipe(response.data, videoFile.value);
   navigateToRecipe(response.data, groupSlug.value, `/g/${groupSlug.value}/r/create/html`);
 }
 
@@ -200,6 +208,6 @@ async function createFromHtmlOrJson(htmlOrJsonData: string | object | null, impo
     (message: string) => createStatus.value = message,
   );
   createStatus.value = null;
-  handleResponse(response, importKeywordsAsTags);
+  await handleResponse(response, importKeywordsAsTags);
 }
 </script>

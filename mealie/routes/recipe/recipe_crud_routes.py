@@ -1,7 +1,9 @@
 import asyncio
 from collections import defaultdict
 from collections.abc import AsyncIterable
-from shutil import copyfileobj
+from pathlib import Path as FileSystemPath
+from shutil import copyfileobj, rmtree
+from tempfile import mkdtemp
 from uuid import UUID
 
 import orjson
@@ -20,7 +22,7 @@ from fastapi import (
 )
 from fastapi.datastructures import UploadFile
 from fastapi.sse import EventSourceResponse, ServerSentEvent
-from pydantic import UUID4
+from pydantic import UUID4, Field
 from slugify import slugify
 
 from mealie.core import exceptions
@@ -31,6 +33,7 @@ from mealie.pkgs import cache
 from mealie.repos.all_repositories import get_repositories
 from mealie.routes._base import controller
 from mealie.routes._base.routers import MealieCrudRoute, UserAPIRouter
+from mealie.schema._mealie import MealieModel
 from mealie.schema.cookbook.cookbook import ReadCookBook
 from mealie.schema.make_dependable import make_dependable
 from mealie.schema.recipe import Recipe, ScrapeRecipe, ScrapeRecipeData
@@ -69,7 +72,7 @@ from mealie.services.recipe.recipe_data_service import (
     NotAnImageError,
     RecipeDataService,
 )
-from mealie.services.scraper.recipe_bulk_scraper import RecipeBulkScraperService
+from mealie.services.scraper.recipe_bulk_scraper import BulkImportVideo, RecipeBulkScraperService
 from mealie.services.scraper.scraped_extras import ScraperContext
 from mealie.services.scraper.scraper import create_from_html
 from mealie.services.scraper.scraper_strategies import (
@@ -80,9 +83,29 @@ from mealie.services.scraper.scraper_strategies import (
 
 from ._base import BaseRecipeController, JSONBytes
 
-ASSET_ALLOWED_EXTENSIONS = {"pdf", "jpg", "jpeg", "png", "gif", "webp", "bmp", "avif", "txt", "md", "csv", "json"}
+ASSET_VIDEO_EXTENSIONS = {"mp4", "webm", "mov", "m4v", "ogv"}
+ASSET_ALLOWED_EXTENSIONS = {
+    "pdf",
+    "jpg",
+    "jpeg",
+    "png",
+    "gif",
+    "webp",
+    "bmp",
+    "avif",
+    "txt",
+    "md",
+    "csv",
+    "json",
+    *ASSET_VIDEO_EXTENSIONS,
+}
 
 router = UserAPIRouter(prefix="/recipes", route_class=MealieCrudRoute)
+
+
+class CreateRecipeFromText(MealieModel):
+    text: str = Field(..., min_length=1, max_length=200000)
+    translate_language: str | None = None
 
 
 @controller(router)
@@ -289,6 +312,73 @@ class RecipeController(BaseRecipeController):
 
         return {"reportId": report_id}
 
+    def _stage_bulk_video_assets(
+        self,
+        video_indexes: list[int] | None,
+        videos: list[UploadFile] | None,
+    ) -> tuple[list[BulkImportVideo], FileSystemPath | None]:
+        video_indexes = video_indexes or []
+        videos = videos or []
+
+        if not videos:
+            return [], None
+
+        if len(video_indexes) != len(videos):
+            raise HTTPException(status_code=400, detail="Video indexes do not match uploaded videos")
+
+        temp_dir = FileSystemPath(mkdtemp(prefix="mealie-bulk-video-"))
+        staged_videos: list[BulkImportVideo] = []
+
+        try:
+            for position, (index, video) in enumerate(zip(video_indexes, videos, strict=True)):
+                original_name = video.filename or f"video-{index + 1}"
+                extension = original_name.split(".")[-1].lower()
+                if extension not in ASSET_VIDEO_EXTENSIONS:
+                    raise HTTPException(status_code=400, detail="Unsupported video extension")
+
+                dest = temp_dir / f"{position}.{extension}"
+                with dest.open("wb") as buffer:
+                    copyfileobj(video.file, buffer)
+
+                staged_videos.append(
+                    BulkImportVideo(
+                        index=index,
+                        path=dest,
+                        original_name=original_name,
+                        extension=extension,
+                    )
+                )
+        except Exception:
+            rmtree(temp_dir, ignore_errors=True)
+            raise
+
+        return staged_videos, temp_dir
+
+    @router.post("/create/url/bulk/assets", status_code=202)
+    def parse_recipe_url_bulk_with_assets(
+        self,
+        bg_tasks: BackgroundTasks,
+        bulk: str = Form(...),
+        video_indexes: list[int] | None = Form(None),
+        videos: list[UploadFile] | None = File(None),
+    ):
+        """Bulk URL import with optional per-row video assets."""
+        bulk_payload = CreateRecipeByUrlBulk.model_validate_json(bulk)
+        staged_videos, temp_dir = self._stage_bulk_video_assets(video_indexes, videos)
+
+        bulk_scraper = RecipeBulkScraperService(self.service, self.repos, self.group, self.translator)
+        report_id = bulk_scraper.get_report_id()
+        bg_tasks.add_task(bulk_scraper.scrape, bulk_payload, staged_videos, temp_dir)
+
+        self.publish_event(
+            event_type=EventTypes.recipe_created,
+            document_data=EventRecipeBulkReportData(operation=EventOperation.create, report_id=report_id),
+            group_id=self.group_id,
+            household_id=self.household_id,
+        )
+
+        return {"reportId": report_id}
+
     # ==================================================================================================================
     # Other Create Operations
 
@@ -325,6 +415,34 @@ class RecipeController(BaseRecipeController):
             )
 
         recipe = await self.service.create_from_images(images, translate_language)
+        self.publish_event(
+            event_type=EventTypes.recipe_created,
+            document_data=EventRecipeData(operation=EventOperation.create, recipe_slug=recipe.slug),
+            group_id=recipe.group_id,
+            household_id=recipe.household_id,
+        )
+
+        return recipe.slug
+
+    @router.post("/create/text", status_code=201)
+    async def create_recipe_from_text(self, data: CreateRecipeFromText):
+        """Create a recipe from pasted recipe text using OpenAI."""
+
+        ai_settings = self.group.ai_provider_settings
+        if not (ai_settings and ai_settings.ai_enabled):
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("OpenAI services are not enabled"),
+            )
+
+        recipe_text = data.text.strip()
+        if not recipe_text:
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("Recipe text cannot be empty"),
+            )
+
+        recipe = await self.service.create_from_text(recipe_text, data.translate_language)
         self.publish_event(
             event_type=EventTypes.recipe_created,
             document_data=EventRecipeData(operation=EventOperation.create, recipe_slug=recipe.slug),
@@ -693,6 +811,9 @@ class RecipeController(BaseRecipeController):
 
         if recipe.assets is not None:
             recipe.assets.append(asset_in)
+
+        if extension in ASSET_VIDEO_EXTENSIONS and recipe.settings is not None:
+            recipe.settings.show_assets = True
 
         self.service.update_one(slug, recipe)
 

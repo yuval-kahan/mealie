@@ -30,6 +30,13 @@
           @delete="deleteRecipe"
           @close="closeEditor"
         />
+        <RecipeMediaAssets
+          v-if="!isEditJSON"
+          v-model="recipe.assets"
+          :recipe="recipe"
+          :edit="isEditForm"
+          @asset-uploaded="recipe.settings.showAssets = true"
+        />
         <RecipeJsonEditor
           v-if="isEditJSON"
           v-model="recipe"

@@ -5,8 +5,10 @@ import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 from textwrap import dedent
-from typing import TypeVar
+from typing import Any, TypeVar
+from urllib.parse import urlsplit, urlunsplit
 
+import httpx
 import openai
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletion
@@ -16,7 +18,7 @@ from mealie.core import exceptions, root_logger
 from mealie.core.config import get_app_settings
 from mealie.pkgs import img
 from mealie.repos.repository_factory import AllRepositories
-from mealie.schema.group.ai_providers import AIProviderOut
+from mealie.schema.group.ai_providers import AIProviderCreate, AIProviderOut
 from mealie.schema.openai._base import OpenAIBase
 from mealie.schema.openai.general import OpenAIText
 
@@ -28,6 +30,12 @@ logger = root_logger.get_logger(__name__)
 
 class OpenAINotEnabledException(Exception):
     def __init__(self, message: str = "OpenAI not enabled"):
+        self.message = message
+        super().__init__(self.message)
+
+
+class AIProviderValidationError(Exception):
+    def __init__(self, message: str = "AI provider validation failed"):
         self.message = message
         super().__init__(self.message)
 
@@ -136,13 +144,156 @@ class OpenAIService(BaseService):
         super().__init__()
 
     def get_client(self, provider: AIProviderOut) -> AsyncOpenAI:
+        api_key = self._first_api_key(provider.api_key) if self._is_gemini_provider_data(provider) else provider.api_key
         return AsyncOpenAI(
             base_url=provider.base_url or None,
-            api_key=provider.api_key,
+            api_key=api_key,
             timeout=provider.timeout,
             default_headers=provider.request_headers or None,
             default_query=provider.request_params or None,
         )
+
+    @staticmethod
+    async def _close_client(client: AsyncOpenAI) -> None:
+        close_result = client.close()
+        if inspect.isawaitable(close_result):
+            await close_result
+
+    @staticmethod
+    def _is_anthropic_provider_data(provider: AIProviderCreate | AIProviderOut) -> bool:
+        base_url = (provider.base_url or "").lower()
+        return "anthropic.com" in base_url or provider.model.startswith("claude-")
+
+    @staticmethod
+    def _is_gemini_provider_data(provider: AIProviderCreate | AIProviderOut) -> bool:
+        base_url = (provider.base_url or "").lower()
+        return "generativelanguage.googleapis.com" in base_url or provider.model.startswith("gemini-")
+
+    @staticmethod
+    def _split_api_keys(api_key: str) -> list[str]:
+        return [key.strip() for key in api_key.replace(",", "\n").splitlines() if key.strip()]
+
+    @classmethod
+    def _first_api_key(cls, api_key: str) -> str:
+        return cls._split_api_keys(api_key)[0] if api_key else ""
+
+    @staticmethod
+    def _append_api_path(base_url: str, path: str) -> str:
+        base_url = base_url.rstrip("/")
+        if base_url.endswith(f"/{path}"):
+            return base_url
+        if base_url.endswith("/v1") or base_url.endswith("/v1beta"):
+            return f"{base_url}/{path}"
+        return f"{base_url}/v1/{path}"
+
+    @staticmethod
+    def _gemini_models_url(provider: AIProviderCreate | AIProviderOut) -> str:
+        base_url = (provider.base_url or "https://generativelanguage.googleapis.com/v1beta").rstrip("/")
+        if "generativelanguage.googleapis.com" not in base_url:
+            base_url = "https://generativelanguage.googleapis.com/v1beta"
+
+        # The app uses Google's OpenAI-compatible URL for generation, while the no-cost key check uses
+        # Gemini's native models.list endpoint.
+        split = urlsplit(base_url)
+        path = split.path.rstrip("/")
+        if path.endswith("/openai"):
+            path = path[: -len("/openai")]
+        if not path.endswith("/v1") and not path.endswith("/v1beta"):
+            path = "/v1beta"
+        return urlunsplit((split.scheme, split.netloc, f"{path}/models", "", ""))
+
+    @staticmethod
+    def _provider_error_message(response: httpx.Response) -> str:
+        try:
+            payload = response.json()
+        except ValueError:
+            payload = None
+
+        if isinstance(payload, dict):
+            error = payload.get("error") or payload.get("detail")
+            if isinstance(error, dict):
+                return str(error.get("message") or error.get("detail") or error)
+            if isinstance(error, str):
+                return error
+            message = payload.get("message")
+            if isinstance(message, str):
+                return message
+
+        return response.text[:500] if response.text else response.reason_phrase
+
+    @staticmethod
+    def _redact_secret(message: str, secret: str) -> str:
+        if not secret:
+            return message
+        return message.replace(secret, "[redacted]")
+
+    @classmethod
+    async def validate_provider_access(cls, provider: AIProviderCreate | AIProviderOut) -> None:
+        """Validate provider credentials without creating a model completion."""
+
+        if not provider.api_key:
+            raise AIProviderValidationError("API key cannot be empty")
+
+        timeout = min(provider.timeout or 30, 30)
+        request_headers = provider.request_headers or {}
+        request_params = provider.request_params or {}
+        api_keys = cls._split_api_keys(provider.api_key)
+
+        if cls._is_anthropic_provider_data(provider):
+            base_url = provider.base_url or "https://api.anthropic.com/v1"
+            url = cls._append_api_path(base_url, "models")
+            headers = {
+                "x-api-key": provider.api_key,
+                "anthropic-version": "2023-06-01",
+                **request_headers,
+            }
+            params = request_params or None
+        elif cls._is_gemini_provider_data(provider):
+            url = cls._gemini_models_url(provider)
+            headers = request_headers
+            params = {**request_params, "pageSize": "1"}
+        else:
+            base_url = provider.base_url or "https://api.openai.com/v1"
+            url = cls._append_api_path(base_url, "models")
+            headers = {"Authorization": f"Bearer {provider.api_key}", **request_headers}
+            params = request_params or None
+
+        if not api_keys:
+            raise AIProviderValidationError("API key cannot be empty")
+
+        if not cls._is_gemini_provider_data(provider) and len(api_keys) > 1:
+            raise AIProviderValidationError("Only Google Gemini supports multiple API keys")
+
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            for index, api_key in enumerate(api_keys, start=1):
+                validation_headers = dict(headers)
+                if cls._is_anthropic_provider_data(provider):
+                    validation_headers["x-api-key"] = api_key
+                elif cls._is_gemini_provider_data(provider):
+                    validation_headers["x-goog-api-key"] = api_key
+                else:
+                    validation_headers["Authorization"] = f"Bearer {api_key}"
+
+                try:
+                    response = await client.get(url, headers=validation_headers, params=params)
+                except httpx.TimeoutException as e:
+                    raise AIProviderValidationError("Timed out while validating the AI provider API key") from e
+                except httpx.RequestError as e:
+                    raise AIProviderValidationError(f"Could not reach AI provider: {e}") from e
+
+                key_label = f"API key #{index}" if len(api_keys) > 1 else "API key"
+
+                if response.status_code in {401, 403}:
+                    provider_message = cls._provider_error_message(response)
+                    provider_message = cls._redact_secret(provider_message, api_key)
+                    raise AIProviderValidationError(
+                        f"Invalid {key_label} or missing access: {provider_message}",
+                    )
+
+                if response.status_code >= 400:
+                    provider_message = cls._provider_error_message(response)
+                    provider_message = cls._redact_secret(provider_message, api_key)
+                    raise AIProviderValidationError(f"{key_label} validation failed: {provider_message}")
 
     def _get_provider(self, attachments: list[OpenAIAttachment] | None = None) -> AIProviderOut:
         """Select the appropriate provider based on attachment types, falling back to the default."""
@@ -265,20 +416,91 @@ class OpenAIService(BaseService):
         self, prompt: str, content: list[dict], response_schema: type[T], provider: AIProviderOut
     ) -> ChatCompletion:
         client = self.get_client(provider)
-        return await client.chat.completions.parse(
-            messages=[
+        try:
+            return await client.chat.completions.parse(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": prompt,
+                    },
+                    {
+                        "role": "user",
+                        "content": content,
+                    },
+                ],
+                model=provider.model,
+                response_format=response_schema,
+            )
+        finally:
+            await self._close_client(client)
+
+    def _is_anthropic_provider(self, provider: AIProviderOut) -> bool:
+        return self._is_anthropic_provider_data(provider)
+
+    def _get_anthropic_messages_url(self, provider: AIProviderOut) -> str:
+        base_url = (provider.base_url or "https://api.anthropic.com/v1").rstrip("/")
+        if base_url.endswith("/v1"):
+            return f"{base_url}/messages"
+        return f"{base_url}/v1/messages"
+
+    async def _get_anthropic_response(
+        self, prompt: str, content: list[dict], response_schema: type[T], provider: AIProviderOut
+    ) -> T | None:
+        text_parts: list[str] = []
+        for item in content:
+            if item.get("type") != "text":
+                raise ValueError("Direct Anthropic providers currently support text-only AI requests")
+            text_parts.append(item.get("text", ""))
+
+        tool_name = "return_structured_data"
+        payload = {
+            "model": provider.model,
+            "max_tokens": 8192,
+            "system": prompt,
+            "messages": [{"role": "user", "content": "\n\n".join(text_parts)}],
+            "tools": [
                 {
-                    "role": "system",
-                    "content": prompt,
-                },
-                {
-                    "role": "user",
-                    "content": content,
-                },
+                    "name": tool_name,
+                    "description": "Return the structured data requested by the schema.",
+                    "input_schema": response_schema.model_json_schema(),
+                }
             ],
-            model=provider.model,
-            response_format=response_schema,
+            "tool_choice": {"type": "tool", "name": tool_name},
+        }
+
+        headers = {
+            "x-api-key": provider.api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+            **(provider.request_headers or {}),
+        }
+
+        async with httpx.AsyncClient(timeout=provider.timeout) as client:
+            response = await client.post(
+                self._get_anthropic_messages_url(provider),
+                headers=headers,
+                params=provider.request_params or None,
+                json=payload,
+            )
+
+        if response.status_code == 429:
+            raise exceptions.RateLimitError(response.text)
+        response.raise_for_status()
+
+        response_data = response.json()
+        for item in response_data.get("content", []):
+            if item.get("type") == "tool_use" and item.get("name") == tool_name:
+                tool_input: Any = item.get("input")
+                if tool_input:
+                    return response_schema.model_validate(tool_input)
+
+        text_response = "\n".join(
+            item.get("text", "") for item in response_data.get("content", []) if item.get("type") == "text"
         )
+        if not text_response:
+            return None
+
+        return response_schema.parse_openai_response(text_response)
 
     async def get_response(
         self,
@@ -296,6 +518,9 @@ class OpenAIService(BaseService):
             user_messages: list[dict] = [{"type": "text", "text": message}]
             for attachment in attachments or []:
                 user_messages.append(attachment.build_message())
+
+            if self._is_anthropic_provider(provider):
+                return await self._get_anthropic_response(prompt, user_messages, response_schema, provider)
 
             response = await self._get_raw_response(prompt, user_messages, response_schema, provider)
             if not response.choices:
@@ -328,6 +553,8 @@ class OpenAIService(BaseService):
             self.logger.warning(
                 f"Failed to create audio transcription, falling back to chat completion ({e.__class__.__name__}: {e})"
             )
+        finally:
+            await self._close_client(client)
 
         # Fallback to chat completion
         path_obj = Path(audio_file_path)

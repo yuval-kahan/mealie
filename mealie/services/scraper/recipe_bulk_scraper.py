@@ -1,10 +1,15 @@
 import asyncio
+from dataclasses import dataclass
+from pathlib import Path
+from shutil import copyfile, rmtree
 
 from pydantic import UUID4
+from slugify import slugify
 
 from mealie.lang.providers import Translator
 from mealie.repos.repository_factory import AllRepositories
 from mealie.schema.recipe.recipe import CreateRecipeByUrlBulk, Recipe
+from mealie.schema.recipe.recipe_asset import RecipeAsset
 from mealie.schema.reports.reports import (
     ReportCategory,
     ReportCreate,
@@ -16,6 +21,14 @@ from mealie.schema.user.user import GroupInDB
 from mealie.services._base_service import BaseService
 from mealie.services.recipe.recipe_service import RecipeService
 from mealie.services.scraper.scraper import create_from_html
+
+
+@dataclass
+class BulkImportVideo:
+    index: int
+    path: Path
+    original_name: str
+    extension: str
 
 
 class RecipeBulkScraperService(BaseService):
@@ -79,8 +92,31 @@ class RecipeBulkScraperService(BaseService):
         self.report.entries = new_entries
         self.repos.group_reports.update(self.report.id, self.report)
 
-    async def scrape(self, urls: CreateRecipeByUrlBulk) -> None:
+    def _attach_video(self, recipe: Recipe, video: BulkImportVideo) -> None:
+        name = Path(video.original_name).stem or f"Video {video.index + 1}"
+        file_slug = slugify(name) or f"video-{video.index + 1}"
+        file_name = f"{file_slug}.{video.extension}"
+        dest = recipe.asset_dir / file_name
+
+        copyfile(video.path, dest)
+
+        if recipe.assets is None:
+            recipe.assets = []
+
+        recipe.assets.append(RecipeAsset(name=name, icon="mdi-play", file_name=file_name))
+        if recipe.settings is not None:
+            recipe.settings.show_assets = True
+
+        self.service.update_one(recipe.slug, recipe)
+
+    async def scrape(
+        self,
+        urls: CreateRecipeByUrlBulk,
+        videos: list[BulkImportVideo] | None = None,
+        video_temp_dir: Path | None = None,
+    ) -> None:
         sem = asyncio.Semaphore(3)
+        videos_by_index = {video.index: video for video in videos or []}
 
         async def _do(url: str) -> Recipe | None:
             async with sem:
@@ -93,35 +129,41 @@ class RecipeBulkScraperService(BaseService):
                     self._add_error_entry(f"failed to scrape url {url}", str(e))
                     return None
 
-        if self.report is None:
-            self.get_report_id()
-        tasks = [_do(b.url) for b in urls.imports]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        for b, recipe in zip(urls.imports, results, strict=True):
-            if not recipe or isinstance(recipe, BaseException):
-                continue
+        try:
+            if self.report is None:
+                self.get_report_id()
+            tasks = [_do(b.url) for b in urls.imports]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for idx, (b, recipe) in enumerate(zip(urls.imports, results, strict=True)):
+                if not recipe or isinstance(recipe, BaseException):
+                    continue
 
-            if b.tags:
-                recipe.tags = b.tags
+                if b.tags:
+                    recipe.tags = b.tags
 
-            if b.categories:
-                recipe.recipe_category = b.categories
+                if b.categories:
+                    recipe.recipe_category = b.categories
 
-            try:
-                self.service.create_one(recipe)
-            except Exception as e:
-                self.service.logger.error(f"Failed to save recipe to database during bulk url import {b.url}")
-                self.service.logger.exception(e)
-                self._add_error_entry(f"Failed to save recipe to database during bulk url import {b.url}", str(e))
-                continue
+                try:
+                    created_recipe = self.service.create_one(recipe)
+                    if video := videos_by_index.get(idx):
+                        self._attach_video(created_recipe, video)
+                except Exception as e:
+                    self.service.logger.error(f"Failed to save recipe to database during bulk url import {b.url}")
+                    self.service.logger.exception(e)
+                    self._add_error_entry(f"Failed to save recipe to database during bulk url import {b.url}", str(e))
+                    continue
 
-            self.report_entries.append(
-                ReportEntryCreate(
-                    report_id=self.report.id,
-                    success=True,
-                    message=f"Successfully imported recipe {recipe.name}",
-                    exception="",
+                self.report_entries.append(
+                    ReportEntryCreate(
+                        report_id=self.report.id,
+                        success=True,
+                        message=f"Successfully imported recipe {recipe.name}",
+                        exception="",
+                    )
                 )
-            )
 
-        self._save_all_entries()
+            self._save_all_entries()
+        finally:
+            if video_temp_dir is not None:
+                rmtree(video_temp_dir, ignore_errors=True)

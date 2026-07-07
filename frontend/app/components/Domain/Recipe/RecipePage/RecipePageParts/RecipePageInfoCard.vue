@@ -1,12 +1,8 @@
 <template>
   <div>
-    <div class="d-flex justify-end flex-wrap align-stretch">
-      <RecipePageInfoCardImage
-        v-if="landscape"
-        :recipe="recipe"
-      />
+    <div class="d-flex justify-center flex-wrap align-stretch">
       <v-card
-        :width="landscape ? '100%' : '50%'"
+        width="100%"
         flat
         class="d-flex flex-column justify-center align-center"
       >
@@ -66,12 +62,6 @@
           </v-container>
         </v-card-text>
       </v-card>
-      <RecipePageInfoCardImage
-        v-if="!landscape"
-        :recipe="recipe"
-        max-width="50%"
-        class="my-auto"
-      />
     </div>
   </div>
 </template>
@@ -82,7 +72,6 @@ import RecipeRating from "~/components/Domain/Recipe/RecipeRating.vue";
 import RecipeLastMade from "~/components/Domain/Recipe/RecipeLastMade.vue";
 import RecipeTimeCard from "~/components/Domain/Recipe/RecipeTimeCard.vue";
 import RecipeYield from "~/components/Domain/Recipe/RecipeYield.vue";
-import RecipePageInfoCardImage from "~/components/Domain/Recipe/RecipePage/RecipePageParts/RecipePageInfoCardImage.vue";
 import type { Recipe } from "~/lib/api/types/recipe";
 import type { NoUndefinedField } from "~/lib/api/types/non-generated";
 

@@ -20,6 +20,7 @@ export type SupportedMigrations =
 export interface AIProviderCreate {
   name: string;
   baseUrl?: string | null;
+  apiKey: string;
   model: string;
   timeout?: number;
   requestHeaders?: {
@@ -32,6 +33,7 @@ export interface AIProviderCreate {
 export interface AIProviderOut {
   name: string;
   baseUrl?: string | null;
+  apiKey?: string;
   model: string;
   timeout?: number;
   requestHeaders?: {
@@ -79,6 +81,7 @@ export interface AIProviderSettingsUpdate {
 export interface AIProviderUpdate {
   name: string;
   baseUrl?: string | null;
+  apiKey?: string;
   model: string;
   timeout?: number;
   requestHeaders?: {

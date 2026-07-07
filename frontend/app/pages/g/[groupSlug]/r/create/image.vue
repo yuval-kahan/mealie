@@ -60,6 +60,11 @@
               </v-row>
             </div>
           </v-container>
+          <v-divider class="my-4" />
+          <RecipeVideoAssetUpload
+            v-model="videoFile"
+            :disabled="state.loading"
+          />
           <v-checkbox
             v-if="uploadedImages.length"
             v-model="shouldTranslate"
@@ -116,8 +121,10 @@ const uploadedImages = ref<(Blob | File)[]>([]);
 const uploadedImageNames = ref<string[]>([]);
 const uploadedImagesPreviewUrls = ref<string[]>([]);
 const shouldTranslate = ref(true);
+const videoFile = ref<File | null>(null);
 
 const { parseRecipe, navigateToRecipe } = useNewRecipeOptions();
+const { attachVideoToRecipe } = useRecipeVideoAsset();
 
 function uploadImages(files: File[]) {
   uploadedImages.value = [...uploadedImages.value, ...files];
@@ -151,6 +158,7 @@ async function createRecipe() {
     state.loading = false;
   }
   else {
+    await attachVideoToRecipe(data, videoFile.value);
     navigateToRecipe(data, groupSlug.value, `/g/${groupSlug.value}/r/create/image`);
   }
 }

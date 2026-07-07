@@ -9,6 +9,14 @@ from mealie.schema.recipe.recipe_timeline_events import RecipeTimelineEventOut
 
 router = APIRouter(prefix="/recipes")
 
+VIDEO_MEDIA_TYPES = {
+    ".m4v": "video/mp4",
+    ".mov": "video/quicktime",
+    ".mp4": "video/mp4",
+    ".ogv": "video/ogg",
+    ".webm": "video/webm",
+}
+
 
 class ImageType(StrEnum):
     original = "original.webp"
@@ -58,6 +66,15 @@ async def get_recipe_asset(recipe_id: UUID4, file_name: str):
         raise HTTPException(status.HTTP_400_BAD_REQUEST)
 
     if file.exists():
+        if media_type := VIDEO_MEDIA_TYPES.get(file.suffix.lower()):
+            return FileResponse(
+                file,
+                media_type=media_type,
+                filename=file.name,
+                content_disposition_type="inline",
+                headers={"X-Content-Type-Options": "nosniff"},
+            )
+
         # Force download and disable MIME sniffing so uploaded assets cannot be
         # served as active content in Mealie's origin.
         return FileResponse(
