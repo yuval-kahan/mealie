@@ -134,6 +134,8 @@ class RecipeSummary(MealieModel):
     perform_time: str | None = None
 
     description: str | None = ""
+    source: str | None = None
+    created_by: str | None = None
     recipe_category: Annotated[list[RecipeCategory] | None, Field(validate_default=True)] = []
     tags: Annotated[list[RecipeTag] | None, Field(validate_default=True)] = []
     tools: list[RecipeTool] = []
@@ -352,6 +354,8 @@ class Recipe(RecipeSummary):
                 or_(
                     RecipeModel.name_normalized.op("%>")(search),
                     RecipeModel.description_normalized.op("%>")(search),
+                    RecipeModel.source_normalized.op("%>")(search),
+                    RecipeModel.created_by_normalized.op("%>")(search),
                     RecipeModel.recipe_ingredient.any(RecipeIngredientModel.id.in_(ingredient_ids)),
                 )
             ).order_by(  # trigram ordering could be too slow on million record db, but is fine with thousands.
@@ -378,6 +382,9 @@ class Recipe(RecipeSummary):
                 or_(
                     *[RecipeModel.name_normalized.like(f"%{ns}%") for ns in search_list],
                     *[RecipeModel.description_normalized.like(f"%{ns}%") for ns in search_list],
+                    *[RecipeModel.source_normalized.like(f"%{ns}%") for ns in search_list],
+                    *[RecipeModel.created_by_normalized.like(f"%{ns}%") for ns in search_list],
+                    *[RecipeModel.org_url.like(f"%{ns}%") for ns in search_list],
                     RecipeModel.recipe_ingredient.any(RecipeIngredientModel.id.in_(ingredient_ids)),
                 )
             ).order_by(desc(RecipeModel.name_normalized.like(f"%{search}%")))

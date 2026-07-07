@@ -9,11 +9,35 @@ from .repository_generic import GroupRepositoryGeneric
 
 
 class GroupRepositoryAIProvider(GroupRepositoryGeneric[AIProviderOut, AIProvider]):
+    @staticmethod
+    def _split_api_keys(api_key: str) -> list[str]:
+        keys = [key.strip() for key in api_key.replace(",", "\n").splitlines() if key.strip()]
+        return list(dict.fromkeys(keys))
+
+    @staticmethod
+    def _is_gemini_provider_data(data: dict) -> bool:
+        base_url = (data.get("base_url") or "").lower()
+        model = (data.get("model") or "").lower()
+        return "generativelanguage.googleapis.com" in base_url or model.startswith("gemini-")
+
+    @classmethod
+    def _normalize_api_key(cls, data: dict) -> None:
+        api_key = data.get("api_key")
+        if not api_key:
+            return
+
+        if cls._is_gemini_provider_data(data):
+            data["api_key"] = "\n".join(cls._split_api_keys(api_key))
+        else:
+            data["api_key"] = api_key.strip()
+
     def create(self, data: AIProviderCreate | dict):
         if isinstance(data, AIProviderCreate):
             api_key = data.api_key
             data = data.model_dump()
             data["api_key"] = api_key
+
+        self._normalize_api_key(data)
 
         if not data.get("api_key"):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="API key cannot be empty")
@@ -37,6 +61,8 @@ class GroupRepositoryAIProvider(GroupRepositoryGeneric[AIProviderOut, AIProvider
             existing = self.get_one(match_value)
             if existing:
                 new_data["api_key"] = existing.api_key
+
+        self._normalize_api_key(new_data)
 
         return super().update(match_value, new_data)
 

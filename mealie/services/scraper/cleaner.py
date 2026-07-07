@@ -55,6 +55,10 @@ def clean(recipe_data: Recipe | dict, translator: Translator, url=None) -> Recip
 
     recipe_data["slug"] = slugify(recipe_data.get("name", ""))
     recipe_data["description"] = clean_string(recipe_data.get("description", ""))
+    recipe_data["source"] = clean_string(recipe_data.get("source", ""))
+    recipe_data["createdBy"] = clean_string(
+        recipe_data.get("createdBy") or recipe_data.get("created_by") or recipe_data.get("author") or ""
+    )
 
     recipe_data["prepTime"] = clean_time(recipe_data.get("prepTime"), translator)
     recipe_data["performTime"] = clean_time(recipe_data.get("performTime"), translator)

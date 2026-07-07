@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import suppress
 from collections import defaultdict
 from collections.abc import AsyncIterable
 from pathlib import Path as FileSystemPath
@@ -43,6 +44,7 @@ from mealie.schema.recipe.recipe import (
     RecipeLastMade,
     RecipeSummary,
 )
+from mealie.schema.recipe.recipe_ai_search import RecipeAISearchRequest, RecipeAISearchResponse
 from mealie.schema.recipe.recipe_asset import RecipeAsset
 from mealie.schema.recipe.recipe_scraper import ScrapeRecipeTest
 from mealie.schema.recipe.recipe_suggestion import RecipeSuggestionQuery, RecipeSuggestionResponse
@@ -140,6 +142,14 @@ class RecipeController(BaseRecipeController):
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=ErrorResponse.respond(message="Unable to generate recipe slug"),
             )
+        elif thrownType == exceptions.NotARecipe:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=ErrorResponse.respond(
+                    message=str(ex) or "The pasted text does not look like a recipe",
+                    exception="NotARecipe",
+                ),
+            )
         else:
             self.logger.error("Unknown Error on recipe controller action")
             self.logger.exception(ex)
@@ -231,9 +241,11 @@ class RecipeController(BaseRecipeController):
         if isinstance(req, ScrapeRecipeData):
             html = req.data
             url = req.url or ""
+            use_openai = False
         else:
             html = None
             url = req.url
+            use_openai = req.use_openai
 
         queue: asyncio.Queue[ServerSentEvent | None] = asyncio.Queue()
 
@@ -247,7 +259,14 @@ class RecipeController(BaseRecipeController):
 
         async def run() -> None:
             try:
-                recipe, extras = await create_from_html(url, self.repos, self.translator, html, on_progress=on_progress)
+                recipe, extras = await create_from_html(
+                    url,
+                    self.repos,
+                    self.translator,
+                    html,
+                    on_progress=on_progress,
+                    use_openai=use_openai,
+                )
                 slug = self._finish_recipe_from_web(req, recipe, extras)
                 await queue.put(
                     ServerSentEvent(
@@ -266,9 +285,15 @@ class RecipeController(BaseRecipeController):
             finally:
                 await queue.put(None)
 
-        asyncio.create_task(run())
-        while (event := await queue.get()) is not None:
-            yield event
+        task = asyncio.create_task(run())
+        try:
+            while (event := await queue.get()) is not None:
+                yield event
+        finally:
+            if not task.done():
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
 
     def _finish_recipe_from_web(self, req: ScrapeRecipe | ScrapeRecipeData, recipe: Recipe, extras: object) -> str:
         if req.include_tags:
@@ -442,7 +467,17 @@ class RecipeController(BaseRecipeController):
                 detail=ErrorResponse.respond("Recipe text cannot be empty"),
             )
 
-        recipe = await self.service.create_from_text(recipe_text, data.translate_language)
+        try:
+            recipe = await self.service.create_from_text(recipe_text, data.translate_language)
+        except exceptions.NotARecipe as e:
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond(
+                    message=str(e) or "The pasted text does not look like a recipe",
+                    exception="NotARecipe",
+                ),
+            ) from e
+
         self.publish_event(
             event_type=EventTypes.recipe_created,
             document_data=EventRecipeData(operation=EventOperation.create, recipe_slug=recipe.slug),
@@ -451,6 +486,30 @@ class RecipeController(BaseRecipeController):
         )
 
         return recipe.slug
+
+    @router.post("/ai-search", response_model=RecipeAISearchResponse)
+    async def search_recipes_with_ai(self, data: RecipeAISearchRequest) -> RecipeAISearchResponse:
+        """Search existing recipes using the configured AI provider."""
+
+        ai_settings = self.group.ai_provider_settings
+        if not (ai_settings and ai_settings.ai_enabled):
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("OpenAI services are not enabled"),
+            )
+
+        try:
+            return await self.service.search_with_ai(data.query, data.limit)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond(str(e)),
+            ) from e
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("AI recipe search failed"),
+            ) from e
 
     # ==================================================================================================================
     # CRUD Operations

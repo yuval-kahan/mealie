@@ -76,6 +76,26 @@
       density="compact"
       variant="underlined"
     />
+    <v-container class="ma-0 pa-0">
+      <v-row>
+        <v-col cols="12" md="6">
+          <v-text-field
+            v-model="recipe.source"
+            density="compact"
+            :label="$t('recipe.source')"
+            variant="underlined"
+          />
+        </v-col>
+        <v-col cols="12" md="6">
+          <v-text-field
+            v-model="recipe.createdBy"
+            density="compact"
+            :label="$t('recipe.created-by')"
+            variant="underlined"
+          />
+        </v-col>
+      </v-row>
+    </v-container>
   </div>
 </template>
 

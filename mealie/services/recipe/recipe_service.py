@@ -1,7 +1,11 @@
+import hashlib
 import json
+import math
 import os
+import re
 import shutil
-from datetime import UTC, datetime
+from collections import Counter
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from shutil import copytree, rmtree
 from textwrap import dedent
@@ -12,18 +16,23 @@ from zipfile import ZipFile
 import sqlalchemy as sa
 from fastapi import UploadFile
 from slugify import slugify
+from sqlalchemy.orm import selectinload
 
 from mealie.core import exceptions
 from mealie.core.dependencies.dependencies import get_temporary_path
+from mealie.db.models.recipe.ai_search_index import RecipeAISearchIndex
+from mealie.db.models.recipe.ingredient import RecipeIngredientModel
 from mealie.lang.providers import Translator
 from mealie.pkgs import cache
 from mealie.repos.all_repositories import get_repositories
 from mealie.repos.repository_factory import AllRepositories
 from mealie.repos.repository_generic import RepositoryGeneric
 from mealie.schema.household.household import HouseholdInDB, HouseholdRecipeUpdate
-from mealie.schema.openai.recipe import OpenAIRecipe
+from mealie.schema.openai.recipe import OpenAIRecipe, OpenAIRecipeTextParse
+from mealie.schema.openai.recipe_search import OpenAIRecipeSearchResponse
 from mealie.schema.recipe.recipe_category import CategorySave, TagSave
-from mealie.schema.recipe.recipe import CreateRecipe, Recipe, create_recipe_slug
+from mealie.schema.recipe.recipe import CreateRecipe, Recipe, RecipeSummary, create_recipe_slug
+from mealie.schema.recipe.recipe_ai_search import RecipeAISearchResponse, RecipeAISearchResult
 from mealie.schema.recipe.recipe_ingredient import RecipeIngredient
 from mealie.schema.recipe.recipe_notes import RecipeNote
 from mealie.schema.recipe.recipe_settings import RecipeSettings
@@ -364,6 +373,10 @@ class RecipeService(RecipeServiceBase):
         recipe_data = cleaner.clean(recipe_data, self.translator)
         return self.create_one(recipe_data)
 
+    async def search_with_ai(self, query: str, limit: int) -> RecipeAISearchResponse:
+        openai_recipe_service = OpenAIRecipeService(self.repos, self.user, self.household, self.translator)
+        return await openai_recipe_service.search_recipes_with_ai(query, limit)
+
     def duplicate_one(self, old_slug_or_id: str | UUID, dup_data: RecipeDuplicate) -> Recipe:
         """Duplicates a recipe and returns the new recipe."""
 
@@ -605,6 +618,368 @@ class RecipeService(RecipeServiceBase):
 
 
 class OpenAIRecipeService(RecipeServiceBase):
+    _SEARCH_TOKEN_RE = re.compile(r"[\w\u0590-\u05ff]+", re.UNICODE)
+    _MIN_AI_SEARCH_CANDIDATES = 80
+    _MAX_AI_SEARCH_CANDIDATES = 400
+    _AI_SEARCH_INDEX_TTL = timedelta(hours=24)
+
+    @staticmethod
+    def _compact_text(value: Any, max_length: int = 240) -> str:
+        text = " ".join(str(value or "").split())
+        if len(text) <= max_length:
+            return text
+        return text[: max_length - 1].rstrip() + "..."
+
+    def _ingredient_catalog_text(self, ingredient: RecipeIngredientModel) -> str:
+        if ingredient.original_text:
+            text = ingredient.original_text
+        elif ingredient.note:
+            text = ingredient.note
+        else:
+            parts: list[str] = []
+            if ingredient.quantity:
+                quantity = float(ingredient.quantity)
+                parts.append(str(int(quantity)) if quantity.is_integer() else str(ingredient.quantity))
+            if ingredient.unit:
+                parts.append(ingredient.unit.name or ingredient.unit.abbreviation or "")
+            if ingredient.food:
+                parts.append(ingredient.food.name or ingredient.food.plural_name or "")
+            text = " ".join(part for part in parts if part)
+
+        if ingredient.title:
+            text = f"{ingredient.title}: {text}"
+
+        return self._compact_text(text, 180)
+
+    @classmethod
+    def _search_tokens(cls, text: str) -> list[str]:
+        return [token for token in cls._SEARCH_TOKEN_RE.findall((text or "").lower()) if len(token) > 1]
+
+    @classmethod
+    def _search_vector(cls, text: str) -> dict[str, float]:
+        counts = Counter(cls._search_tokens(text))
+        if not counts:
+            return {}
+
+        weights = {token: 1 + math.log(count) for token, count in counts.most_common(500)}
+        norm = math.sqrt(sum(weight * weight for weight in weights.values()))
+        if not norm:
+            return {}
+
+        return {token: round(weight / norm, 6) for token, weight in weights.items()}
+
+    @staticmethod
+    def _catalog_text(catalog: dict[str, Any]) -> str:
+        parts: list[str] = []
+        for key in (
+            "name",
+            "description",
+            "source",
+            "created_by",
+            "original_url",
+            "yield",
+            "total_time",
+        ):
+            value = catalog.get(key)
+            if value:
+                parts.append(str(value))
+
+        for key in ("categories", "tags", "tools", "ingredients", "instructions", "notes"):
+            values = catalog.get(key) or []
+            if values:
+                parts.extend(str(value) for value in values if value)
+
+        return " ".join(parts)
+
+    def _recipe_catalog_entry(self, recipe: Any, large_catalog: bool) -> dict[str, Any]:
+        ingredient_limit = 10 if large_catalog else 24
+        instruction_limit = 2 if large_catalog else 6
+        note_limit = 1 if large_catalog else 3
+
+        return {
+            "slug": recipe.slug,
+            "name": self._compact_text(recipe.name, 180),
+            "description": self._compact_text(recipe.description, 260 if not large_catalog else 140),
+            "source": self._compact_text(recipe.source, 160),
+            "created_by": self._compact_text(recipe.created_by, 160),
+            "original_url": self._compact_text(recipe.org_url, 180),
+            "categories": [category.name for category in recipe.recipe_category if category.name],
+            "tags": [tag.name for tag in recipe.tags if tag.name],
+            "tools": [tool.name for tool in recipe.tools if tool.name],
+            "yield": self._compact_text(recipe.recipe_yield, 80),
+            "total_time": self._compact_text(recipe.total_time, 60),
+            "ingredients": [
+                self._ingredient_catalog_text(ingredient) for ingredient in recipe.recipe_ingredient[:ingredient_limit]
+            ],
+            "instructions": [
+                self._compact_text(
+                    f"{instruction.title or ''} {instruction.text or instruction.summary or ''}",
+                    220,
+                )
+                for instruction in recipe.recipe_instructions[:instruction_limit]
+                if instruction.text or instruction.summary or instruction.title
+            ],
+            "notes": [
+                self._compact_text(f"{note.title or ''} {note.text or ''}", 180)
+                for note in recipe.notes[:note_limit]
+                if note.title or note.text
+            ],
+        }
+
+    def _recipe_index_payload(self, recipe: Any, large_catalog: bool) -> dict[str, str]:
+        catalog = self._recipe_catalog_entry(recipe, large_catalog)
+        catalog_json = json.dumps(catalog, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+        search_text = self._catalog_text(catalog)
+        search_vector = json.dumps(self._search_vector(search_text), ensure_ascii=False, separators=(",", ":"))
+        content_hash = hashlib.sha256(catalog_json.encode("utf-8")).hexdigest()
+
+        return {
+            "catalog_json": catalog_json,
+            "search_text": search_text,
+            "search_vector": search_vector,
+            "content_hash": content_hash,
+        }
+
+    def _ensure_ai_recipe_search_index(self) -> list[RecipeAISearchIndex]:
+        model = self.group_recipes.model
+        session = self.group_recipes.session
+        recipe_meta_rows = session.execute(
+            sa.select(model.id, model.slug, model.name, model.update_at)
+            .filter(model.group_id == self.user.group_id)
+            .filter(model.household_id.is_not(None))
+            .order_by(model.name.asc())
+        ).all()
+
+        index_rows = session.execute(
+            sa.select(RecipeAISearchIndex).filter(RecipeAISearchIndex.group_id == self.user.group_id)
+        ).scalars().all()
+
+        if not recipe_meta_rows:
+            if index_rows:
+                session.execute(
+                    sa.delete(RecipeAISearchIndex).where(RecipeAISearchIndex.group_id == self.user.group_id)
+                )
+                session.commit()
+            return []
+
+        recipe_meta_by_id = {
+            row.id: {
+                "slug": row.slug,
+                "name": row.name,
+                "updated_at": row.update_at,
+            }
+            for row in recipe_meta_rows
+        }
+        current_recipe_ids = set(recipe_meta_by_id)
+        index_by_recipe_id = {row.recipe_id: row for row in index_rows}
+
+        changed = False
+        for index_row in index_rows:
+            if index_row.recipe_id not in current_recipe_ids:
+                session.delete(index_row)
+                changed = True
+
+        stale_recipe_ids = []
+        now = datetime.now(UTC)
+        for recipe_id, meta in recipe_meta_by_id.items():
+            index_row = index_by_recipe_id.get(recipe_id)
+            if not index_row:
+                stale_recipe_ids.append(recipe_id)
+                continue
+
+            index_expires_at = index_row.update_at + self._AI_SEARCH_INDEX_TTL if index_row.update_at else None
+            if (
+                index_row.recipe_slug != meta["slug"]
+                or index_row.recipe_name != meta["name"]
+                or index_row.recipe_updated_at != meta["updated_at"]
+                or not index_expires_at
+                or index_expires_at <= now
+                or not index_row.catalog_json
+                or not index_row.search_vector
+            ):
+                stale_recipe_ids.append(recipe_id)
+
+        if stale_recipe_ids:
+            large_catalog = len(recipe_meta_rows) > 100
+            stale_recipes = session.execute(
+                sa.select(model)
+                .filter(model.id.in_(stale_recipe_ids))
+                .options(
+                    *RecipeSummary.loader_options(),
+                    selectinload(model.recipe_ingredient).joinedload(RecipeIngredientModel.food),
+                    selectinload(model.recipe_ingredient).joinedload(RecipeIngredientModel.unit),
+                    selectinload(model.recipe_instructions),
+                    selectinload(model.notes),
+                )
+                .order_by(model.name.asc())
+            ).scalars().unique().all()
+
+            for recipe in stale_recipes:
+                payload = self._recipe_index_payload(recipe, large_catalog)
+                index_row = index_by_recipe_id.get(recipe.id)
+                if not index_row:
+                    index_row = RecipeAISearchIndex(recipe_id=recipe.id, group_id=recipe.group_id)
+                    session.add(index_row)
+
+                index_row.recipe_slug = recipe.slug or ""
+                index_row.recipe_name = recipe.name
+                index_row.recipe_updated_at = recipe.update_at
+                index_row.content_hash = payload["content_hash"]
+                index_row.catalog_json = payload["catalog_json"]
+                index_row.search_text = payload["search_text"]
+                index_row.search_vector = payload["search_vector"]
+                changed = True
+
+        if changed:
+            session.commit()
+
+        return session.execute(
+            sa.select(RecipeAISearchIndex)
+            .filter(RecipeAISearchIndex.group_id == self.user.group_id)
+            .order_by(RecipeAISearchIndex.recipe_name.asc())
+        ).scalars().all()
+
+    def _score_ai_search_index(self, query: str, query_vector: dict[str, float], index_row: RecipeAISearchIndex) -> float:
+        try:
+            recipe_vector = json.loads(index_row.search_vector or "{}")
+        except ValueError:
+            recipe_vector = {}
+
+        score = sum(weight * recipe_vector.get(token, 0) for token, weight in query_vector.items())
+        if not query_vector:
+            return score
+
+        query_tokens = set(query_vector)
+        matched_tokens = sum(1 for token in query_tokens if token in recipe_vector)
+        score += (matched_tokens / len(query_tokens)) * 0.75
+
+        search_text = (index_row.search_text or "").lower()
+        query_text = query.lower()
+        if len(query_text) >= 3 and query_text in search_text:
+            score += 1.5
+
+        recipe_name = (index_row.recipe_name or "").lower()
+        if any(token in recipe_name for token in query_tokens):
+            score += 0.5
+
+        return score
+
+    def _build_ai_recipe_catalog(self, query: str, limit: int) -> tuple[int, list[dict[str, Any]], set[str]]:
+        index_rows = self._ensure_ai_recipe_search_index()
+        if not index_rows:
+            return 0, [], set()
+
+        candidate_limit = min(
+            len(index_rows),
+            max(self._MIN_AI_SEARCH_CANDIDATES, min(self._MAX_AI_SEARCH_CANDIDATES, limit * 8)),
+        )
+        query_vector = self._search_vector(query)
+        scored_rows = [
+            (self._score_ai_search_index(query, query_vector, index_row), index_row) for index_row in index_rows
+        ]
+        scored_rows.sort(key=lambda item: (-item[0], item[1].recipe_name or ""))
+
+        candidates = [index_row for _, index_row in scored_rows[:candidate_limit]]
+        catalog: list[dict[str, Any]] = []
+        candidate_slugs: set[str] = set()
+
+        for index_row in candidates:
+            try:
+                catalog_item = json.loads(index_row.catalog_json)
+            except ValueError:
+                continue
+
+            if slug := catalog_item.get("slug"):
+                candidate_slugs.add(slug)
+                catalog.append(catalog_item)
+
+        return len(index_rows), catalog, candidate_slugs
+
+    def _load_ai_search_result_recipes(self, slugs: set[str]) -> dict[str, Any]:
+        if not slugs:
+            return {}
+
+        model = self.group_recipes.model
+        recipes = self.group_recipes.session.execute(
+            sa.select(model)
+            .filter(model.group_id == self.user.group_id)
+            .filter(model.slug.in_(slugs))
+            .options(
+                *RecipeSummary.loader_options(),
+            )
+        ).scalars().unique().all()
+
+        return {recipe.slug: recipe for recipe in recipes if recipe.slug}
+
+    async def search_recipes_with_ai(self, query: str, limit: int) -> RecipeAISearchResponse:
+        openai_service = OpenAIService(self.repos)
+        if not (openai_service.provider_settings and openai_service.provider_settings.ai_enabled):
+            raise ValueError("OpenAI services are not available")
+
+        query = query.strip()
+        if not query:
+            raise ValueError("Search query cannot be empty")
+
+        recipe_count, catalog, candidate_slugs = self._build_ai_recipe_catalog(query, limit)
+        if not catalog:
+            return RecipeAISearchResponse(query=query, items=[], recipe_count=recipe_count)
+
+        prompt = openai_service.get_prompt("recipes.search-recipes")
+        message = dedent(
+            f"""
+            User request:
+            {query}
+
+            Return at most {limit} recipes.
+
+            The catalog below is a prefiltered shortlist from {recipe_count} indexed recipes.
+            Choose only from this shortlist.
+
+            Recipe shortlist JSON:
+            {json.dumps(catalog, ensure_ascii=False)}
+            """
+        ).strip()
+
+        try:
+            response = await openai_service.get_response(
+                prompt,
+                message,
+                response_schema=OpenAIRecipeSearchResponse,
+            )
+        except Exception as e:
+            raise Exception("Failed to call OpenAI services") from e
+
+        if not response:
+            return RecipeAISearchResponse(query=query, items=[], recipe_count=recipe_count)
+
+        recipe_by_slug = self._load_ai_search_result_recipes(candidate_slugs)
+        seen_slugs: set[str] = set()
+        items: list[RecipeAISearchResult] = []
+        for result in response.results:
+            if result.slug in seen_slugs:
+                continue
+
+            if result.slug not in candidate_slugs:
+                continue
+
+            recipe = recipe_by_slug.get(result.slug)
+            if not recipe:
+                continue
+
+            seen_slugs.add(result.slug)
+            items.append(
+                RecipeAISearchResult(
+                    recipe=RecipeSummary.model_validate(recipe),
+                    reason=result.reason,
+                    score=result.score,
+                )
+            )
+
+            if len(items) >= limit:
+                break
+
+        return RecipeAISearchResponse(query=query, items=items, recipe_count=recipe_count)
+
     def _clean_organizer_names(self, names: list[str], max_items: int = 10) -> list[str]:
         cleaned_names: list[str] = []
         seen_slugs: set[str] = set()
@@ -671,6 +1046,8 @@ class OpenAIRecipeService(RecipeServiceBase):
             name=openai_recipe.name,
             slug=create_recipe_slug(openai_recipe.name),
             description=openai_recipe.description,
+            source=openai_recipe.source,
+            created_by=openai_recipe.created_by,
             recipe_yield=openai_recipe.recipe_yield,
             total_time=openai_recipe.total_time,
             prep_time=openai_recipe.prep_time,
@@ -690,6 +1067,13 @@ class OpenAIRecipeService(RecipeServiceBase):
             tools=self._get_or_create_tools(openai_recipe.tools),
             notes=[RecipeNote(title=note.title or "", text=note.text) for note in openai_recipe.notes if note.text],
         )
+
+    @staticmethod
+    def _has_minimum_recipe_data(openai_recipe: OpenAIRecipe) -> bool:
+        has_name = bool(openai_recipe.name and openai_recipe.name.strip())
+        has_ingredients = any(ingredient.text.strip() for ingredient in openai_recipe.ingredients)
+        has_instructions = any(instruction.text.strip() for instruction in openai_recipe.instructions)
+        return has_name and has_ingredients and has_instructions
 
     async def build_recipe_from_images(self, images: list[Path], translate_language: str | None) -> Recipe:
         openai_service = OpenAIService(self.repos)
@@ -733,7 +1117,7 @@ class OpenAIRecipeService(RecipeServiceBase):
             raise ValueError("OpenAI services are not available")
 
         prompt = openai_service.get_prompt("recipes.parse-recipe-text")
-        message = "Please extract exactly one recipe from the pasted text below."
+        message = "Please analyze the pasted text below and create a recipe only if it contains usable recipe data."
 
         if translate_language:
             message += f" Please translate the recipe to {translate_language}."
@@ -744,16 +1128,25 @@ class OpenAIRecipeService(RecipeServiceBase):
             response = await openai_service.get_response(
                 prompt,
                 message,
-                response_schema=OpenAIRecipe,
+                response_schema=OpenAIRecipeTextParse,
             )
             if not response:
                 raise ValueError("Received empty response from OpenAI")
+            if not response.is_recipe or not response.recipe:
+                raise exceptions.NotARecipe(response.reason or "The pasted text does not look like a recipe")
+            openai_recipe = response.recipe
+            if not self._has_minimum_recipe_data(openai_recipe):
+                raise exceptions.NotARecipe(
+                    "The pasted text does not contain enough recipe data. Include a name, ingredients, and instructions."
+                )
 
         except Exception as e:
+            if isinstance(e, exceptions.NotARecipe):
+                raise
             raise Exception("Failed to call OpenAI services") from e
 
         try:
-            recipe = self._convert_recipe(response)
+            recipe = self._convert_recipe(openai_recipe)
         except Exception as e:
             raise ValueError("Unable to parse recipe from text") from e
 

@@ -14,6 +14,7 @@ from .shopping_list import (
     ShoppingListMultiPurposeLabel,
     ShoppingListRecipeReference,
 )
+from .uploaded_book import UploadedBook
 from .webhooks import GroupWebhooksModel
 
 __all__ = [
@@ -33,5 +34,6 @@ __all__ = [
     "ShoppingListItemRecipeReference",
     "ShoppingListMultiPurposeLabel",
     "ShoppingListRecipeReference",
+    "UploadedBook",
     "GroupWebhooksModel",
 ]

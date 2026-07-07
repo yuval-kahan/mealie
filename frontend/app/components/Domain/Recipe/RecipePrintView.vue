@@ -27,6 +27,17 @@
               {{ recipe.name }}
             </v-card-title>
             <div
+              v-if="recipe.createdBy || recipe.source"
+              class="print-origin pb-3"
+            >
+              <div v-if="recipe.createdBy">
+                <strong>{{ $t("recipe.created-by") }}:</strong> {{ recipe.createdBy }}
+              </div>
+              <div v-if="recipe.source">
+                <strong>{{ $t("recipe.source") }}:</strong> {{ recipe.source }}
+              </div>
+            </div>
+            <div
               v-if="recipeYield"
               class="d-flex justify-space-between align-center pb-6"
             >
@@ -412,7 +423,8 @@ p {
 
 .ingredient-body,
 .recipe-step-body,
-.note-body {
+.note-body,
+.print-origin {
   font-size: 14px;
 }
 

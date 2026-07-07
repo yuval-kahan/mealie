@@ -80,6 +80,8 @@ class RecipeModel(SqlAlchemyBase, BaseMixins):
     # General Recipe Properties
     name: FilterableColumn[str] = mapped_column(sa.String, nullable=False)
     description: FilterableColumn[str | None] = mapped_column(sa.String)
+    source: FilterableColumn[str | None] = mapped_column(sa.String)
+    created_by: FilterableColumn[str | None] = mapped_column(sa.String)
 
     image: FilterableColumn[str | None] = mapped_column(sa.String)
 
@@ -164,6 +166,8 @@ class RecipeModel(SqlAlchemyBase, BaseMixins):
     # Automatically updated by sqlalchemy event, do not write to this manually
     name_normalized: FilterableColumn[str] = mapped_column(sa.String, nullable=False, index=True)
     description_normalized: FilterableColumn[str | None] = mapped_column(sa.String, index=True)
+    source_normalized: FilterableColumn[str | None] = mapped_column(sa.String, index=True)
+    created_by_normalized: FilterableColumn[str | None] = mapped_column(sa.String, index=True)
     model_config = ConfigDict(
         get_attr="slug",
         exclude={
@@ -227,6 +231,12 @@ class RecipeModel(SqlAlchemyBase, BaseMixins):
         if description is not None:
             self.description_normalized = self.normalize(description)
 
+        if self.source is not None:
+            self.source_normalized = self.normalize(self.source)
+
+        if self.created_by is not None:
+            self.created_by_normalized = self.normalize(self.created_by)
+
         tableargs = [  # base set of indices
             sa.UniqueConstraint("slug", "group_id", name="recipe_slug_group_id_key"),
             sa.Index(
@@ -237,6 +247,16 @@ class RecipeModel(SqlAlchemyBase, BaseMixins):
             sa.Index(
                 "ix_recipes_description_normalized",
                 "description_normalized",
+                unique=False,
+            ),
+            sa.Index(
+                "ix_recipes_source_normalized",
+                "source_normalized",
+                unique=False,
+            ),
+            sa.Index(
+                "ix_recipes_created_by_normalized",
+                "created_by_normalized",
                 unique=False,
             ),
         ]
@@ -262,6 +282,24 @@ class RecipeModel(SqlAlchemyBase, BaseMixins):
                             "description_normalized": "gin_trgm_ops",
                         },
                     ),
+                    sa.Index(
+                        "ix_recipes_source_normalized_gin",
+                        "source_normalized",
+                        unique=False,
+                        postgresql_using="gin",
+                        postgresql_ops={
+                            "source_normalized": "gin_trgm_ops",
+                        },
+                    ),
+                    sa.Index(
+                        "ix_recipes_created_by_normalized_gin",
+                        "created_by_normalized",
+                        unique=False,
+                        postgresql_using="gin",
+                        postgresql_ops={
+                            "created_by_normalized": "gin_trgm_ops",
+                        },
+                    ),
                 ]
             )
         # add indices
@@ -279,6 +317,22 @@ def receive_description(target: RecipeModel, value: str, oldvalue, initiator):
         target.description_normalized = RecipeModel.normalize(value)
     else:
         target.description_normalized = None
+
+
+@event.listens_for(RecipeModel.source, "set")
+def receive_source(target: RecipeModel, value: str | None, oldvalue, initiator):
+    if value is not None:
+        target.source_normalized = RecipeModel.normalize(value)
+    else:
+        target.source_normalized = None
+
+
+@event.listens_for(RecipeModel.created_by, "set")
+def receive_created_by(target: RecipeModel, value: str | None, oldvalue, initiator):
+    if value is not None:
+        target.created_by_normalized = RecipeModel.normalize(value)
+    else:
+        target.created_by_normalized = None
 
 
 @event.listens_for(RecipeModel, "before_update")

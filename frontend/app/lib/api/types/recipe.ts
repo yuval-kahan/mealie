@@ -241,6 +241,8 @@ export interface Recipe {
   cookTime?: string | null;
   performTime?: string | null;
   description?: string | null;
+  source?: string | null;
+  createdBy?: string | null;
   recipeCategory?: RecipeCategory[] | null;
   tags?: RecipeTag[] | null;
   tools?: RecipeTool[];
@@ -323,6 +325,8 @@ export interface RecipeSummary {
   cookTime?: string | null;
   performTime?: string | null;
   description?: string | null;
+  source?: string | null;
+  createdBy?: string | null;
   recipeCategory?: RecipeCategory[] | null;
   tags?: RecipeTag[] | null;
   tools?: RecipeTool[];
@@ -407,6 +411,20 @@ export interface RecipeSuggestionResponseItem {
   recipe: RecipeSummary;
   missingFoods: IngredientFood[];
   missingTools: RecipeTool[];
+}
+export interface RecipeAISearchRequest {
+  query: string;
+  limit?: number;
+}
+export interface RecipeAISearchResponse {
+  query: string;
+  items: RecipeAISearchResult[];
+  recipeCount: number;
+}
+export interface RecipeAISearchResult {
+  recipe: RecipeSummary;
+  reason: string;
+  score?: number | null;
 }
 export interface RecipeTagResponse {
   name: string;
@@ -510,6 +528,7 @@ export interface ScrapeRecipe {
   includeTags?: boolean;
   includeCategories?: boolean;
   url: string;
+  useOpenAI?: boolean;
 }
 export interface ScrapeRecipeBase {
   includeTags?: boolean;

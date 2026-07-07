@@ -171,7 +171,8 @@ class OpenAIService(BaseService):
 
     @staticmethod
     def _split_api_keys(api_key: str) -> list[str]:
-        return [key.strip() for key in api_key.replace(",", "\n").splitlines() if key.strip()]
+        keys = [key.strip() for key in api_key.replace(",", "\n").splitlines() if key.strip()]
+        return list(dict.fromkeys(keys))
 
     @classmethod
     def _first_api_key(cls, api_key: str) -> str:

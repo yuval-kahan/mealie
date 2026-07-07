@@ -6,12 +6,13 @@ export interface SideBarLink {
   title: string;
   children?: SideBarLink[];
   childrenStartExpanded?: boolean;
+  onClick?: () => void;
   restricted: boolean;
 }
 
 export type SidebarLinks = Array<SideBarLink>;
 
-export type OrganizerSidebarSectionKey = "cookbooks" | "categories" | "tags";
+export type OrganizerSidebarSectionKey = "cookbooks" | "translatedBooks" | "categories" | "tags";
 
 export interface OrganizerSidebarSection {
   key: OrganizerSidebarSectionKey;

@@ -76,10 +76,14 @@
                 v-for="child in nav.children"
                 :key="child.key || child.title"
                 exact
-                :to="child.to"
+                :href="child.href"
+                :rel="child.href ? 'noopener' : undefined"
+                :target="child.href ? '_blank' : undefined"
+                :to="child.href ? undefined : child.to"
                 :prepend-icon="child.icon"
                 :title="child.title"
                 class="ml-4"
+                @click="handleNavClick(child)"
               />
             </v-list-group>
 
@@ -89,9 +93,13 @@
                 :key="(nav.key || nav.title) + 'single-item'"
                 exact
                 link
-                :to="nav.to"
+                :href="nav.href"
+                :rel="nav.href ? 'noopener' : undefined"
+                :target="nav.href ? '_blank' : undefined"
+                :to="nav.href ? undefined : nav.to"
                 :prepend-icon="nav.icon"
                 :title="nav.title"
+                @click="handleNavClick(nav)"
               />
             </template>
           </div>
@@ -122,15 +130,29 @@
                 v-for="child in nav.children"
                 :key="child.key || child.title"
                 exact
-                :to="child.to"
+                :href="child.href"
+                :rel="child.href ? 'noopener' : undefined"
+                :target="child.href ? '_blank' : undefined"
+                :to="child.href ? undefined : child.to"
                 class="ml-2"
                 :prepend-icon="child.icon"
                 :title="child.title"
+                @click="handleNavClick(child)"
               />
             </v-list-group>
 
             <!-- Single Item -->
-            <v-list-item v-else :key="(nav.key || nav.title) + 'single-item'" exact link :to="nav.to">
+            <v-list-item
+              v-else
+              :key="(nav.key || nav.title) + 'single-item'"
+              exact
+              link
+              :href="nav.href"
+              :rel="nav.href ? 'noopener' : undefined"
+              :target="nav.href ? '_blank' : undefined"
+              :to="nav.href ? undefined : nav.to"
+              @click="handleNavClick(nav)"
+            >
               <template #prepend>
                 <v-icon>{{ nav.icon }}</v-icon>
               </template>
@@ -189,7 +211,7 @@
 
 <script setup lang="ts">
 import { useLoggedInState } from "~/composables/use-logged-in-state";
-import type { OrganizerSidebarSection, SidebarLinks } from "~/types/application-types";
+import type { OrganizerSidebarSection, SideBarLink, SidebarLinks } from "~/types/application-types";
 import AnnouncementDialog from "~/components/Domain/Announcement/AnnouncementDialog.vue";
 import UserAvatar from "~/components/Domain/User/UserAvatar.vue";
 import GroupAIProviderSettingsEditor from "~/components/Domain/Group/GroupAIProviderSettingsEditor.vue";
@@ -227,9 +249,10 @@ const modelValue = defineModel<boolean>({ default: false });
 const organizerPreferences = defineModel<UserOrganizerSidebarPreferences>("organizerPreferences", {
   default: () => ({
     showCookbooks: true,
+    showTranslatedBooks: false,
     showCategories: false,
     showTags: false,
-    sectionOrder: ["cookbooks", "categories", "tags"],
+    sectionOrder: ["cookbooks", "translatedBooks", "categories", "tags"],
   }),
 });
 
@@ -266,6 +289,10 @@ function initDropdowns() {
 
 function openQuickApiDialog() {
   state.apiDialog = true;
+}
+
+function handleNavClick(nav: SideBarLink) {
+  nav.onClick?.();
 }
 
 function providerErrorMessage(error: unknown, fallback: string) {

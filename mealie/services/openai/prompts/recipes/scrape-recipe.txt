@@ -3,3 +3,5 @@ Extract recipe data from webpage contents (HTML, text, etc.) and return it in sc
 Do not create or make up any information. If insufficient data is found, return an empty object.
 
 You will receive the webpage contents, including (but not necessarily limited to) text extracted from the HTML.
+
+If the page explicitly includes a source, such as a website, blog, article, TV show, magazine, book, or page number, put it in the source field. If it explicitly credits a chef, author, book, show, publisher, channel, or organization, put that in the created_by field. Do not invent source or creator details.

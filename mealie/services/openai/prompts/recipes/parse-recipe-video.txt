@@ -5,3 +5,4 @@ Do not create or make up any information. If insufficient data is found, return 
 - The video transcript is the primary source for instructions.
 - The caption text is the primary source for the ingredient list and title.
 - If there is a conflict (e.g., caption says "1 cup" but transcript says "1.5 cups"), trust the video transcript.
+- If the title, description, caption, or transcript explicitly names a source, channel, show, chef, author, book, publisher, or organization, fill source and/or created_by accordingly. Do not invent source or creator details.

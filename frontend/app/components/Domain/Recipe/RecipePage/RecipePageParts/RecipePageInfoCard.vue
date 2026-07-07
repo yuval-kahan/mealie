@@ -20,7 +20,38 @@
           </div>
           <v-divider class="my-2" />
           <SafeMarkdown :source="recipe.description" class="my-3" />
-          <v-divider v-if="recipe.description" />
+          <div
+            v-if="recipe.source || recipe.createdBy"
+            class="recipe-origin-meta my-3"
+          >
+            <div
+              v-if="recipe.createdBy"
+              class="recipe-origin-meta__item"
+            >
+              <v-icon
+                size="small"
+                color="primary"
+              >
+                {{ $globals.icons.chefHat }}
+              </v-icon>
+              <span class="font-weight-medium">{{ $t("recipe.created-by") }}:</span>
+              <span>{{ recipe.createdBy }}</span>
+            </div>
+            <div
+              v-if="recipe.source"
+              class="recipe-origin-meta__item"
+            >
+              <v-icon
+                size="small"
+                color="primary"
+              >
+                {{ $globals.icons.book }}
+              </v-icon>
+              <span class="font-weight-medium">{{ $t("recipe.source") }}:</span>
+              <span>{{ recipe.source }}</span>
+            </div>
+          </div>
+          <v-divider v-if="recipe.description || recipe.source || recipe.createdBy" />
           <v-container class="d-flex flex-row flex-wrap justify-center">
             <div class="mx-6">
               <v-row no-gutters>
@@ -87,3 +118,19 @@ withDefaults(defineProps<Props>(), {
 
 const { isOwnGroup } = useLoggedInState();
 </script>
+
+<style scoped>
+.recipe-origin-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 18px;
+  color: rgba(var(--v-theme-on-surface), 0.75);
+}
+
+.recipe-origin-meta__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+</style>

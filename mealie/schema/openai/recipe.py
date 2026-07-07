@@ -53,6 +53,22 @@ class OpenAIRecipe(OpenAIBase):
         description="A brief description of the recipe in a few words or sentences.",
     )
 
+    source: str | None = Field(
+        None,
+        description=(
+            "Where the recipe came from, if explicitly available. Examples: website name, blog name, TV show, "
+            "book title with page number, magazine, article, or other source record. Do not invent."
+        ),
+    )
+
+    created_by: str | None = Field(
+        None,
+        description=(
+            "The credited creator, chef, author, book, show, publisher, or organization, if explicitly available. "
+            "Do not invent."
+        ),
+    )
+
     recipe_yield: str | None = Field(
         None,
         description="Recipe yield, e.g., '12 cookies' or '4 servings'.",
@@ -101,4 +117,46 @@ class OpenAIRecipe(OpenAIBase):
     tools: list[str] = Field(
         default_factory=list,
         description="A short list of required kitchen tools or equipment explicitly mentioned in the recipe.",
+    )
+
+
+class OpenAIRecipeTextParse(OpenAIBase):
+    is_recipe: bool = Field(
+        ...,
+        description=(
+            "True only when the pasted text contains enough recipe data to create a recipe. "
+            "False when the text is not a recipe or is too incomplete."
+        ),
+    )
+
+    reason: str | None = Field(
+        None,
+        description="Short practical reason when is_recipe is false, or a brief parsing note when useful.",
+    )
+
+    recipe: OpenAIRecipe | None = Field(
+        None,
+        description="The structured recipe when is_recipe is true. Use null when is_recipe is false.",
+    )
+
+
+class OpenAIBookRecipeChunkParse(OpenAIBase):
+    recipes: list[OpenAIRecipe] = Field(
+        default_factory=list,
+        description=(
+            "All complete, usable recipes found in this cookbook chunk. Return an empty list when no complete recipes "
+            "are present."
+        ),
+    )
+
+
+class OpenAIBookTranslatedPage(OpenAIBase):
+    page: int = Field(..., description="Original page number.")
+    text: str = Field(..., description="The full translated text for this page.")
+
+
+class OpenAIBookTranslationChunkParse(OpenAIBase):
+    pages: list[OpenAIBookTranslatedPage] = Field(
+        default_factory=list,
+        description="Translated pages from the requested chunk, preserving original page numbers.",
     )

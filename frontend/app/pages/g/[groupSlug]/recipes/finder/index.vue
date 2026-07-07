@@ -305,8 +305,163 @@
           :cols="useMobile ? 12 : 9"
           :style="useMobile ? '' : 'max-height: 70vh; overflow-y: auto'"
         >
+          <v-form
+            v-if="isOwnGroup"
+            class="mb-4"
+            @submit.prevent="runAISearch"
+          >
+            <v-sheet
+              border
+              rounded
+              class="pa-3"
+            >
+              <div class="d-flex align-center mb-3">
+                <v-icon start>
+                  {{ $globals.icons.robot }}
+                </v-icon>
+                <span class="text-subtitle-1 font-weight-medium">
+                  {{ $t("recipe-finder.ai-search") }}
+                </span>
+              </div>
+              <v-row dense>
+                <v-col
+                  cols="12"
+                  md="8"
+                >
+                  <v-textarea
+                    v-model="aiSearch.query"
+                    :label="$t('recipe-finder.ai-search-placeholder')"
+                    rows="2"
+                    auto-grow
+                    clearable
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                  />
+                </v-col>
+                <v-col
+                  cols="12"
+                  sm="5"
+                  md="2"
+                >
+                  <v-select
+                    v-model="aiSearch.limit"
+                    :items="aiSearchLimitOptions"
+                    :label="$t('search.max-results')"
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                  />
+                </v-col>
+                <v-col
+                  cols="12"
+                  sm="7"
+                  md="2"
+                  class="d-flex align-start ga-2"
+                >
+                  <v-btn
+                    color="primary"
+                    type="submit"
+                    :loading="aiSearch.loading"
+                    :disabled="aiSearchDisabled"
+                  >
+                    <v-icon start>
+                      {{ $globals.icons.search }}
+                    </v-icon>
+                    {{ $t("recipe-finder.ai-search-action") }}
+                  </v-btn>
+                  <v-btn
+                    type="button"
+                    variant="text"
+                    :disabled="aiSearch.loading || !aiSearch.active"
+                    @click="clearAISearch"
+                  >
+                    {{ $t("search.clear-selection") }}
+                  </v-btn>
+                </v-col>
+              </v-row>
+              <v-alert
+                v-if="aiSearch.error"
+                type="error"
+                variant="tonal"
+                density="compact"
+                class="mt-3"
+              >
+                {{ aiSearch.error }}
+              </v-alert>
+            </v-sheet>
+          </v-form>
           <v-container
-            v-if="recipeSuggestions.readyToMake.length || recipeSuggestions.missingItems.length"
+            v-if="aiSearch.active"
+            class="ma-0 pa-0"
+          >
+            <v-row v-if="aiSearch.loading">
+              <v-col
+                cols="12"
+                class="d-flex justify-center"
+              >
+                <AppLoader waiting-text="" />
+              </v-col>
+            </v-row>
+            <v-row
+              v-else-if="aiSearchResults.length"
+              density="compact"
+            >
+              <v-col cols="12">
+                <v-card-title class="ma-0 pa-0">
+                  {{ $t("recipe-finder.ai-search-results") }}
+                </v-card-title>
+                <v-card-subtitle class="ma-0 pa-0">
+                  {{ $t("recipe-finder.ai-search-results-summary", {
+                    count: aiSearchResults.length,
+                    recipeCount: aiSearch.recipeCount,
+                  }) }}
+                </v-card-subtitle>
+              </v-col>
+              <v-col
+                v-for="item in aiSearchResults"
+                :key="item.recipe.slug"
+                cols="12"
+              >
+                <v-lazy>
+                  <v-container class="elevation-3">
+                    <RecipeCardMobile
+                      :name="item.recipe.name"
+                      :description="item.recipe.description"
+                      :slug="item.recipe.slug"
+                      :rating="item.recipe.rating"
+                      :image="item.recipe.image"
+                      :recipe-id="item.recipe.id"
+                    />
+                    <v-alert
+                      v-if="item.reason"
+                      color="primary"
+                      variant="tonal"
+                      density="compact"
+                      class="mt-2"
+                    >
+                      {{ item.reason }}
+                    </v-alert>
+                  </v-container>
+                </v-lazy>
+              </v-col>
+            </v-row>
+            <v-row v-else>
+              <v-col
+                cols="12"
+                class="d-flex flex-column justify-center align-center ga-1"
+              >
+                <v-card-title class="ma-0 pa-0">
+                  {{ $t("recipe-finder.ai-no-recipes-found") }}
+                </v-card-title>
+                <v-card-text class="ma-0 pa-0 text-center">
+                  {{ $t("recipe-finder.ai-no-recipes-found-description") }}
+                </v-card-text>
+              </v-col>
+            </v-row>
+          </v-container>
+          <v-container
+            v-else-if="recipeSuggestions.readyToMake.length || recipeSuggestions.missingItems.length"
             class="ma-0 pa-0"
           >
             <v-row
@@ -417,9 +572,10 @@ import { useUserApi } from "~/composables/api";
 import { usePublicExploreApi } from "~/composables/api/api-client";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import { useFoodStore, usePublicFoodStore, useToolStore, usePublicToolStore } from "~/composables/store";
-import type { IngredientFood, RecipeSuggestionQuery, RecipeSuggestionResponseItem, RecipeTool } from "~/lib/api/types/recipe";
+import type { IngredientFood, RecipeAISearchResult, RecipeSuggestionQuery, RecipeSuggestionResponseItem, RecipeTool } from "~/lib/api/types/recipe";
 import { Organizer } from "~/lib/api/types/non-generated";
 import QueryFilterBuilder from "~/components/Domain/QueryFilterBuilder.vue";
+import RecipeCardMobile from "~/components/Domain/Recipe/RecipeCardMobile.vue";
 import RecipeSuggestion from "~/components/Domain/Recipe/RecipeSuggestion.vue";
 import SearchFilter from "~/components/Domain/SearchFilter.vue";
 import type { QueryFilterJSON } from "~/lib/api/types/non-generated";
@@ -444,7 +600,8 @@ const useMobile = computed(() => display.smAndDown.value);
 
 const groupSlug = computed(() => route.params.groupSlug as string || auth.user.value?.groupSlug || "");
 const { isOwnGroup } = useLoggedInState();
-const api = isOwnGroup.value ? useUserApi() : usePublicExploreApi(groupSlug.value).explore;
+const userApi = useUserApi();
+const api = isOwnGroup.value ? userApi : usePublicExploreApi(groupSlug.value).explore;
 
 const preferences = useRecipeFinderPreferences();
 const state = reactive({
@@ -506,6 +663,79 @@ const attrs = computed(() => {
     },
   };
 });
+
+const aiSearchLimitOptions = [5, 10, 20, 30, 50];
+const aiSearch = reactive({
+  query: "",
+  limit: 10,
+  loading: false,
+  active: false,
+  error: "",
+  recipeCount: 0,
+});
+const aiSearchResults = ref<RecipeAISearchResult[]>([]);
+let aiSearchRun = 0;
+const aiSearchDisabled = computed(() => aiSearch.loading || aiSearch.query.trim().length < 2);
+
+function apiErrorMessage(error: unknown, fallback: string) {
+  const responseData = (error as { response?: { data?: { detail?: unknown } } })?.response?.data;
+  const detail = responseData?.detail;
+
+  if (typeof detail === "string") {
+    return detail;
+  }
+
+  if (detail && typeof detail === "object") {
+    const detailObject = detail as { message?: string; exception?: string };
+    return detailObject.exception || detailObject.message || fallback;
+  }
+
+  if (error instanceof Error) {
+    return error.message || fallback;
+  }
+
+  return fallback;
+}
+
+async function runAISearch() {
+  const query = aiSearch.query.trim();
+  if (!query || aiSearchDisabled.value || !isOwnGroup.value) {
+    return;
+  }
+
+  const run = ++aiSearchRun;
+  aiSearch.loading = true;
+  aiSearch.active = true;
+  aiSearch.error = "";
+  const { data, error } = await userApi.recipes.aiSearch({ query, limit: aiSearch.limit }).finally(() => {
+    if (run === aiSearchRun) {
+      aiSearch.loading = false;
+    }
+  });
+
+  if (run !== aiSearchRun) {
+    return;
+  }
+
+  if (error || !data) {
+    aiSearchResults.value = [];
+    aiSearch.recipeCount = 0;
+    aiSearch.error = apiErrorMessage(error, i18n.t("recipe-finder.ai-search-error"));
+    return;
+  }
+
+  aiSearchResults.value = data.items;
+  aiSearch.recipeCount = data.recipeCount;
+}
+
+function clearAISearch() {
+  aiSearchRun++;
+  aiSearch.active = false;
+  aiSearch.loading = false;
+  aiSearch.error = "";
+  aiSearchResults.value = [];
+  aiSearch.recipeCount = 0;
+}
 
 const foodStore = isOwnGroup.value ? useFoodStore() : usePublicFoodStore(groupSlug.value);
 const foods = foodStore.store.value;

@@ -6,7 +6,7 @@
 
 ## תקציר
 
-ה-fork מוסיף ל-Mealie יכולות AI נוחות יותר, יצירת מתכון מטקסט חופשי, תמיכה רחבה בהעלאת וידאו למתכונים, תצוגת מדיה עליונה בתוך עמוד המתכון, ניהול API מהיר מהתפריט הצדדי, ניווט מהיר לספרים/קטגוריות/תגיות, ומחיקה מהירה של מתכונים מרשימת המתכונים.
+ה-fork מוסיף ל-Mealie יכולות AI נוחות יותר, יצירת מתכון מטקסט חופשי, חיפוש מתכונים עם AI בתוך המתכונים הקיימים, שדות מקור/יוצר למתכון, תמיכה רחבה בהעלאת וידאו למתכונים, תצוגת מדיה עליונה בתוך עמוד המתכון, ניהול API מהיר מהתפריט הצדדי, ניווט מהיר לספרים/קטגוריות/תגיות, ומחיקה מהירה של מתכונים מרשימת המתכונים.
 
 ## ניהול ספקי AI ו-API
 
@@ -26,6 +26,8 @@
 - נוספה תמיכה בכמה API keys עבור Google Gemini.
   אפשר להפריד מפתחות בשורה חדשה או בפסיק.
 - עבור Gemini, המפתח הראשון משמש לקריאות בפועל, וכל המפתחות נבדקים לפני שמירה.
+- אם הוזנו מפתחות Gemini כפולים, הם מזוהים במסך ונשמרים פעם אחת בלבד, תוך שמירה על הסדר המקורי.
+- גם צד השרת מנקה כפילויות במפתחות Gemini, כך שקריאות API ישירות לא יכולות לשמור מפתחות כפולים.
 - נוספה בדיקת API key לפני שמירה.
   הבדיקה נעשית דרך endpoints של רשימת מודלים / גישה לספק, כדי להימנע מקריאת generation רגילה שעלולה לעלות כסף.
 - אם המפתח לא תקין, אי אפשר לשמור את הספק.
@@ -47,10 +49,14 @@
 ## יצירת מתכון מטקסט חופשי בעזרת AI
 
 - נוספה אפשרות ליצור מתכון מטקסט חופשי, למשל כתבה, טקסט שהועתק מאתר, או מתכון בעברית/אנגלית.
-- נוסף כפתור מהיר בתפריט הצדדי: "יצירה מטקסט".
-- הכפתור פותח popup מהיר שבו מדביקים את הטקסט וה-AI מפרק אותו למתכון מסודר.
+- נוסף כפתור מהיר בתפריט הצדדי: "יצירה עם AI".
+- הכפתור פותח popup מהיר שבו ניתן לבחור בין יצירה מטקסט לבין יצירה מקישור.
+- שני המצבים בלעדיים: או שמדביקים טקסט, או שמדביקים קישור למתכון באינטרנט.
+- ביצירה מקישור, החלון שולח את הקישור למסלול הייבוא עם `useOpenAI`, כך שה-AI מנסה לחלץ את המתכון מהדף.
 - נוסף גם route ייעודי ליצירה מטקסט: `/r/create/text`.
 - ה-AI מחזיר מבנה מסודר לפי schema, ולא טקסט חופשי.
+- לפני יצירת מתכון, ה-AI מחזיר גם `is_recipe`.
+  אם הטקסט לא נראה כמו מתכון, או חסרים שם/רכיבים/הוראות, לא נוצר מתכון והמשתמש מקבל הודעה ברורה.
 - השדות הנתמכים כוללים:
   - שם מתכון
   - תיאור
@@ -74,10 +80,82 @@
 - `frontend/app/pages/g/[groupSlug]/r/create.vue`
 - `frontend/app/components/Layout/DefaultLayout.vue`
 - `frontend/app/lib/api/user/recipes/recipe.ts`
+- `frontend/app/plugins/axios.ts`
+- `mealie/core/exceptions.py`
 - `mealie/routes/recipe/recipe_crud_routes.py`
+- `mealie/schema/recipe/recipe_scraper.py`
 - `mealie/services/recipe/recipe_service.py`
+- `mealie/services/scraper/scraper.py`
 - `mealie/schema/openai/recipe.py`
 - `mealie/services/openai/prompts/recipes/parse-recipe-text.txt`
+
+## חיפוש מתכונים עם AI
+
+- במסך "מצא מתכון" נוספה אפשרות לחפש מתכונים בשפה חופשית בעזרת AI.
+- המשתמש יכול לכתוב בקשה כמו "משהו איטלקי עם גבינות" או "ארוחת ערב בלי בשר", וה-AI מחפש בתוך המתכונים הקיימים.
+- החיפוש בונה אינדקס מקומי מקוצר של המתכונים בקבוצה:
+  - שם מתכון
+  - תיאור
+  - מקור ויוצר / שף / ספר
+  - קטגוריות
+  - תגיות
+  - כלים
+  - רכיבים עיקריים
+  - הוראות והערות מקוצרות
+- ה-AI מקבל רק shortlist של מועמדים מתוך האינדקס, מחזיר רק `slug` של מתכונים קיימים, והשרת מסנן כל תוצאה שלא באמת קיימת במסד.
+- התוצאות מוצגות ככרטיסי מתכון רגילים, עם הסבר קצר למה ה-AI בחר כל מתכון.
+- ניתן לבחור כמה תוצאות להחזיר.
+- כפתור ניקוי מחזיר את המסך להצעות הרגילות לפי מרכיבים.
+- נוסף אינדקס חיפוש AI מקומי ושמור במסד הנתונים.
+- לכל מתכון נשמרים:
+  - תקציר JSON קצר לשליחה ל-AI.
+  - טקסט חיפוש מאוחד.
+  - וקטור חיפוש מקומי.
+  - hash ותאריך עדכון כדי לזהות מתי צריך לרענן את הקאש.
+- בזמן חיפוש, השרת מעדכן רק מתכונים חדשים/משתנים באינדקס.
+- רשומת אינדקס מתרעננת אוטומטית גם אחרי 24 שעות, כדי למנוע קאש ישן אם שינוי פנימי לא עדכן את timestamp של המתכון.
+- השרת מדרג מקומית את המתכונים לפי הבקשה, ובונה shortlist של מועמדים רלוונטיים.
+- ל-AI נשלח רק ה-shortlist ולא כל המתכונים, כדי לחסוך זמן, טוקנים ועלויות.
+- ה-AI עדיין מסנן ומחזיר רק מתכונים קיימים מתוך ה-shortlist.
+
+קבצים מרכזיים:
+
+- `frontend/app/pages/g/[groupSlug]/recipes/finder/index.vue`
+- `frontend/app/lib/api/user/recipes/recipe.ts`
+- `mealie/db/models/recipe/ai_search_index.py`
+- `mealie/alembic/versions/2026-07-07-20.25.00_b5c9d1a8f0e6_add_recipe_ai_search_index.py`
+- `mealie/routes/recipe/recipe_crud_routes.py`
+- `mealie/services/recipe/recipe_service.py`
+- `mealie/schema/recipe/recipe_ai_search.py`
+- `mealie/schema/openai/recipe_search.py`
+- `mealie/services/openai/prompts/recipes/search-recipes.txt`
+
+## מקור ויוצר למתכון
+
+- נוספו למתכון שני שדות חדשים:
+  - `source` - מקור חופשי, למשל אתר, בלוג, כתבה, תוכנית טלוויזיה, ספר, עמוד בספר או מגזין.
+  - `createdBy` - יוצר / שף / ספר / ערוץ / ארגון שמקושר למתכון.
+- השדות מוצגים בראש עמוד המתכון אם יש להם ערך.
+- השדות ניתנים לעריכה במסך עריכת פרטי המתכון.
+- השדות מופיעים גם בהדפסת מתכון.
+- חיפוש המתכונים הרגיל יכול למצוא לפי מקור או יוצר.
+- חיפוש ה-AI מקבל את השדות האלה בקטלוג, ולכן אפשר לבקש למשל "ריזוטו של שף מסוים" או "מתכון מספר מסוים".
+- יצירת מתכון בעזרת AI יודעת למלא את השדות אם הטקסט כולל מקור, קרדיט, שם שף, ספר, תוכנית, בלוג או כתבה.
+- ייבוא מאתר מנסה לשמור `author`/`publisher` קיימים בתור יוצר/מקור.
+- נוספה migration למסד הנתונים עבור השדות והאינדקסים שלהם.
+
+קבצים מרכזיים:
+
+- `mealie/db/models/recipe/recipe.py`
+- `mealie/alembic/versions/2026-07-07-20.10.00_f8a1c3d9e2b4_add_recipe_source_fields.py`
+- `mealie/schema/recipe/recipe.py`
+- `mealie/schema/openai/recipe.py`
+- `mealie/services/recipe/recipe_service.py`
+- `mealie/services/scraper/cleaner.py`
+- `mealie/services/scraper/scraper_strategies.py`
+- `frontend/app/components/Domain/Recipe/RecipePage/RecipePageParts/RecipePageInfoEditor.vue`
+- `frontend/app/components/Domain/Recipe/RecipePage/RecipePageParts/RecipePageInfoCard.vue`
+- `frontend/app/components/Domain/Recipe/RecipePrintView.vue`
 
 ## תמיכה בווידאו במתכונים
 
@@ -186,6 +264,100 @@
 - `frontend/app/lang/messages/he-IL.json`
 - `frontend/app/lang/messages/en-US.json`
 
+## חילוץ מתכונים מספרים עם AI
+
+- נוסף עיבוד AI לספרים שהועלו למערכת.
+- ניתן להפעיל חילוץ מתכונים:
+  - בזמן העלאת ספר, באמצעות סימון "חלץ מתכונים עם AI אחרי ההעלאה".
+  - אחרי שהספר כבר עלה, מתוך פעולת "חלץ מתכונים עם AI" תחת הספר בניווט.
+- ברירת המחדל היא חלוקה ל-10 עמודים בכל chunk, והמשתמש יכול לבחור מספר אחר בין 1 ל-100.
+- העיבוד רץ ברקע, כדי שהדפדפן לא ייתקע בזמן עיבוד ספר ארוך.
+- לכל ספר נשמר סטטוס חילוץ:
+  - לא התחיל
+  - בעיבוד
+  - הסתיים
+  - נכשל
+- נשמרים גם מונים:
+  - מספר chunks כולל
+  - chunks שהושלמו
+  - מתכונים שנמצאו
+  - מתכונים שנשמרו
+  - הודעת שגיאה אחרונה/חלקית
+- בזמן עיבוד, רשימת הספרים מתרעננת אוטומטית כל כמה שניות ומציגה התקדמות ליד שם הספר.
+- החילוץ תומך כרגע בפורמטים שניתן לחלץ מהם טקסט ישירות:
+  - PDF
+  - EPUB
+  - TXT / Markdown
+  - HTML / MHTML
+  - DOCX
+  - ODT
+  - FB2 / FB2.ZIP
+  - RTF בסיסי
+- קבצי PDF עוברים חילוץ טקסט באמצעות `pypdf`.
+- ה-AI מקבל כל chunk ומחזיר רשימת מתכונים במבנה מסודר, לא טקסט חופשי.
+- המתכונים מתורגמים לעברית כחלק מהחילוץ.
+- מתכונים שנמצאו נשמרים כמתכוני Mealie רגילים, דרך אותו מנגנון שכבר משמש ל"יצירה עם AI".
+- מקור המתכון נשמר לפי שם הספר וטווח העמודים אם ה-AI לא מצא מקור מפורש.
+- אם ספק ברירת המחדל הוא Google Gemini ויש בו כמה API keys, כל מפתח הופך ל-slot נפרד והעיבוד מחולק ביניהם במקביל, עד 6 קריאות במקביל.
+- אם ספק AI מחזיר rate limit / quota / retry-after, המפתח הספציפי נכנס ל-cooldown, ה-chunk חוזר לתור, והמערכת מנסה להמשיך עם מפתח אחר.
+- לכל chunk נשמר סטטוס JSON במסד: ממתין, בעיבוד, retry, הושלם או נכשל, כולל מספר ניסיונות, ספק אחרון, שגיאה אחרונה וכמות מתכונים שנשמרו.
+- ספר לא מסומן כ"הושלם" אם נשארו chunks שלא עברו. במקרה כזה הוא מסומן כ-`partial_failed`, ואפשר להפעיל חילוץ שוב כדי לנסות להשלים רק את החלקים שלא הושלמו.
+- נוסף retry מדורג לכל chunk, עד 6 ניסיונות, עם שימוש בזמן המתנה שהספק מחזיר אם קיים.
+- נוסף מנגנון מניעת כפילויות לפי שם מתכון + מקור/טווח עמודים, כדי ש-retry לא ייצור עותקים כפולים של אותו מתכון.
+- אם ספק ברירת המחדל אינו Gemini, העיבוד עובד דרך ספק אחד.
+
+קבצים מרכזיים:
+
+- `mealie/services/uploaded_books/book_recipe_extractor.py`
+- `mealie/routes/households/controller_uploaded_books.py`
+- `mealie/db/models/household/uploaded_book.py`
+- `mealie/schema/cookbook/uploaded_book.py`
+- `mealie/schema/openai/recipe.py`
+- `mealie/services/openai/prompts/recipes/extract-book-recipes.txt`
+- `mealie/alembic/versions/2026-07-07-21.20.00_d4e5f6a7b8c9_add_uploaded_book_ai_extraction.py`
+- `mealie/alembic/versions/2026-07-07-22.10.00_e7f8a9b0c1d2_add_uploaded_book_extraction_retries.py`
+- `frontend/app/components/Layout/DefaultLayout.vue`
+- `frontend/app/lib/api/user/uploaded-books.ts`
+- `frontend/app/lib/api/types/uploaded-book.ts`
+
+## תרגום ספרים עם AI
+
+- נוסף מצב "תרגם ספר עם AI" בזמן העלאת ספר וגם מתוך פעולות ספר שכבר הועלה.
+- בזמן העלאה ניתן לבחור פעולה אחת בלבד:
+  - רק להעלות את הספר
+  - חילוץ מתכונים עם AI
+  - תרגום ספר עם AI
+- לא ניתן להפעיל חילוץ מתכונים ותרגום ספר במקביל על אותו ספר.
+- שפת ברירת המחדל לתרגום נקבעת לפי שפת האתר של המשתמש.
+- ניתן לבחור שפה מתוך dropdown או להקליד שפה אחרת ידנית.
+- גם בתרגום ספרים ניתן לבחור כמה עמודים לשלוח בכל chunk, ברירת מחדל 10 עמודים.
+- מנגנון התרגום משתמש באותו retry/cooldown של חילוץ המתכונים:
+  - Gemini multi-key
+  - המתנה לפי retry-after/rate limit
+  - retry מדורג לכל chunk
+  - סטטוס לכל chunk
+- כל chunk מתורגם ונשמר זמנית כקובץ JSON פנימי.
+- הספר המתורגם נבנה רק אחרי שכל ה-chunks הושלמו בהצלחה.
+- אם חלקים נכשלו, הספר לא מסומן כמתורגם ולא נוצר קובץ חלקי; הסטטוס יהיה `partial_failed`.
+- התוצר כרגע הוא ספר HTML מתורגם ונקי, שנפתח בדפדפן מתוך Mealie.
+- ספרים מתורגמים נשמרים כ-Uploaded Books רגילים עם סימון `is_translated_book`, וקישור לספר המקורי.
+- נוסף סעיף ניווט מהיר "ספרים מתורגמים", שאפשר להפעיל/לכבות ולסדר ב-drag and drop כמו ספרים/קטגוריות/תגיות.
+- קבצי HTML שהמשתמש מעלה עדיין מוגשים כהורדה, אבל HTML שנוצר על ידי התרגום מוגש inline כי הוא נבנה ומנוקה על ידי המערכת.
+
+קבצים מרכזיים:
+
+- `mealie/services/uploaded_books/book_recipe_extractor.py`
+- `mealie/services/openai/prompts/recipes/translate-book-chunk.txt`
+- `mealie/routes/households/controller_uploaded_books.py`
+- `mealie/db/models/household/uploaded_book.py`
+- `mealie/schema/cookbook/uploaded_book.py`
+- `mealie/schema/openai/recipe.py`
+- `mealie/alembic/versions/2026-07-08-00.20.00_f1a2b3c4d5e6_add_uploaded_book_translation.py`
+- `frontend/app/components/Layout/DefaultLayout.vue`
+- `frontend/app/components/Layout/LayoutParts/AppOrganizerSidebar.vue`
+- `frontend/app/lib/api/user/uploaded-books.ts`
+- `frontend/app/lib/api/types/uploaded-book.ts`
+
 ## שיפורי ממשק ותרגום
 
 - נוספו מחרוזות תרגום בעברית ובאנגלית עבור:
@@ -196,8 +368,13 @@
   - בדיקת API key
   - הודעות Gemini מרובות מפתחות
   - ניווט מהיר לספרים, קטגוריות ותגיות
-- שופר צבע הטקסט של כפתור "יצירה מטקסט" בתפריט הצדדי כדי שיהיה קריא.
-- נוספה גישה מהירה יותר ליצירה מטקסט, בנוסף לתפריט היצירה הרגיל.
+- שופר צבע הטקסט של כפתור "יצירה עם AI" בתפריט הצדדי כדי שיהיה קריא.
+- נוספה גישה מהירה יותר ליצירה עם AI מטקסט חופשי, בנוסף לתפריט היצירה הרגיל.
+- מתחת לספרי בישול נוסף כפתור "העלאת ספר" שפותח popup להעלאת קבצי ספרים, והספרים שהועלו מופיעים בניווט המהיר כקישורים לפתיחה.
+- העלאת ספרים תומכת בפורמטים רבים: PDF, EPUB, MOBI, AZW/AZW3/AZW4, FB2/FB2.ZIP, DJVU, CBZ/CBR/CB7/CBT, DOC/DOCX, ODT, TXT, RTF, HTML/MHTML, Markdown, LIT, PDB, ZIP/RAR/7Z.
+- נוסף כפתור "מחק ספר" בתפריט של ספרים שהועלו. המחיקה מוחקת גם את רשומת הספר וגם את תיקיית הקובץ השמור; אם מוחקים ספר מקור שנוצרו ממנו ספרים מתורגמים, גם הספרים המתורגמים שלו נמחקים כדי לא להשאיר קישורים שבורים.
+- תוקנה נפילה בהעלאת ספרים שנגרמה מיצירת רשומת `UploadedBook` בלי להעביר `session` למודל SQLAlchemy של Mealie.
+- תוקן חוסר התאמה בין `id` הרשומה במסד לבין תיקיית הקובץ בפועל, כדי שלחיצה על ספר שהועלה תפתח את הקובץ ולא תחזיר `404 Not Found`.
 
 קבצים מרכזיים:
 
@@ -227,6 +404,13 @@
 
 - נוסף endpoint ליצירת מתכון מטקסט:
   - `POST /api/recipes/create/text`
+- נוספו endpoints להעלאת ספרי בישול כקבצים אמיתיים ושמירתם במערכת:
+  - `GET /api/households/uploaded-books`
+  - `POST /api/households/uploaded-books`
+  - `GET /api/households/uploaded-books/{book_id}/file`
+  - `DELETE /api/households/uploaded-books/{book_id}`
+  - `POST /api/households/uploaded-books/{book_id}/extract-recipes`
+  - `POST /api/households/uploaded-books/{book_id}/translate`
 - נוסף endpoint לייבוא URL מרובה עם קבצי וידאו:
   - `POST /api/recipes/create/url/bulk/assets`
 - הורחב endpoint נכסי מתכון כך שיקבל גם קבצי וידאו:
@@ -255,10 +439,17 @@
 - בדיאלוג ספקי AI נוסף ניקוי ל-debounce timer של בדיקת API key כאשר הדיאלוג נסגר או הקומפוננטה יורדת מהמסך.
 - תוצאות validation ישנות של API key מבוטלות לוגית אם הדיאלוג נסגר או אם המשתמש שינה את הנתונים בזמן שהבדיקה עדיין רצה.
 - בניווט המהיר עודכן state של dropdowns כך שהוא נבנה מחדש לפי הסעיפים הנוכחיים, במקום לצבור מפתחות ישנים אם שמות/קבוצות משתנים.
+- רענון סטטוס ספרים שהועלו קיבל guard נגד בקשות מקבילות, כדי ששרת איטי או בקשה תקועה לא יגרמו להצטברות polling requests כל 6 שניות.
+- קאש ה-stores של ניווט ציבורי לפי קבוצות הוגבל ל-8 קבוצות אחרונות, כדי למנוע גידול לא מוגבל אם מדפדפים בין הרבה קבוצות ציבוריות.
+- יצירת מתכון ב-streaming URL מבטלת את משימת הרקע אם חיבור ה-SSE נסגר לפני שהעבודה הסתיימה, כדי שלא תמשיך משימת AI/ייבוא ארוכה בלי לקוח שמאזין לה.
+- חיפוש AI ב"מצא מתכון" קיבל מזהה ריצה כדי שתוצאה ישנה לא תדרוס תוצאה חדשה, ו-loading משתחרר גם אם הבקשה מסתיימת בצורה חריגה.
+- טופס "יצירה עם AI" קיבל טיפול חריגות כללי כדי שלא יישאר במצב טעינה אם העלאת וידאו או ייבוא URL נכשלים באופן לא צפוי.
 - בנכסי מתכון נוסף ניקוי של הגדרות גודל וידאו מ-localStorage כאשר asset וידאו נמחק.
 - וידאו בעמוד המתכון משתמש ב-`preload="metadata"` ולא טוען את כל הקובץ מראש.
 - לא נמצאו `ObjectURL` חדשים ללא `revokeObjectURL` בשינויים שנוספו.
 - העלאות וידאו מרובות לייבוא URL נשמרות זמנית בתיקיית temp ונמחקות ב-`finally` לאחר סיום משימת הייבוא.
+- העלאת ספרי בישול נשמרת בצ'אנקים של 1MB לתיקיית `DATA_DIR/uploaded-books`, כדי לא לקרוא ספרים גדולים לזיכרון בבת אחת.
+- קבצים שעלולים להריץ תוכן בדפדפן, כמו HTML, מוגשים כהורדה ולא כ-inline preview.
 
 ## בדיקות שבוצעו
 

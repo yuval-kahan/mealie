@@ -36,7 +36,7 @@ export default defineNuxtPlugin(() => {
       return response;
     },
     (error) => {
-      if (error?.response?.data?.detail?.message) {
+      if (error?.response?.data?.detail?.message && !error.config?.suppressAlert) {
         alert.error(error.response.data.detail.message as string);
       };
 

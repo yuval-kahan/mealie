@@ -14,6 +14,8 @@ import type {
   RecipeLastMade,
   RecipeSuggestionQuery,
   RecipeSuggestionResponse,
+  RecipeAISearchRequest,
+  RecipeAISearchResponse,
   RecipeTimelineEventIn,
   RecipeTimelineEventOut,
   RecipeTimelineEventUpdate,
@@ -42,6 +44,7 @@ const routes = {
   recipesCreate: `${prefix}/recipes/create`,
   recipesBase: `${prefix}/recipes`,
   recipesSuggestions: `${prefix}/recipes/suggestions`,
+  recipesAISearch: `${prefix}/recipes/ai-search`,
   recipesTestScrapeUrl: `${prefix}/recipes/test-scrape-url`,
   recipesCreateUrl: `${prefix}/recipes/create/url/stream`,
   recipesCreateUrlBulk: `${prefix}/recipes/create/url/bulk`,
@@ -125,6 +128,10 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
     return await this.requests.get<RecipeSuggestionResponse>(
       route(routes.recipesSuggestions, { ...q, foods, tools }),
     );
+  }
+
+  async aiSearch(payload: RecipeAISearchRequest) {
+    return await this.requests.post<RecipeAISearchResponse>(routes.recipesAISearch, payload);
   }
 
   async createAsset(recipeSlug: string, payload: CreateAsset) {
@@ -214,8 +221,9 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
     includeTags: boolean,
     includeCategories: boolean,
     onProgress?: (message: string) => void,
+    useOpenAI = false,
   ): Promise<RequestResponse<string>> {
-    return this.streamRecipeCreate(routes.recipesCreateUrl, { url, includeTags, includeCategories }, onProgress);
+    return this.streamRecipeCreate(routes.recipesCreateUrl, { url, includeTags, includeCategories, useOpenAI }, onProgress);
   }
 
   async createManyByUrl(payload: CreateRecipeByUrlBulk, videos: (File | null)[] = []) {
@@ -252,7 +260,7 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
   }
 
   async createOneFromText(payload: CreateRecipeFromText) {
-    return await this.requests.post<string>(routes.recipesCreateFromText, payload);
+    return await this.requests.post<string>(routes.recipesCreateFromText, payload, { suppressAlert: true });
   }
 
   async parseIngredients(parser: Parser, ingredients: Array<string>) {

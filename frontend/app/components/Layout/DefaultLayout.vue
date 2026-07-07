@@ -15,7 +15,7 @@
       v-model="sidebar"
       v-model:organizer-preferences="organizerSidebarPreferences"
       :top-link="topLinks"
-      :secondary-links="cookbookLinks || []"
+      :secondary-links="sidebarCookbookLinks || []"
       :organizer-sections="organizerSidebarSections"
     >
       <BaseDialog
@@ -32,6 +32,210 @@
           :return-to="route.path"
           @created="quickTextRecipeDialog = false"
         />
+      </BaseDialog>
+      <BaseDialog
+        v-model="uploadedBookDialog"
+        :title="$t('cookbook.upload-book')"
+        :icon="$globals.icons.upload"
+        width="560"
+        max-width="96vw"
+        can-submit
+        keep-open
+        disable-submit-on-enter
+        :loading="uploadedBookUploading"
+        :submit-text="$t('cookbook.upload-book')"
+        :submit-icon="$globals.icons.upload"
+        :submit-disabled="!uploadedBookFile"
+        @submit="uploadBook"
+        @close="resetUploadBookForm"
+      >
+        <v-card-text class="pt-4">
+          <v-text-field
+            v-model="uploadedBookName"
+            variant="outlined"
+            density="comfortable"
+            :label="$t('cookbook.uploaded-book-name')"
+            :placeholder="$t('cookbook.uploaded-book-name-placeholder')"
+          />
+          <v-file-input
+            v-model="uploadedBookFile"
+            :accept="uploadedBookAccept"
+            variant="solo-filled"
+            rounded
+            clearable
+            prepend-icon=""
+            :prepend-inner-icon="$globals.icons.book"
+            :label="$t('cookbook.book-file')"
+            :hint="$t('cookbook.supported-book-files')"
+            persistent-hint
+            truncate-length="100"
+          />
+          <v-radio-group
+            v-model="uploadedBookAction"
+            density="compact"
+            :label="$t('cookbook.after-upload-action')"
+          >
+            <v-radio
+              value="none"
+              :label="$t('cookbook.upload-only')"
+            />
+            <v-radio
+              value="extract"
+              :label="$t('cookbook.extract-recipes-after-upload')"
+            />
+            <v-radio
+              value="translate"
+              :label="$t('cookbook.translate-book-after-upload')"
+            />
+          </v-radio-group>
+          <v-combobox
+            v-if="uploadedBookAction === 'translate'"
+            v-model="uploadedBookTargetLanguage"
+            :items="uploadedBookTranslationLanguageOptions"
+            variant="outlined"
+            density="comfortable"
+            :label="$t('cookbook.translation-language')"
+          />
+          <v-text-field
+            v-model.number="uploadedBookPagesPerChunk"
+            type="number"
+            min="1"
+            max="100"
+            variant="outlined"
+            density="comfortable"
+            :label="$t('cookbook.pages-per-ai-chunk')"
+          />
+        </v-card-text>
+      </BaseDialog>
+      <BaseDialog
+        v-model="uploadedBookTranslationDialog"
+        :title="$t('cookbook.translate-book-with-ai')"
+        :icon="$globals.icons.translate"
+        width="520"
+        max-width="96vw"
+        can-submit
+        keep-open
+        disable-submit-on-enter
+        :loading="uploadedBookTranslationStarting"
+        :submit-text="$t('cookbook.start-translation')"
+        :submit-icon="$globals.icons.translate"
+        :submit-disabled="!selectedUploadedBook || isUploadedBookExtracting(selectedUploadedBook) || isUploadedBookTranslating(selectedUploadedBook)"
+        @submit="startSelectedUploadedBookTranslation"
+      >
+        <v-card-text class="pt-4">
+          <div
+            v-if="selectedUploadedBook"
+            class="text-subtitle-2 mb-3"
+          >
+            {{ selectedUploadedBook.name }}
+          </div>
+          <v-combobox
+            v-model="uploadedBookTargetLanguage"
+            :items="uploadedBookTranslationLanguageOptions"
+            variant="outlined"
+            density="comfortable"
+            :label="$t('cookbook.translation-language')"
+          />
+          <v-text-field
+            v-model.number="uploadedBookPagesPerChunk"
+            type="number"
+            min="1"
+            max="100"
+            variant="outlined"
+            density="comfortable"
+            :label="$t('cookbook.pages-per-ai-chunk')"
+          />
+          <v-alert
+            v-if="selectedUploadedBook"
+            density="compact"
+            variant="tonal"
+            :type="['failed', 'partial_failed'].includes(selectedUploadedBook.translationStatus) ? 'error' : 'info'"
+          >
+            {{ uploadedBookTranslationStatusText(selectedUploadedBook) }}
+          </v-alert>
+        </v-card-text>
+      </BaseDialog>
+      <BaseDialog
+        v-model="uploadedBookDeleteDialog"
+        :title="$t('cookbook.delete-book')"
+        :icon="$globals.icons.delete"
+        color="error"
+        width="520"
+        max-width="96vw"
+        can-confirm
+        :loading="uploadedBookDeleting"
+        :submit-disabled="uploadedBookDeleting || !selectedUploadedBook || isUploadedBookExtracting(selectedUploadedBook) || isUploadedBookTranslating(selectedUploadedBook)"
+        @confirm="deleteSelectedUploadedBook"
+      >
+        <v-card-text class="pt-4">
+          <p>
+            {{ $t("cookbook.delete-uploaded-book-confirm") }}
+          </p>
+          <p
+            v-if="selectedUploadedBook"
+            class="font-weight-bold mb-2"
+          >
+            {{ selectedUploadedBook.name }}
+          </p>
+          <v-alert
+            v-if="selectedUploadedBook && !selectedUploadedBook.isTranslatedBook"
+            density="compact"
+            variant="tonal"
+            type="warning"
+          >
+            {{ $t("cookbook.delete-uploaded-book-with-translations-warning") }}
+          </v-alert>
+          <v-alert
+            v-if="selectedUploadedBook && (isUploadedBookExtracting(selectedUploadedBook) || isUploadedBookTranslating(selectedUploadedBook))"
+            density="compact"
+            variant="tonal"
+            type="error"
+            class="mt-3"
+          >
+            {{ $t("cookbook.cannot-delete-uploaded-book-processing") }}
+          </v-alert>
+        </v-card-text>
+      </BaseDialog>
+      <BaseDialog
+        v-model="uploadedBookExtractionDialog"
+        :title="$t('cookbook.extract-recipes-with-ai')"
+        :icon="$globals.icons.robot"
+        width="520"
+        max-width="96vw"
+        can-submit
+        keep-open
+        disable-submit-on-enter
+        :loading="uploadedBookExtractionStarting"
+        :submit-text="$t('cookbook.start-extraction')"
+        :submit-icon="$globals.icons.robot"
+        :submit-disabled="!selectedUploadedBook || isUploadedBookExtracting(selectedUploadedBook) || isUploadedBookTranslating(selectedUploadedBook)"
+        @submit="startSelectedUploadedBookExtraction"
+      >
+        <v-card-text class="pt-4">
+          <div
+            v-if="selectedUploadedBook"
+            class="text-subtitle-2 mb-3"
+          >
+            {{ selectedUploadedBook.name }}
+          </div>
+          <v-text-field
+            v-model.number="uploadedBookPagesPerChunk"
+            type="number"
+            min="1"
+            max="100"
+            variant="outlined"
+            density="comfortable"
+            :label="$t('cookbook.pages-per-ai-chunk')"
+          />
+          <v-alert
+            v-if="selectedUploadedBook"
+            density="compact"
+            variant="tonal"
+            :type="['failed', 'partial_failed'].includes(selectedUploadedBook.extractionStatus) ? 'error' : 'info'"
+          >
+            {{ uploadedBookExtractionStatusText(selectedUploadedBook) }}
+          </v-alert>
+        </v-card-text>
       </BaseDialog>
       <v-menu
         offset-y
@@ -137,6 +341,9 @@ import { useCategoryStore, usePublicCategoryStore } from "~/composables/store/us
 import { usePublicTagStore, useTagStore } from "~/composables/store/use-tag-store";
 import type { ReadCookBook } from "~/lib/api/types/cookbook";
 import type { RecipeCategory, RecipeTag } from "~/lib/api/types/recipe";
+import type { UploadedBook } from "~/lib/api/types/uploaded-book";
+import { useUserApi } from "~/composables/api/api-client";
+import { alert } from "~/composables/use-toast";
 
 const i18n = useI18n();
 const { $globals } = useNuxtApp();
@@ -144,6 +351,7 @@ const display = useDisplay();
 const auth = useMealieAuth();
 const { isOwnGroup } = useLoggedInState();
 const { group } = useGroupSelf();
+const api = useUserApi(i18n);
 
 const route = useRoute();
 const groupSlug = computed(() => route.params.groupSlug as string || auth.user.value?.groupSlug || "");
@@ -156,8 +364,31 @@ const ownTagStore = computed(() => isOwnGroup.value ? useTagStore(i18n) : null);
 const publicCookbookStoreCache = ref<Record<string, ReturnType<typeof usePublicCookbookStore>>>({});
 const publicCategoryStoreCache = ref<Record<string, ReturnType<typeof usePublicCategoryStore>>>({});
 const publicTagStoreCache = ref<Record<string, ReturnType<typeof usePublicTagStore>>>({});
+const publicStoreCacheOrder = ref<string[]>([]);
+const MAX_PUBLIC_STORE_CACHE_SIZE = 8;
+
+function pruneCacheEntry<T>(cache: Ref<Record<string, T>>, slug: string) {
+  cache.value = Object.fromEntries(Object.entries(cache.value).filter(([key]) => key !== slug)) as Record<string, T>;
+}
+
+function rememberPublicStoreSlug(slug: string) {
+  publicStoreCacheOrder.value = publicStoreCacheOrder.value.filter(item => item !== slug);
+  publicStoreCacheOrder.value.push(slug);
+
+  while (publicStoreCacheOrder.value.length > MAX_PUBLIC_STORE_CACHE_SIZE) {
+    const expiredSlug = publicStoreCacheOrder.value.shift();
+    if (!expiredSlug) {
+      continue;
+    }
+
+    pruneCacheEntry(publicCookbookStoreCache, expiredSlug);
+    pruneCacheEntry(publicCategoryStoreCache, expiredSlug);
+    pruneCacheEntry(publicTagStoreCache, expiredSlug);
+  }
+}
 
 function getPublicCookbookStore(slug: string) {
+  rememberPublicStoreSlug(slug);
   if (!publicCookbookStoreCache.value[slug]) {
     publicCookbookStoreCache.value[slug] = usePublicCookbookStore(slug, i18n);
   }
@@ -165,6 +396,7 @@ function getPublicCookbookStore(slug: string) {
 }
 
 function getPublicCategoryStore(slug: string) {
+  rememberPublicStoreSlug(slug);
   if (!publicCategoryStoreCache.value[slug]) {
     publicCategoryStoreCache.value[slug] = usePublicCategoryStore(slug, i18n);
   }
@@ -172,6 +404,7 @@ function getPublicCategoryStore(slug: string) {
 }
 
 function getPublicTagStore(slug: string) {
+  rememberPublicStoreSlug(slug);
   if (!publicTagStoreCache.value[slug]) {
     publicTagStoreCache.value[slug] = usePublicTagStore(slug, i18n);
   }
@@ -215,9 +448,83 @@ const showImageImport = computed(() => group.value?.aiProviderSettings?.imagePro
 
 const sidebar = ref<boolean>(false);
 const quickTextRecipeDialog = ref(false);
+const uploadedBookDialog = ref(false);
+const uploadedBookFile = ref<File | null>(null);
+const uploadedBookName = ref("");
+const uploadedBookUploading = ref(false);
+const uploadedBooks = ref<UploadedBook[]>([]);
+const uploadedBookAction = ref<"none" | "extract" | "translate">("none");
+const uploadedBookPagesPerChunk = ref(10);
+const uploadedBookExtractionDialog = ref(false);
+const uploadedBookExtractionStarting = ref(false);
+const uploadedBookTranslationDialog = ref(false);
+const uploadedBookTranslationStarting = ref(false);
+const uploadedBookDeleteDialog = ref(false);
+const uploadedBookDeleting = ref(false);
+const uploadedBookTargetLanguage = ref(defaultUploadedBookTargetLanguage());
+const selectedUploadedBook = ref<UploadedBook | null>(null);
+let uploadedBookRefreshTimer: ReturnType<typeof setInterval> | null = null;
+let uploadedBookRefreshInFlight = false;
+const uploadedBookTranslationLanguageOptions = computed(() => [
+  i18n.t("cookbook.language-hebrew"),
+  i18n.t("cookbook.language-english"),
+  i18n.t("cookbook.language-arabic"),
+  i18n.t("cookbook.language-french"),
+  i18n.t("cookbook.language-italian"),
+  i18n.t("cookbook.language-spanish"),
+  i18n.t("cookbook.language-german"),
+  i18n.t("cookbook.language-russian"),
+]);
+const uploadedBookAccept = [
+  ".pdf",
+  ".epub",
+  ".mobi",
+  ".azw",
+  ".azw3",
+  ".azw4",
+  ".fb2",
+  ".fb2.zip",
+  ".djvu",
+  ".djv",
+  ".cbz",
+  ".cbr",
+  ".cb7",
+  ".cbt",
+  ".txt",
+  ".rtf",
+  ".doc",
+  ".docx",
+  ".odt",
+  ".html",
+  ".htm",
+  ".mhtml",
+  ".mht",
+  ".md",
+  ".markdown",
+  ".lit",
+  ".pdb",
+  ".zip",
+  ".rar",
+  ".7z",
+  "application/pdf",
+  "application/epub+zip",
+].join(",");
 onMounted(() => {
   sidebar.value = display.lgAndUp.value;
+  syncUploadedBookRefreshTimer();
 });
+
+onBeforeUnmount(() => {
+  clearUploadedBookRefreshTimer();
+});
+
+watch(
+  () => [isOwnGroup.value, auth.user.value?.id],
+  () => {
+    refreshUploadedBooks();
+  },
+  { immediate: true },
+);
 
 function cookbookAsLink(cookbook: ReadCookBook): SideBarLink {
   return {
@@ -226,6 +533,66 @@ function cookbookAsLink(cookbook: ReadCookBook): SideBarLink {
     title: cookbook.name,
     to: `/g/${groupSlug.value}/cookbooks/${cookbook.slug || ""}`,
     restricted: false,
+  };
+}
+
+function uploadedBookAsLink(book: UploadedBook): SideBarLink {
+  const children: SideBarLink[] = [
+    {
+      key: `uploaded-book-${book.id}-open`,
+      icon: $globals.icons.openInNew,
+      title: i18n.t("cookbook.open-book"),
+      href: api.uploadedBooks.fileUrl(book.id),
+      restricted: true,
+    },
+  ];
+
+  if (!book.isTranslatedBook) {
+    children.push(
+      {
+        key: `uploaded-book-${book.id}-extract`,
+        icon: $globals.icons.robot,
+        title: uploadedBookExtractionActionTitle(book),
+        onClick: () => openUploadedBookExtractionDialog(book),
+        restricted: true,
+      },
+      {
+        key: `uploaded-book-${book.id}-translate`,
+        icon: $globals.icons.translate,
+        title: uploadedBookTranslationActionTitle(book),
+        onClick: () => openUploadedBookTranslationDialog(book),
+        restricted: true,
+      },
+    );
+  }
+
+  children.push({
+    key: `uploaded-book-${book.id}-delete`,
+    icon: $globals.icons.delete,
+    title: i18n.t("cookbook.delete-book"),
+    onClick: () => openUploadedBookDeleteDialog(book),
+    restricted: true,
+  });
+
+  return {
+    key: `uploaded-book-${book.id}`,
+    icon: book.isTranslatedBook ? $globals.icons.translate : book.extension === ".pdf" ? $globals.icons.filePDF : $globals.icons.book,
+    title: uploadedBookNavigationTitle(book),
+    childrenStartExpanded: isUploadedBookExtracting(book) || isUploadedBookTranslating(book),
+    children,
+    restricted: true,
+  };
+}
+
+function uploadBookActionLink(): SideBarLink {
+  return {
+    key: "upload-book",
+    icon: $globals.icons.upload,
+    title: i18n.t("cookbook.upload-book"),
+    restricted: true,
+    onClick: () => {
+      uploadedBookDialog.value = true;
+    },
   };
 }
 
@@ -247,10 +614,14 @@ function sortByName<T extends { name: string }>(items: T[]) {
   return [...items].sort((a, b) => a.name.localeCompare(b.name));
 }
 
+const regularUploadedBooks = computed(() => uploadedBooks.value.filter(book => !book.isTranslatedBook));
+const translatedUploadedBooks = computed(() => uploadedBooks.value.filter(book => book.isTranslatedBook));
+
 const currentUserHouseholdId = computed(() => auth.user.value?.householdId);
 const cookbookLinks = computed<SideBarLink[]>(() => {
+  const uploadedLinks = isOwnGroup.value ? regularUploadedBooks.value.map(uploadedBookAsLink) : [];
   if (!cookbooks.value?.length) {
-    return [];
+    return uploadedLinks;
   }
 
   const sortedCookbooks = [...cookbooks.value].sort((a, b) => (a.position || 0) - (b.position || 0));
@@ -282,12 +653,33 @@ const cookbookLinks = computed<SideBarLink[]>(() => {
   });
 
   links.sort((a, b) => a.title.localeCompare(b.title));
-  if (auth.user.value && cookbookPreferences.value.hideOtherHouseholds) {
-    return ownLinks;
+  const visibleCookbookLinks = auth.user.value && cookbookPreferences.value.hideOtherHouseholds
+    ? ownLinks
+    : [...ownLinks, ...links];
+
+  return [...uploadedLinks, ...visibleCookbookLinks];
+});
+
+const translatedBookLinks = computed<SideBarLink[]>(() => {
+  return isOwnGroup.value ? translatedUploadedBooks.value.map(uploadedBookAsLink) : [];
+});
+
+const sidebarCookbookLinks = computed<SideBarLink[]>(() => {
+  if (!translatedBookLinks.value.length) {
+    return cookbookLinks.value;
   }
-  else {
-    return [...ownLinks, ...links];
-  }
+
+  return [
+    ...cookbookLinks.value,
+    {
+      key: "translated-uploaded-books",
+      icon: $globals.icons.translate,
+      title: i18n.t("cookbook.translated-books"),
+      children: translatedBookLinks.value,
+      childrenStartExpanded: translatedUploadedBooks.value.some(isUploadedBookTranslating),
+      restricted: true,
+    },
+  ];
 });
 
 const categoryLinks = computed<SideBarLink[]>(() => {
@@ -302,12 +694,333 @@ const tagLinks = computed<SideBarLink[]>(() => {
     .filter((link): link is SideBarLink => !!link);
 });
 
+function resetUploadBookForm() {
+  if (uploadedBookUploading.value) {
+    return;
+  }
+
+  uploadedBookFile.value = null;
+  uploadedBookName.value = "";
+  uploadedBookAction.value = "none";
+  uploadedBookPagesPerChunk.value = 10;
+  uploadedBookTargetLanguage.value = defaultUploadedBookTargetLanguage();
+}
+
+async function refreshUploadedBooks() {
+  if (uploadedBookRefreshInFlight) {
+    return;
+  }
+
+  if (!isOwnGroup.value || !auth.user.value) {
+    uploadedBooks.value = [];
+    return;
+  }
+
+  uploadedBookRefreshInFlight = true;
+  try {
+    const { data } = await api.uploadedBooks.getAll();
+    uploadedBooks.value = data || [];
+    if (selectedUploadedBook.value) {
+      selectedUploadedBook.value = uploadedBooks.value.find(book => book.id === selectedUploadedBook.value?.id) || selectedUploadedBook.value;
+    }
+  }
+  finally {
+    uploadedBookRefreshInFlight = false;
+    syncUploadedBookRefreshTimer();
+  }
+}
+
+async function uploadBook() {
+  if (!uploadedBookFile.value) {
+    return;
+  }
+
+  uploadedBookUploading.value = true;
+  const { data, error } = await api.uploadedBooks.upload(uploadedBookFile.value, uploadedBookName.value).finally(() => {
+    uploadedBookUploading.value = false;
+  });
+
+  if (!data) {
+    const fallback = i18n.t("cookbook.upload-book-failed");
+    const detail = error?.response?.data?.detail;
+    const status = error?.response?.status;
+    alert.error(typeof detail === "string" ? detail : status ? `${fallback} (${status})` : fallback);
+    return;
+  }
+
+  alert.success(i18n.t("cookbook.upload-book-success"));
+  if (uploadedBookAction.value === "extract") {
+    await startUploadedBookExtraction(data, false);
+  }
+  else if (uploadedBookAction.value === "translate") {
+    await startUploadedBookTranslation(data, false);
+  }
+  uploadedBookDialog.value = false;
+  resetUploadBookForm();
+  await refreshUploadedBooks();
+}
+
+function clearUploadedBookRefreshTimer() {
+  if (uploadedBookRefreshTimer) {
+    clearInterval(uploadedBookRefreshTimer);
+    uploadedBookRefreshTimer = null;
+  }
+}
+
+function syncUploadedBookRefreshTimer() {
+  if (!import.meta.client) {
+    return;
+  }
+
+  const hasProcessingBooks = uploadedBooks.value.some(book => isUploadedBookExtracting(book) || isUploadedBookTranslating(book));
+  if (hasProcessingBooks && !uploadedBookRefreshTimer) {
+    uploadedBookRefreshTimer = setInterval(() => {
+      refreshUploadedBooks();
+    }, 6000);
+  }
+  else if (!hasProcessingBooks) {
+    clearUploadedBookRefreshTimer();
+  }
+}
+
+function isUploadedBookExtracting(book: UploadedBook) {
+  return ["processing", "retrying"].includes(book.extractionStatus);
+}
+
+function isUploadedBookTranslating(book: UploadedBook) {
+  return ["processing", "retrying"].includes(book.translationStatus);
+}
+
+function uploadedBookNavigationTitle(book: UploadedBook) {
+  if (isUploadedBookExtracting(book)) {
+    const total = book.extractionTotalChunks || "?";
+    return `${book.name} (${book.extractionCompletedChunks}/${total})`;
+  }
+
+  if (isUploadedBookTranslating(book)) {
+    const total = book.translationTotalChunks || "?";
+    return `${book.name} (${book.translationCompletedChunks}/${total})`;
+  }
+
+  if (book.isTranslatedBook && book.translationLanguage) {
+    return `${book.name}`;
+  }
+
+  if (!isUploadedBookExtracting(book)) {
+    return book.name;
+  }
+
+  return book.name;
+}
+
+function uploadedBookExtractionActionTitle(book: UploadedBook) {
+  if (isUploadedBookExtracting(book) || isUploadedBookTranslating(book)) {
+    return i18n.t("cookbook.extraction-running");
+  }
+  if (book.extractionStatus === "completed") {
+    return i18n.t("cookbook.extract-again-with-ai");
+  }
+  return i18n.t("cookbook.extract-recipes-with-ai");
+}
+
+function uploadedBookTranslationActionTitle(book: UploadedBook) {
+  if (isUploadedBookExtracting(book) || isUploadedBookTranslating(book)) {
+    return i18n.t("cookbook.translation-running");
+  }
+  if (book.translationStatus === "completed") {
+    return i18n.t("cookbook.translate-again-with-ai");
+  }
+  return i18n.t("cookbook.translate-book-with-ai");
+}
+
+function uploadedBookExtractionStatusText(book: UploadedBook) {
+  if (isUploadedBookExtracting(book)) {
+    return i18n.t("cookbook.extraction-progress", {
+      completed: book.extractionCompletedChunks,
+      total: book.extractionTotalChunks || "?",
+      created: book.extractionRecipesCreated,
+      failed: book.extractionFailedChunks || 0,
+      retries: book.extractionRetryCount || 0,
+    });
+  }
+  if (book.extractionStatus === "completed") {
+    return i18n.t("cookbook.extraction-completed", {
+      found: book.extractionRecipesFound,
+      created: book.extractionRecipesCreated,
+    });
+  }
+  if (book.extractionStatus === "partial_failed") {
+    return i18n.t("cookbook.extraction-partial-failed", {
+      completed: book.extractionCompletedChunks,
+      total: book.extractionTotalChunks || "?",
+      failed: book.extractionFailedChunks || 0,
+      created: book.extractionRecipesCreated,
+    });
+  }
+  if (book.extractionStatus === "failed") {
+    return book.extractionError || i18n.t("cookbook.extraction-failed");
+  }
+  return i18n.t("cookbook.extraction-not-started");
+}
+
+function uploadedBookTranslationStatusText(book: UploadedBook) {
+  if (isUploadedBookTranslating(book)) {
+    return i18n.t("cookbook.translation-progress", {
+      completed: book.translationCompletedChunks,
+      total: book.translationTotalChunks || "?",
+      failed: book.translationFailedChunks || 0,
+      retries: book.translationRetryCount || 0,
+    });
+  }
+  if (book.translationStatus === "completed") {
+    return i18n.t("cookbook.translation-completed", {
+      language: book.translationLanguage || uploadedBookTargetLanguage.value,
+    });
+  }
+  if (book.translationStatus === "partial_failed") {
+    return i18n.t("cookbook.translation-partial-failed", {
+      completed: book.translationCompletedChunks,
+      total: book.translationTotalChunks || "?",
+      failed: book.translationFailedChunks || 0,
+    });
+  }
+  if (book.translationStatus === "failed") {
+    return book.translationError || i18n.t("cookbook.translation-failed");
+  }
+  return i18n.t("cookbook.translation-not-started");
+}
+
+function openUploadedBookExtractionDialog(book: UploadedBook) {
+  selectedUploadedBook.value = book;
+  uploadedBookPagesPerChunk.value = book.extractionPagesPerChunk || 10;
+  uploadedBookExtractionDialog.value = true;
+}
+
+function openUploadedBookTranslationDialog(book: UploadedBook) {
+  selectedUploadedBook.value = book;
+  uploadedBookPagesPerChunk.value = book.translationPagesPerChunk || 10;
+  uploadedBookTargetLanguage.value = book.translationLanguage || defaultUploadedBookTargetLanguage();
+  uploadedBookTranslationDialog.value = true;
+}
+
+function openUploadedBookDeleteDialog(book: UploadedBook) {
+  selectedUploadedBook.value = book;
+  uploadedBookDeleteDialog.value = true;
+}
+
+async function startSelectedUploadedBookExtraction() {
+  if (!selectedUploadedBook.value) {
+    return;
+  }
+  await startUploadedBookExtraction(selectedUploadedBook.value, true);
+}
+
+async function startSelectedUploadedBookTranslation() {
+  if (!selectedUploadedBook.value) {
+    return;
+  }
+  await startUploadedBookTranslation(selectedUploadedBook.value, true);
+}
+
+async function deleteSelectedUploadedBook() {
+  if (!selectedUploadedBook.value) {
+    return;
+  }
+
+  uploadedBookDeleting.value = true;
+  const { error } = await api.uploadedBooks.delete(selectedUploadedBook.value.id).finally(() => {
+    uploadedBookDeleting.value = false;
+  });
+
+  if (error) {
+    const fallback = i18n.t("cookbook.delete-uploaded-book-failed");
+    const detail = error?.response?.data?.detail;
+    alert.error(typeof detail === "string" ? detail : fallback);
+    return;
+  }
+
+  alert.success(i18n.t("cookbook.delete-uploaded-book-success"));
+  uploadedBookDeleteDialog.value = false;
+  selectedUploadedBook.value = null;
+  await refreshUploadedBooks();
+}
+
+async function startUploadedBookExtraction(book: UploadedBook, closeDialog: boolean) {
+  const pagesPerChunk = Math.min(Math.max(Number(uploadedBookPagesPerChunk.value) || 10, 1), 100);
+  uploadedBookExtractionStarting.value = true;
+  const { data, error } = await api.uploadedBooks.extractRecipes(book.id, {
+    pagesPerChunk,
+    translateLanguage: "Hebrew",
+  }).finally(() => {
+    uploadedBookExtractionStarting.value = false;
+  });
+
+  if (!data) {
+    const fallback = i18n.t("cookbook.extraction-start-failed");
+    const detail = error?.response?.data?.detail;
+    const message = typeof detail === "string" ? detail : fallback;
+    alert.error(message);
+    return;
+  }
+
+  selectedUploadedBook.value = data;
+  alert.success(i18n.t("cookbook.extraction-started"));
+  if (closeDialog) {
+    uploadedBookExtractionDialog.value = false;
+  }
+  await refreshUploadedBooks();
+}
+
+async function startUploadedBookTranslation(book: UploadedBook, closeDialog: boolean) {
+  const pagesPerChunk = Math.min(Math.max(Number(uploadedBookPagesPerChunk.value) || 10, 1), 100);
+  const targetLanguage = (uploadedBookTargetLanguage.value || defaultUploadedBookTargetLanguage()).trim();
+  uploadedBookTranslationStarting.value = true;
+  const { data, error } = await api.uploadedBooks.translate(book.id, {
+    pagesPerChunk,
+    targetLanguage,
+  }).finally(() => {
+    uploadedBookTranslationStarting.value = false;
+  });
+
+  if (!data) {
+    const fallback = i18n.t("cookbook.translation-start-failed");
+    const detail = error?.response?.data?.detail;
+    const message = typeof detail === "string" ? detail : fallback;
+    alert.error(message);
+    return;
+  }
+
+  selectedUploadedBook.value = data;
+  alert.success(i18n.t("cookbook.translation-started"));
+  if (closeDialog) {
+    uploadedBookTranslationDialog.value = false;
+  }
+  await refreshUploadedBooks();
+}
+
+function defaultUploadedBookTargetLanguage() {
+  const locale = String(i18n.locale.value || "").toLowerCase();
+  if (locale.startsWith("he")) {
+    return i18n.t("cookbook.language-hebrew");
+  }
+  if (locale.startsWith("ar")) {
+    return i18n.t("cookbook.language-arabic");
+  }
+  return i18n.t("cookbook.language-english");
+}
+
 const organizerSidebarSections = computed<OrganizerSidebarSection[]>(() => [
   {
     key: "cookbooks",
     icon: $globals.icons.book,
     title: i18n.t("cookbook.cookbooks"),
     links: cookbookLinks.value,
+  },
+  {
+    key: "translatedBooks",
+    icon: $globals.icons.translate,
+    title: i18n.t("cookbook.translated-books"),
+    links: translatedBookLinks.value,
   },
   {
     key: "categories",
@@ -390,6 +1103,7 @@ const topLinks = computed<SideBarLink[]>(() => [
     title: i18n.t("cookbook.cookbooks"),
     restricted: true,
   },
+  uploadBookActionLink(),
   {
     icon: $globals.icons.organizers,
     title: i18n.t("general.organizers"),

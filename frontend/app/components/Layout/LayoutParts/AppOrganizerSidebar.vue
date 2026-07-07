@@ -154,10 +154,14 @@
               v-for="child in nav.children"
               :key="section.key + '-' + (child.key || child.title)"
               exact
-              :to="child.to"
+              :href="child.href"
+              :rel="child.href ? 'noopener' : undefined"
+              :target="child.href ? '_blank' : undefined"
+              :to="child.href ? undefined : child.to"
               class="ms-2"
               :prepend-icon="child.icon"
               :title="child.title"
+              @click="handleNavClick(child)"
             />
           </v-list-group>
 
@@ -166,9 +170,13 @@
             :key="section.key + '-' + (nav.key || nav.title) + '-item'"
             exact
             link
-            :to="nav.to"
+            :href="nav.href"
+            :rel="nav.href ? 'noopener' : undefined"
+            :target="nav.href ? '_blank' : undefined"
+            :to="nav.href ? undefined : nav.to"
             :prepend-icon="nav.icon"
             :title="nav.title"
+            @click="handleNavClick(nav)"
           />
         </template>
       </template>
@@ -194,10 +202,10 @@
 <script setup lang="ts">
 import { useLocalStorage } from "@vueuse/core";
 import { VueDraggable } from "vue-draggable-plus";
-import type { OrganizerSidebarSection, OrganizerSidebarSectionKey } from "~/types/application-types";
+import type { OrganizerSidebarSection, OrganizerSidebarSectionKey, SideBarLink } from "~/types/application-types";
 import type { UserOrganizerSidebarPreferences } from "~/composables/use-users/preferences";
 
-type OrganizerVisibilityPreferenceKey = "showCookbooks" | "showCategories" | "showTags";
+type OrganizerVisibilityPreferenceKey = "showCookbooks" | "showTranslatedBooks" | "showCategories" | "showTags";
 
 interface OrganizerPreferenceOption {
   key: OrganizerSidebarSectionKey;
@@ -206,7 +214,7 @@ interface OrganizerPreferenceOption {
   preferenceKey: OrganizerVisibilityPreferenceKey;
 }
 
-const DEFAULT_SECTION_ORDER: OrganizerSidebarSectionKey[] = ["cookbooks", "categories", "tags"];
+const DEFAULT_SECTION_ORDER: OrganizerSidebarSectionKey[] = ["cookbooks", "translatedBooks", "categories", "tags"];
 
 const props = defineProps<{
   sections: OrganizerSidebarSection[];
@@ -216,9 +224,10 @@ const modelValue = defineModel<boolean>({ default: false });
 const preferences = defineModel<UserOrganizerSidebarPreferences>("preferences", {
   default: () => ({
     showCookbooks: true,
+    showTranslatedBooks: false,
     showCategories: false,
     showTags: false,
-    sectionOrder: ["cookbooks", "categories", "tags"],
+    sectionOrder: ["cookbooks", "translatedBooks", "categories", "tags"],
   }),
 });
 
@@ -243,6 +252,7 @@ const state = reactive({
 
 const preferenceKeyBySection: Record<OrganizerSidebarSectionKey, OrganizerVisibilityPreferenceKey> = {
   cookbooks: "showCookbooks",
+  translatedBooks: "showTranslatedBooks",
   categories: "showCategories",
   tags: "showTags",
 };
@@ -253,6 +263,12 @@ const preferenceOptions = computed<OrganizerPreferenceOption[]>(() => [
     icon: $globals.icons.book,
     title: i18n.t("cookbook.cookbooks"),
     preferenceKey: "showCookbooks" as const,
+  },
+  {
+    key: "translatedBooks",
+    icon: $globals.icons.translate,
+    title: i18n.t("cookbook.translated-books"),
+    preferenceKey: "showTranslatedBooks" as const,
   },
   {
     key: "categories",
@@ -315,6 +331,10 @@ function togglePreference(key: keyof UserOrganizerSidebarPreferences) {
 
 function toggleCollapsed() {
   collapsed.value = !collapsed.value;
+}
+
+function handleNavClick(nav: SideBarLink) {
+  nav.onClick?.();
 }
 
 watchEffect(() => {

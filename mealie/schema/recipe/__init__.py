@@ -14,6 +14,7 @@ from .recipe import (
     RecipeTool,
     RecipeToolPagination,
 )
+from .recipe_ai_search import RecipeAISearchRequest, RecipeAISearchResponse, RecipeAISearchResult
 from .recipe_asset import RecipeAsset
 from .recipe_bulk_actions import (
     AssignCategories,
@@ -102,6 +103,9 @@ __all__ = [
     "TimelineEventImage",
     "TimelineEventType",
     "RecipeAsset",
+    "RecipeAISearchRequest",
+    "RecipeAISearchResponse",
+    "RecipeAISearchResult",
     "RecipeSettings",
     "RecipeShareToken",
     "RecipeShareTokenCreate",

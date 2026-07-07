@@ -17,6 +17,8 @@ export interface OpenAIIngredients {
 export interface OpenAIRecipe {
   name: string;
   description?: string | null;
+  source?: string | null;
+  created_by?: string | null;
   recipe_yield?: string | null;
   total_time?: string | null;
   prep_time?: string | null;

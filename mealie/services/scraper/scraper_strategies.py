@@ -261,6 +261,10 @@ class RecipeScraperPackage(ABCScraperStrategy):
         cook_time = try_get_default(
             None, "performTime", None, cleaner.clean_time, translator=self.translator
         ) or try_get_default(scraped_data.cook_time, "cookTime", None, cleaner.clean_time, translator=self.translator)
+        author = try_get_default(getattr(scraped_data, "author", None), "author", None, cleaner.clean_string)
+        source = try_get_default(None, "source", None, cleaner.clean_string) or try_get_default(
+            None, "publisher", None, cleaner.clean_string
+        )
 
         extras = ScrapedExtras()
 
@@ -272,6 +276,8 @@ class RecipeScraperPackage(ABCScraperStrategy):
             slug="",
             image=try_get_default(scraped_data.image, "image", None, cleaner.clean_image),
             description=try_get_default(scraped_data.description, "description", "", cleaner.clean_string),
+            source=source,
+            created_by=author,
             nutrition=try_get_default(scraped_data.nutrients, "nutrition", None, cleaner.clean_nutrition),
             recipe_yield=try_get_default(scraped_data.yields, "recipeYield", "1", cleaner.clean_string),
             recipe_ingredient=try_get_default(
@@ -588,6 +594,8 @@ class RecipeScraperOpenAITranscription(ABCScraperStrategy):
             name=response.name,
             slug="",
             description=response.description,
+            source=response.source,
+            created_by=response.created_by,
             recipe_yield=response.recipe_yield,
             total_time=response.total_time,
             prep_time=response.prep_time,

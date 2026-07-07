@@ -20,6 +20,7 @@ dependencies = [
     "lxml==6.1.1",
     "orjson==3.11.9",
     "pydantic==2.13.4",
+    "pypdf==6.14.2",
     "pyhumps==3.8.0",
     "python-dateutil==2.9.0.post0",
     "python-dotenv==1.2.2",

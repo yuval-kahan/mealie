@@ -15,6 +15,7 @@ from mealie.services.recipe.recipe_data_service import RecipeDataService
 from mealie.services.scraper.scraped_extras import ScrapedExtras
 
 from .recipe_scraper import RecipeScraper
+from .scraper_strategies import RecipeScraperOpenAI, RecipeScraperOpenAITranscription
 
 
 class ParserErrors(StrEnum):
@@ -29,6 +30,7 @@ async def create_from_html(
     translator: Translator,
     html: str | None = None,
     on_progress: Callable[[str], Awaitable[None]] | None = None,
+    use_openai: bool = False,
 ) -> tuple[Recipe, ScrapedExtras | None]:
     """Main entry point for generating a recipe from a URL. Pass in a URL and
     a Recipe object will be returned if successful. Optionally pass in the HTML to skip fetching it.
@@ -41,7 +43,11 @@ async def create_from_html(
     Returns:
         Recipe: Recipe Object
     """
-    scraper = RecipeScraper(repos, translator)
+    scraper = RecipeScraper(
+        repos,
+        translator,
+        scrapers=[RecipeScraperOpenAITranscription, RecipeScraperOpenAI] if use_openai else None,
+    )
 
     if not html:
         extracted_url = regex_search(r"(https?://|www\.)[^\s]+", url)

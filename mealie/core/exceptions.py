@@ -54,6 +54,14 @@ class OpenAIServiceError(Exception):
     pass
 
 
+class NotARecipe(Exception):
+    """
+    This exception is raised when AI parsing determines that the input is not a usable recipe.
+    """
+
+    pass
+
+
 class RateLimitError(Exception):
     """
     This exception is raised when an external API returns a rate limit (429) error.

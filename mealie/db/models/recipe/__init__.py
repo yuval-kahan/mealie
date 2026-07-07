@@ -1,4 +1,5 @@
 from .api_extras import *
+from .ai_search_index import *
 from .assets import *
 from .category import *
 from .comment import *

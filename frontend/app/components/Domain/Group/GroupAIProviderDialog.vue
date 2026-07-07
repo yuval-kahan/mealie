@@ -110,9 +110,18 @@
           type="info"
           variant="tonal"
           density="compact"
-          class="mb-4"
+          class="mb-2"
         >
           {{ $t('group.ai-provider-settings.gemini-default-key-description', { count: geminiKeyCount }) }}
+        </v-alert>
+        <v-alert
+          v-if="hasDuplicateGeminiKeys"
+          type="warning"
+          variant="tonal"
+          density="compact"
+          class="mb-4"
+        >
+          {{ $t('group.ai-provider-settings.gemini-duplicate-api-keys', { count: geminiDuplicateKeyCount }) }}
         </v-alert>
         <v-text-field
           v-model="formData.baseUrl"
@@ -300,6 +309,9 @@ const isGeminiProvider = computed(() => providerPreset.value === "gemini");
 const isDefaultProvider = computed(() => !!props.providerId && props.providerId === props.defaultProviderId);
 const geminiKeys = computed(() => formData.apiKey.replaceAll(",", "\n").split("\n").map(key => key.trim()).filter(Boolean));
 const geminiKeyCount = computed(() => geminiKeys.value.length);
+const uniqueGeminiKeys = computed(() => uniqueApiKeys(geminiKeys.value));
+const geminiDuplicateKeyCount = computed(() => geminiKeyCount.value - uniqueGeminiKeys.value.length);
+const hasDuplicateGeminiKeys = computed(() => isGeminiProvider.value && geminiDuplicateKeyCount.value > 0);
 const apiValidation = reactive({
   status: "idle" as "idle" | "checking" | "valid" | "invalid",
   message: "",
@@ -307,6 +319,26 @@ const apiValidation = reactive({
 });
 let validationTimer: ReturnType<typeof setTimeout> | undefined;
 let validationRun = 0;
+
+function uniqueApiKeys(keys: string[]) {
+  const seen = new Set<string>();
+  return keys.filter((key) => {
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+}
+
+function normalizedFormApiKey() {
+  return isGeminiProvider.value ? uniqueGeminiKeys.value.join("\n") : formData.apiKey.trim();
+}
+
+function normalizeApiKeysForSave() {
+  formData.apiKey = normalizedFormApiKey();
+}
 
 const submitDisabled = computed(() => {
   if (!formData.name?.trim() || !formData.model?.trim()) {
@@ -350,7 +382,7 @@ function apiErrorMessage(error: unknown, fallback: string) {
 function validationFingerprint() {
   return JSON.stringify({
     providerPreset: providerPreset.value,
-    apiKey: formData.apiKey?.trim() ?? "",
+    apiKey: normalizedFormApiKey(),
     baseUrl: formData.baseUrl || null,
     model: formData.model,
     timeout: formData.timeout,
@@ -360,14 +392,15 @@ function validationFingerprint() {
 }
 
 function validationPayload(): AIProviderCreate | null {
-  if (!formData.apiKey?.trim() || !formData.model?.trim()) {
+  const apiKey = normalizedFormApiKey();
+  if (!apiKey || !formData.model?.trim()) {
     return null;
   }
 
   return {
     name: formData.name?.trim() || selectedProvider.value?.defaultName || "AI Provider",
     model: formData.model,
-    apiKey: formData.apiKey,
+    apiKey,
     baseUrl: formData.baseUrl || null,
     timeout: formData.timeout,
     requestHeaders: Object.keys(formData.requestHeaders).length ? formData.requestHeaders : undefined,
@@ -424,6 +457,11 @@ function queueApiKeyValidation() {
     apiValidation.status = "idle";
     apiValidation.message = "";
     apiValidation.fingerprint = "";
+    return;
+  }
+
+  const fingerprint = validationFingerprint();
+  if (apiValidation.fingerprint === fingerprint && ["valid", "invalid"].includes(apiValidation.status)) {
     return;
   }
 
@@ -539,13 +577,17 @@ watch(
 );
 
 async function handleSubmit() {
+  const apiKey = normalizedFormApiKey();
+
   // Required field guard (button is also disabled, but keep as a safeguard)
   if (!formData.name?.trim() || !formData.model?.trim()) return;
-  if (!isEdit.value && !formData.apiKey?.trim()) return;
-  if (formData.apiKey?.trim() && apiValidation.status !== "valid") {
+  if (!isEdit.value && !apiKey) return;
+  if (apiKey && apiValidation.status !== "valid") {
     const valid = await validateApiKey(true);
     if (!valid) return;
   }
+
+  normalizeApiKeysForSave();
 
   if (isEdit.value && props.providerId) {
     const payload: AIProviderUpdate = {
@@ -556,8 +598,8 @@ async function handleSubmit() {
       requestHeaders: Object.keys(formData.requestHeaders).length ? formData.requestHeaders : undefined,
       requestParams: Object.keys(formData.requestParams).length ? formData.requestParams : undefined,
     };
-    if (formData.apiKey) {
-      payload.apiKey = formData.apiKey;
+    if (apiKey) {
+      payload.apiKey = apiKey;
     }
     emit("update", props.providerId, payload);
   }
@@ -565,7 +607,7 @@ async function handleSubmit() {
     const createPayload: AIProviderCreate = {
       name: formData.name,
       model: formData.model,
-      apiKey: formData.apiKey,
+      apiKey,
       baseUrl: formData.baseUrl || null,
       timeout: formData.timeout,
       requestHeaders: Object.keys(formData.requestHeaders).length ? formData.requestHeaders : undefined,

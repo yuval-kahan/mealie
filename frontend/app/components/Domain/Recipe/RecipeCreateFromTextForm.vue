@@ -1,12 +1,34 @@
 <template>
-  <v-form ref="domTextForm" @submit.prevent="createRecipe">
+  <v-form ref="domCreateForm" @submit.prevent="createRecipe">
     <div>
       <v-card-title v-if="showTitle" class="headline">
         {{ $t("recipe.create-recipe-from-text") }}
       </v-card-title>
       <v-card-text>
-        <p>{{ $t("recipe.create-recipe-from-text-description") }}</p>
+        <p>{{ modeDescription }}</p>
+        <v-btn-toggle
+          v-model="createMode"
+          mandatory
+          divided
+          class="mb-4"
+          color="primary"
+          :disabled="state.loading"
+        >
+          <v-btn value="text">
+            <v-icon start>
+              {{ $globals.icons.textBoxCheckOutline }}
+            </v-icon>
+            {{ $t("recipe.ai-create-mode-text") }}
+          </v-btn>
+          <v-btn value="url">
+            <v-icon start>
+              {{ $globals.icons.link }}
+            </v-icon>
+            {{ $t("recipe.ai-create-mode-link") }}
+          </v-btn>
+        </v-btn-toggle>
         <v-textarea
+          v-if="createMode === 'text'"
           v-model="recipeText"
           :label="$t('recipe.recipe-text')"
           :prepend-inner-icon="$globals.icons.textBoxCheckOutline"
@@ -19,13 +41,44 @@
           :rows="rows"
           :rules="[validators.required]"
         />
+        <v-text-field
+          v-else
+          v-model="recipeUrl"
+          :label="$t('new-recipe.recipe-url')"
+          :prepend-inner-icon="$globals.icons.link"
+          validate-on="blur"
+          autofocus
+          variant="solo-filled"
+          clearable
+          rounded
+          :rules="[validators.url]"
+          :hint="$t('new-recipe.url-form-hint')"
+          persistent-hint
+        />
         <v-checkbox
+          v-if="createMode === 'text'"
           v-model="shouldTranslate"
           color="primary"
           hide-details
           :label="$t('recipe.should-translate-description')"
           :disabled="state.loading"
         />
+        <template v-else>
+          <v-checkbox
+            v-model="importKeywordsAsTags"
+            color="primary"
+            hide-details
+            :label="$t('recipe.import-original-keywords-as-tags')"
+            :disabled="state.loading"
+          />
+          <v-checkbox
+            v-model="importCategories"
+            color="primary"
+            hide-details
+            :label="$t('recipe.import-original-categories')"
+            :disabled="state.loading"
+          />
+        </template>
         <v-checkbox
           v-model="parseRecipe"
           color="primary"
@@ -43,7 +96,7 @@
         <div style="width: 100%" class="text-center">
           <div style="width: 250px; margin: 0 auto">
             <BaseButton
-              :disabled="!recipeText?.trim()"
+              :disabled="!canSubmit"
               rounded
               block
               type="submit"
@@ -51,7 +104,7 @@
             />
           </div>
           <v-card-text class="py-2">
-            {{ state.loading ? $t("recipe.please-wait-text-processing") : "" }}&nbsp;
+            {{ statusText }}&nbsp;
           </v-card-text>
         </div>
       </v-card-actions>
@@ -61,10 +114,13 @@
 
 <script setup lang="ts">
 import { useUserApi } from "~/composables/api";
+import { useTagStore } from "~/composables/store/use-tag-store";
 import { useNewRecipeOptions } from "~/composables/use-new-recipe-options";
 import { alert } from "~/composables/use-toast";
 import { validators } from "~/composables/use-validators";
 import type { VForm } from "~/types/auto-forms";
+
+type CreateMode = "text" | "url";
 
 const props = withDefaults(defineProps<{
   showTitle?: boolean;
@@ -89,40 +145,126 @@ const i18n = useI18n();
 const auth = useMealieAuth();
 const route = useRoute();
 const groupSlug = computed(() => route.params.groupSlug as string || auth.user.value?.groupSlug || "");
-const domTextForm = ref<VForm | null>(null);
+const tags = useTagStore();
+const domCreateForm = ref<VForm | null>(null);
 const shouldTranslate = ref(true);
 const videoFile = ref<File | null>(null);
+const createStatus = ref<string | null>(null);
 const { attachVideoToRecipe } = useRecipeVideoAsset();
 
-const sharedText = typeof route.query.recipe_import_text === "string" ? route.query.recipe_import_text : "";
-const recipeText = ref<string | null>(sharedText);
+function isHttpUrl(value: string | null) {
+  if (!value) {
+    return false;
+  }
 
-const { parseRecipe, navigateToRecipe } = useNewRecipeOptions({
-  enableImportKeywords: false,
-  enableImportCategories: false,
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  }
+  catch {
+    return false;
+  }
+}
+
+const sharedQueryUrl = typeof route.query.recipe_import_url === "string" ? route.query.recipe_import_url : null;
+const sharedQueryText = typeof route.query.recipe_import_text === "string" ? route.query.recipe_import_text : "";
+const sharedUrl = sharedQueryUrl || (isHttpUrl(sharedQueryText) ? sharedQueryText : null);
+const sharedText = sharedUrl ? "" : sharedQueryText;
+const createMode = ref<CreateMode>(sharedUrl ? "url" : "text");
+const recipeText = ref<string | null>(sharedText);
+const recipeUrl = ref<string | null>(sharedUrl);
+
+const {
+  importKeywordsAsTags,
+  importCategories,
+  parseRecipe,
+  navigateToRecipe,
+} = useNewRecipeOptions({
+  enableImportKeywords: true,
+  enableImportCategories: true,
   enableStayInEditMode: true,
   enableParseRecipe: true,
 });
 
-async function createRecipe() {
-  const text = recipeText.value?.trim();
-  if (!text) {
-    return;
+const modeDescription = computed(() => {
+  return createMode.value === "url"
+    ? i18n.t("recipe.create-recipe-from-link-description")
+    : i18n.t("recipe.create-recipe-from-text-description");
+});
+
+const canSubmit = computed(() => {
+  return createMode.value === "url"
+    ? Boolean(recipeUrl.value?.trim())
+    : Boolean(recipeText.value?.trim());
+});
+
+const statusText = computed(() => {
+  if (!state.loading) {
+    return "";
   }
 
-  const isValid = await domTextForm.value?.validate();
+  if (createStatus.value) {
+    return createStatus.value;
+  }
+
+  return createMode.value === "url"
+    ? i18n.t("recipe.please-wait-link-processing")
+    : i18n.t("recipe.please-wait-text-processing");
+});
+
+function createTextErrorMessage(error: unknown) {
+  const typedError = error as { response?: { data?: { detail?: { exception?: string; message?: string } } } };
+  const detail = typedError.response?.data?.detail;
+  if (detail?.exception === "NotARecipe") {
+    return i18n.t("recipe.recipe-text-not-recognized");
+  }
+
+  return detail?.message || i18n.t("events.something-went-wrong");
+}
+
+function createLinkErrorMessage(error: unknown) {
+  const typedError = error as { message?: string; response?: { data?: { detail?: { message?: string } } } };
+  return typedError.response?.data?.detail?.message || i18n.t("recipe.recipe-link-import-error");
+}
+
+async function createRecipe() {
+  const isValid = await domCreateForm.value?.validate();
   if (!isValid?.valid) {
     return;
   }
 
+  createStatus.value = null;
   state.loading = true;
+
+  try {
+    if (createMode.value === "url") {
+      await createRecipeFromUrl();
+      return;
+    }
+
+    await createRecipeFromText();
+  }
+  catch {
+    alert.error(i18n.t("events.something-went-wrong"));
+    state.loading = false;
+    createStatus.value = null;
+  }
+}
+
+async function createRecipeFromText() {
+  const text = recipeText.value?.trim();
+  if (!text) {
+    state.loading = false;
+    return;
+  }
+
   const { data, error } = await api.recipes.createOneFromText({
     text,
     translateLanguage: shouldTranslate.value ? i18n.locale.value : null,
   });
 
   if (error || !data) {
-    alert.error(i18n.t("events.something-went-wrong"));
+    alert.error(createTextErrorMessage(error));
     state.loading = false;
     return;
   }
@@ -133,5 +275,38 @@ async function createRecipe() {
 
   emit("created", data);
   navigateToRecipe(data, groupSlug.value, props.returnTo || route.path);
+}
+
+async function createRecipeFromUrl() {
+  const url = recipeUrl.value?.trim();
+  if (!url) {
+    state.loading = false;
+    return;
+  }
+
+  const { response, error } = await api.recipes.createOneByUrl(
+    url,
+    importKeywordsAsTags.value,
+    importCategories.value,
+    (message) => {
+      createStatus.value = message;
+    },
+    true,
+  );
+  createStatus.value = null;
+
+  if (error || response?.status !== 201 || !response?.data) {
+    alert.error(createLinkErrorMessage(error));
+    state.loading = false;
+    return;
+  }
+
+  if (importKeywordsAsTags.value) {
+    tags.actions.refresh();
+  }
+
+  await attachVideoToRecipe(response.data, videoFile.value);
+  emit("created", response.data);
+  navigateToRecipe(response.data, groupSlug.value, props.returnTo || route.path);
 }
 </script>

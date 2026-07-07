@@ -54,6 +54,7 @@ export interface UserCookbooksPreferences {
 
 export interface UserOrganizerSidebarPreferences {
   showCookbooks: boolean;
+  showTranslatedBooks: boolean;
   showCategories: boolean;
   showTags: boolean;
   sectionOrder: OrganizerSidebarSectionKey[];
@@ -210,9 +211,10 @@ export function useOrganizerSidebarPreferences(): Ref<UserOrganizerSidebarPrefer
     "organizer-sidebar-preferences",
     {
       showCookbooks: true,
+      showTranslatedBooks: false,
       showCategories: false,
       showTags: false,
-      sectionOrder: ["cookbooks", "categories", "tags"],
+      sectionOrder: ["cookbooks", "translatedBooks", "categories", "tags"],
     },
     { mergeDefaults: true },
   );
