@@ -95,6 +95,8 @@ class ProviderSlot:
     label: str
     available_at: float = 0.0
     busy: bool = False
+    disabled: bool = False
+    disabled_reason: str | None = None
 
 
 @dataclass
@@ -105,6 +107,7 @@ class ChunkWorkResult:
     wait_seconds: int | None = None
     error: str | None = None
     retryable: bool = False
+    provider_disabled: bool = False
 
 
 @dataclass
@@ -115,6 +118,7 @@ class ChunkTranslationResult:
     wait_seconds: int | None = None
     error: str | None = None
     retryable: bool = False
+    provider_disabled: bool = False
 
 
 class UploadedBookRecipeExtractor(BaseService):
@@ -496,6 +500,29 @@ class UploadedBookRecipeExtractor(BaseService):
         return any(marker in message for marker in retryable_markers)
 
     @staticmethod
+    def _is_provider_disabled_error(error: Exception) -> bool:
+        message = str(error).lower()
+        if any(marker in message for marker in ("quota", "rate limit", "resource_exhausted", "retry-after")):
+            return False
+
+        disabled_markers = (
+            "401",
+            "403",
+            "api key not valid",
+            "api_key_invalid",
+            "invalid api key",
+            "invalid_api_key",
+            "incorrect api key",
+            "authentication",
+            "unauthorized",
+            "not authorized",
+            "permission_denied",
+            "permission denied",
+            "denied access",
+        )
+        return any(marker in message for marker in disabled_markers)
+
+    @staticmethod
     def _short_error(error: Exception) -> str:
         message = str(error).replace("\n", " ").strip()
         return message[:500] if message else error.__class__.__name__
@@ -505,8 +532,12 @@ class UploadedBookRecipeExtractor(BaseService):
             sleep_for = 0.25
             async with lock:
                 now = time.monotonic()
-                available_slots = [slot for slot in slots if not slot.busy]
-                has_busy_slots = len(available_slots) != len(slots)
+                enabled_slots = [slot for slot in slots if not slot.disabled]
+                if not enabled_slots:
+                    raise RuntimeError("No usable AI provider keys remain")
+
+                available_slots = [slot for slot in enabled_slots if not slot.busy]
+                has_busy_slots = len(available_slots) != len(enabled_slots)
 
                 if available_slots:
                     slot = min(available_slots, key=lambda item: item.available_at)
@@ -518,6 +549,16 @@ class UploadedBookRecipeExtractor(BaseService):
                     sleep_for = 0.25 if has_busy_slots else min(wait_seconds, 30)
 
             await asyncio.sleep(sleep_for)
+
+    async def _disable_provider_slot(self, slot: ProviderSlot, lock: asyncio.Lock, reason: str | None = None) -> None:
+        async with lock:
+            slot.disabled = True
+            slot.disabled_reason = reason
+            slot.available_at = 0
+
+    async def _has_usable_provider_slot(self, slots: list[ProviderSlot], lock: asyncio.Lock) -> bool:
+        async with lock:
+            return any(not slot.disabled for slot in slots)
 
     async def _release_provider_slot(
         self,
@@ -547,8 +588,13 @@ class UploadedBookRecipeExtractor(BaseService):
                 provider=slot.provider,
             )
         except Exception as e:
-            retryable = self._is_retryable_error(e)
-            if retryable:
+            provider_disabled = self._is_provider_disabled_error(e)
+            retryable = False if provider_disabled else self._is_retryable_error(e)
+            if provider_disabled:
+                self.logger.warning(
+                    f"Disabling AI provider slot {slot.label} after extraction error for book chunk {chunk.index + 1}: {e}"
+                )
+            elif retryable:
                 self.logger.warning(
                     f"Retryable AI extraction error for book chunk {chunk.index + 1} using {slot.label}: {e}"
                 )
@@ -563,6 +609,7 @@ class UploadedBookRecipeExtractor(BaseService):
                 wait_seconds=self._retry_wait_seconds(e),
                 error=self._short_error(e),
                 retryable=retryable,
+                provider_disabled=provider_disabled,
             )
 
         return ChunkWorkResult(chunk=chunk, recipes=response.recipes if response else [], provider_label=slot.label)
@@ -670,7 +717,23 @@ class UploadedBookRecipeExtractor(BaseService):
                     except asyncio.QueueEmpty:
                         return
 
-                    slot = await self._acquire_provider_slot(provider_slots, provider_lock)
+                    try:
+                        slot = await self._acquire_provider_slot(provider_slots, provider_lock)
+                    except RuntimeError as e:
+                        async with state_lock:
+                            state = chunk_states[chunk.index]
+                            state.update(
+                                {
+                                    "status": CHUNK_FAILED,
+                                    "error": str(e),
+                                    "provider": None,
+                                    "nextRetrySeconds": None,
+                                }
+                            )
+                            self._save_progress(book, chunk_states)
+                        queue.task_done()
+                        continue
+
                     wait_seconds: int | None = None
 
                     try:
@@ -696,12 +759,29 @@ class UploadedBookRecipeExtractor(BaseService):
                             translate_language,
                         )
 
+                        has_usable_provider = True
+                        if result.error and result.provider_disabled:
+                            await self._disable_provider_slot(slot, provider_lock, result.error)
+                            has_usable_provider = await self._has_usable_provider_slot(provider_slots, provider_lock)
+
                         async with state_lock:
                             state = chunk_states[chunk.index]
                             attempts = self._state_int(state, "attempts")
 
                             if result.error:
-                                if result.retryable and attempts < self.MAX_CHUNK_ATTEMPTS:
+                                if result.provider_disabled and has_usable_provider:
+                                    state["attempts"] = max(attempts - 1, 0)
+                                    state.update(
+                                        {
+                                            "status": CHUNK_RETRYING,
+                                            "error": f"{result.provider_label} disabled: {result.error}",
+                                            "provider": result.provider_label,
+                                            "nextRetrySeconds": None,
+                                        }
+                                    )
+                                    self._save_progress(book, chunk_states)
+                                    await queue.put(chunk)
+                                elif result.retryable and attempts < self.MAX_CHUNK_ATTEMPTS:
                                     backoff_seconds = min(
                                         self.DEFAULT_RETRY_WAIT_SECONDS * (2 ** max(attempts - 1, 0)),
                                         self.MAX_RETRY_WAIT_SECONDS,
@@ -721,7 +801,12 @@ class UploadedBookRecipeExtractor(BaseService):
                                     state.update(
                                         {
                                             "status": CHUNK_FAILED,
-                                            "error": result.error,
+                                            "error": (
+                                                f"No usable AI provider keys remain after {result.provider_label}: "
+                                                f"{result.error}"
+                                                if result.provider_disabled
+                                                else result.error
+                                            ),
                                             "provider": result.provider_label,
                                             "nextRetrySeconds": None,
                                         }
@@ -946,8 +1031,13 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                 provider=slot.provider,
             )
         except Exception as e:
-            retryable = self._is_retryable_error(e)
-            if retryable:
+            provider_disabled = self._is_provider_disabled_error(e)
+            retryable = False if provider_disabled else self._is_retryable_error(e)
+            if provider_disabled:
+                self.logger.warning(
+                    f"Disabling AI provider slot {slot.label} after translation error for book chunk {chunk.index + 1}: {e}"
+                )
+            elif retryable:
                 self.logger.warning(
                     f"Retryable AI translation error for book chunk {chunk.index + 1} using {slot.label}: {e}"
                 )
@@ -962,6 +1052,7 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                 wait_seconds=self._retry_wait_seconds(e),
                 error=self._short_error(e),
                 retryable=retryable,
+                provider_disabled=provider_disabled,
             )
 
         pages = {page.page: page.text for page in response.pages} if response else {}
@@ -1180,7 +1271,23 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                     except asyncio.QueueEmpty:
                         return
 
-                    slot = await self._acquire_provider_slot(provider_slots, provider_lock)
+                    try:
+                        slot = await self._acquire_provider_slot(provider_slots, provider_lock)
+                    except RuntimeError as e:
+                        async with state_lock:
+                            state = chunk_states[chunk.index]
+                            state.update(
+                                {
+                                    "status": CHUNK_FAILED,
+                                    "error": str(e),
+                                    "provider": None,
+                                    "nextRetrySeconds": None,
+                                }
+                            )
+                            self._save_translation_progress(book, chunk_states)
+                        queue.task_done()
+                        continue
+
                     wait_seconds: int | None = None
 
                     try:
@@ -1206,12 +1313,29 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                             target_language,
                         )
 
+                        has_usable_provider = True
+                        if result.error and result.provider_disabled:
+                            await self._disable_provider_slot(slot, provider_lock, result.error)
+                            has_usable_provider = await self._has_usable_provider_slot(provider_slots, provider_lock)
+
                         async with state_lock:
                             state = chunk_states[chunk.index]
                             attempts = self._state_int(state, "attempts")
 
                             if result.error:
-                                if result.retryable and attempts < self.MAX_CHUNK_ATTEMPTS:
+                                if result.provider_disabled and has_usable_provider:
+                                    state["attempts"] = max(attempts - 1, 0)
+                                    state.update(
+                                        {
+                                            "status": CHUNK_RETRYING,
+                                            "error": f"{result.provider_label} disabled: {result.error}",
+                                            "provider": result.provider_label,
+                                            "nextRetrySeconds": None,
+                                        }
+                                    )
+                                    self._save_translation_progress(book, chunk_states)
+                                    await queue.put(chunk)
+                                elif result.retryable and attempts < self.MAX_CHUNK_ATTEMPTS:
                                     backoff_seconds = min(
                                         self.DEFAULT_RETRY_WAIT_SECONDS * (2 ** max(attempts - 1, 0)),
                                         self.MAX_RETRY_WAIT_SECONDS,
@@ -1231,7 +1355,12 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                                     state.update(
                                         {
                                             "status": CHUNK_FAILED,
-                                            "error": result.error,
+                                            "error": (
+                                                f"No usable AI provider keys remain after {result.provider_label}: "
+                                                f"{result.error}"
+                                                if result.provider_disabled
+                                                else result.error
+                                            ),
                                             "provider": result.provider_label,
                                             "nextRetrySeconds": None,
                                         }
