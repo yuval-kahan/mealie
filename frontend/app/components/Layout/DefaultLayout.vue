@@ -45,7 +45,7 @@
         :loading="uploadedBookUploading"
         :submit-text="$t('cookbook.upload-book')"
         :submit-icon="$globals.icons.upload"
-        :submit-disabled="!uploadedBookFile"
+        :submit-disabled="!uploadedBookFiles.length"
         @submit="uploadBook"
         @close="resetUploadBookForm"
       >
@@ -56,6 +56,7 @@
             density="comfortable"
             :label="$t('cookbook.uploaded-book-name')"
             :placeholder="$t('cookbook.uploaded-book-name-placeholder')"
+            :disabled="hasMultipleUploadedBookFiles"
           />
           <v-file-input
             v-model="uploadedBookFile"
@@ -69,11 +70,51 @@
             :hint="$t('cookbook.supported-book-files')"
             persistent-hint
             truncate-length="100"
+            @update:model-value="onUploadedBookFileSelected"
           />
+          <input
+            ref="uploadedBookFolderInput"
+            class="d-none"
+            type="file"
+            :accept="uploadedBookAccept"
+            multiple
+            webkitdirectory
+            directory
+            @change="onUploadedBookFolderSelected"
+          >
+          <div class="d-flex align-center ga-2 mt-2 mb-1">
+            <v-btn
+              variant="tonal"
+              color="primary"
+              :prepend-icon="$globals.icons.folderOutline"
+              :disabled="uploadedBookUploading"
+              @click="openUploadedBookFolderPicker"
+            >
+              {{ $t("cookbook.select-book-folder") }}
+            </v-btn>
+            <v-chip
+              v-if="uploadedBookFiles.length"
+              size="small"
+              color="primary"
+              variant="tonal"
+            >
+              {{ $t("cookbook.selected-book-files", { count: uploadedBookFiles.length }) }}
+            </v-chip>
+          </div>
+          <v-alert
+            v-if="hasMultipleUploadedBookFiles"
+            density="compact"
+            variant="tonal"
+            type="info"
+            class="mb-3"
+          >
+            {{ $t("cookbook.bulk-upload-ai-disabled") }}
+          </v-alert>
           <v-radio-group
             v-model="uploadedBookAction"
             density="compact"
             :label="$t('cookbook.after-upload-action')"
+            :disabled="hasMultipleUploadedBookFiles"
           >
             <v-radio
               value="none"
@@ -450,6 +491,8 @@ const sidebar = ref<boolean>(false);
 const quickTextRecipeDialog = ref(false);
 const uploadedBookDialog = ref(false);
 const uploadedBookFile = ref<File | null>(null);
+const uploadedBookFiles = ref<File[]>([]);
+const uploadedBookFolderInput = ref<HTMLInputElement | null>(null);
 const uploadedBookName = ref("");
 const uploadedBookUploading = ref(false);
 const uploadedBooks = ref<UploadedBook[]>([]);
@@ -475,7 +518,7 @@ const uploadedBookTranslationLanguageOptions = computed(() => [
   i18n.t("cookbook.language-german"),
   i18n.t("cookbook.language-russian"),
 ]);
-const uploadedBookAccept = [
+const uploadedBookSupportedExtensions = [
   ".pdf",
   ".epub",
   ".mobi",
@@ -506,9 +549,13 @@ const uploadedBookAccept = [
   ".zip",
   ".rar",
   ".7z",
+];
+const uploadedBookAccept = [
+  ...uploadedBookSupportedExtensions,
   "application/pdf",
   "application/epub+zip",
 ].join(",");
+const hasMultipleUploadedBookFiles = computed(() => uploadedBookFiles.value.length > 1);
 onMounted(() => {
   sidebar.value = display.lgAndUp.value;
   syncUploadedBookRefreshTimer();
@@ -614,6 +661,44 @@ function sortByName<T extends { name: string }>(items: T[]) {
   return [...items].sort((a, b) => a.name.localeCompare(b.name));
 }
 
+function isSupportedUploadedBookFile(file: File) {
+  const fileName = file.name.toLowerCase();
+  return uploadedBookSupportedExtensions.some(extension => fileName.endsWith(extension));
+}
+
+function setUploadedBookFiles(files: File[]) {
+  const supportedFiles = files.filter(isSupportedUploadedBookFile);
+  uploadedBookFiles.value = supportedFiles;
+  uploadedBookFile.value = supportedFiles.length === 1 ? supportedFiles[0] : null;
+
+  if (supportedFiles.length > 1) {
+    uploadedBookName.value = "";
+    uploadedBookAction.value = "none";
+  }
+}
+
+function onUploadedBookFileSelected(value: File | File[] | null) {
+  if (Array.isArray(value)) {
+    setUploadedBookFiles(value);
+  }
+  else {
+    setUploadedBookFiles(value ? [value] : []);
+  }
+
+  if (uploadedBookFolderInput.value) {
+    uploadedBookFolderInput.value.value = "";
+  }
+}
+
+function onUploadedBookFolderSelected(event: Event) {
+  const input = event.target as HTMLInputElement;
+  setUploadedBookFiles(Array.from(input.files || []));
+}
+
+function openUploadedBookFolderPicker() {
+  uploadedBookFolderInput.value?.click();
+}
+
 const regularUploadedBooks = computed(() => uploadedBooks.value.filter(book => !book.isTranslatedBook));
 const translatedUploadedBooks = computed(() => uploadedBooks.value.filter(book => book.isTranslatedBook));
 
@@ -700,6 +785,10 @@ function resetUploadBookForm() {
   }
 
   uploadedBookFile.value = null;
+  uploadedBookFiles.value = [];
+  if (uploadedBookFolderInput.value) {
+    uploadedBookFolderInput.value.value = "";
+  }
   uploadedBookName.value = "";
   uploadedBookAction.value = "none";
   uploadedBookPagesPerChunk.value = 10;
@@ -731,30 +820,55 @@ async function refreshUploadedBooks() {
 }
 
 async function uploadBook() {
-  if (!uploadedBookFile.value) {
+  const files = uploadedBookFiles.value;
+  if (!files.length) {
     return;
   }
 
   uploadedBookUploading.value = true;
-  const { data, error } = await api.uploadedBooks.upload(uploadedBookFile.value, uploadedBookName.value).finally(() => {
-    uploadedBookUploading.value = false;
-  });
+  const uploaded: UploadedBook[] = [];
+  let firstError: unknown = null;
 
-  if (!data) {
+  try {
+    for (const file of files) {
+      const { data, error } = await api.uploadedBooks.upload(file, hasMultipleUploadedBookFiles.value ? null : uploadedBookName.value);
+      if (data) {
+        uploaded.push(data);
+      }
+      else if (!firstError) {
+        firstError = error;
+      }
+    }
+  }
+  finally {
+    uploadedBookUploading.value = false;
+  }
+
+  if (!uploaded.length) {
     const fallback = i18n.t("cookbook.upload-book-failed");
-    const detail = error?.response?.data?.detail;
-    const status = error?.response?.status;
+    const detail = (firstError as { response?: { data?: { detail?: unknown }; status?: number } })?.response?.data?.detail;
+    const status = (firstError as { response?: { status?: number } })?.response?.status;
     alert.error(typeof detail === "string" ? detail : status ? `${fallback} (${status})` : fallback);
     return;
   }
 
-  alert.success(i18n.t("cookbook.upload-book-success"));
-  if (uploadedBookAction.value === "extract") {
-    await startUploadedBookExtraction(data, false);
+  if (uploaded.length === 1) {
+    alert.success(i18n.t("cookbook.upload-book-success"));
   }
-  else if (uploadedBookAction.value === "translate") {
-    await startUploadedBookTranslation(data, false);
+  else if (uploaded.length === files.length) {
+    alert.success(i18n.t("cookbook.upload-books-success", { count: uploaded.length }));
   }
+  else {
+    alert.info(i18n.t("cookbook.upload-books-partial-success", { uploaded: uploaded.length, total: files.length }));
+  }
+
+  if (uploaded.length === 1 && uploadedBookAction.value === "extract") {
+    await startUploadedBookExtraction(uploaded[0], false);
+  }
+  else if (uploaded.length === 1 && uploadedBookAction.value === "translate") {
+    await startUploadedBookTranslation(uploaded[0], false);
+  }
+
   uploadedBookDialog.value = false;
   resetUploadBookForm();
   await refreshUploadedBooks();
