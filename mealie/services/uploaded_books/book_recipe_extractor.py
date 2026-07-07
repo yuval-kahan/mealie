@@ -120,7 +120,6 @@ class ChunkTranslationResult:
 class UploadedBookRecipeExtractor(BaseService):
     PSEUDO_PAGE_CHAR_LIMIT = 3500
     MAX_AI_CHARS = 90000
-    MAX_PARALLEL_AI_REQUESTS = 6
     MAX_CHUNK_ATTEMPTS = 6
     DEFAULT_RETRY_WAIT_SECONDS = 60
     MAX_RETRY_WAIT_SECONDS = 30 * 60
@@ -750,7 +749,7 @@ class UploadedBookRecipeExtractor(BaseService):
                         await self._release_provider_slot(slot, provider_lock, wait_seconds)
                         queue.task_done()
 
-            worker_count = min(len(provider_slots), self.MAX_PARALLEL_AI_REQUESTS, queue.qsize())
+            worker_count = min(len(provider_slots), queue.qsize())
             if worker_count:
                 await asyncio.gather(*(worker() for _ in range(worker_count)))
 
@@ -1256,7 +1255,7 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                         await self._release_provider_slot(slot, provider_lock, wait_seconds)
                         queue.task_done()
 
-            worker_count = min(len(provider_slots), self.MAX_PARALLEL_AI_REQUESTS, queue.qsize())
+            worker_count = min(len(provider_slots), queue.qsize())
             if worker_count:
                 await asyncio.gather(*(worker() for _ in range(worker_count)))
 
