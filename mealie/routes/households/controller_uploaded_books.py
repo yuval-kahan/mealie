@@ -16,6 +16,7 @@ from mealie.schema.cookbook.uploaded_book import (
     UploadedBookOut,
     UploadedBookTranslateRequest,
 )
+from mealie.schema.household.household import HouseholdInDB
 from mealie.schema.user import PrivateUser
 from mealie.services.uploaded_books import UploadedBookRecipeExtractor, UploadedBookTranslator
 
@@ -84,6 +85,10 @@ class UploadedBooksController(BasePublicController):
     @property
     def household_id(self) -> UUID4:
         return self.user.household_id
+
+    @property
+    def household(self) -> HouseholdInDB:
+        return self.repos.households.get_one(self.household_id)
 
     def _books_root(self) -> Path:
         root = self.folders.DATA_DIR.joinpath("uploaded-books", str(self.group_id))
