@@ -220,6 +220,7 @@ export interface RecipeIngredient {
   food?: IngredientFood | CreateIngredientFood | null;
   referencedRecipe?: Recipe | null;
   note?: string | null;
+  recommendedVariety?: string | null;
   display?: string;
   title?: string | null;
   originalText?: string | null;
@@ -360,6 +361,7 @@ export interface RecipeIngredientBase {
   food?: IngredientFood | CreateIngredientFood | null;
   referencedRecipe?: Recipe | null;
   note?: string | null;
+  recommendedVariety?: string | null;
   display?: string;
 }
 export interface RecipeLastMade {

@@ -195,6 +195,7 @@ class RecipeIngredientBase(MealieModel):
     referenced_recipe: Recipe | None = None
 
     note: str | None = ""
+    recommended_variety: str | None = ""
     display: str = ""
     """
     How the ingredient should be displayed

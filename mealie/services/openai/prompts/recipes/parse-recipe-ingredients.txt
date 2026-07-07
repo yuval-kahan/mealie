@@ -7,5 +7,6 @@ When parsing:
 - Text in parentheses = notes (e.g., "3 potatoes (roughly chopped)" → note: "roughly chopped")
 - Correct common typos (e.g., "potatos" → "potatoes")
 - Recognize units: tablespoon, teaspoon, gram, tsp, tbsp, oz, sprig, can, bundle, bunch, unit, cube, package, pinch
+- Put a specific ingredient type/variety in recommended_variety when it is explicitly present or clearly useful, such as Roma tomatoes, red bell pepper, waxy potatoes, yellow onion, baby spinach, basil leaves, shiitake mushrooms, or spaghetti. Leave it null when not relevant.
 - For ranges (e.g., "3-5", "1 to 2"), use the lower number
 - All text must appear somewhere, or otherwise be accounted for; if converting "2 dozen" → "24", don't put "dozen" elsewhere. If you're unsure, put extra text in the notes

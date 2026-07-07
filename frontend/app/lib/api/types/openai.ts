@@ -10,6 +10,7 @@ export interface OpenAIIngredient {
   unit?: string | null;
   food?: string | null;
   note?: string | null;
+  recommended_variety?: string | null;
 }
 export interface OpenAIIngredients {
   ingredients?: OpenAIIngredient[];
@@ -30,6 +31,7 @@ export interface OpenAIRecipe {
 export interface OpenAIRecipeIngredient {
   title?: string | null;
   text: string;
+  recommended_variety?: string | null;
 }
 export interface OpenAIRecipeInstruction {
   title?: string | null;

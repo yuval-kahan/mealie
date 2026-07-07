@@ -601,7 +601,11 @@ class RecipeScraperOpenAITranscription(ABCScraperStrategy):
             prep_time=response.prep_time,
             perform_time=response.perform_time,
             recipe_ingredient=[
-                RecipeIngredient(title=ingredient.title, note=ingredient.text)
+                RecipeIngredient(
+                    title=ingredient.title,
+                    note=ingredient.text,
+                    recommended_variety=ingredient.recommended_variety,
+                )
                 for ingredient in response.ingredients
                 if ingredient.text
             ],

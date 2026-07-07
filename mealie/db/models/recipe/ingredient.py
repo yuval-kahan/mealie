@@ -349,6 +349,7 @@ class RecipeIngredientModel(SqlAlchemyBase, BaseMixins):
 
     title: FilterableColumn[str | None] = mapped_column(String)  # Section Header - Shows if Present
     note: FilterableColumn[str | None] = mapped_column(String)  # Force Show Text - Overrides Concat
+    recommended_variety: FilterableColumn[str | None] = mapped_column(String)
 
     # Scaling Items
     unit_id: FilterableColumn[GUID | None] = mapped_column(GUID, ForeignKey("ingredient_units.id"), index=True)
@@ -370,6 +371,7 @@ class RecipeIngredientModel(SqlAlchemyBase, BaseMixins):
 
     # Automatically updated by sqlalchemy event, do not write to this manually
     note_normalized: FilterableColumn[str | None] = mapped_column(String, index=True)
+    recommended_variety_normalized: FilterableColumn[str | None] = mapped_column(String, index=True)
     original_text_normalized: FilterableColumn[str | None] = mapped_column(String, index=True)
 
     @auto_init()
@@ -377,12 +379,16 @@ class RecipeIngredientModel(SqlAlchemyBase, BaseMixins):
         self,
         session: Session,
         note: str | None = None,
+        recommended_variety: str | None = None,
         orginal_text: str | None = None,
         **_,
     ) -> None:
         # SQLAlchemy events do not seem to register things that are set during auto_init
         if note is not None:
             self.note_normalized = self.normalize(note)
+
+        if recommended_variety is not None:
+            self.recommended_variety_normalized = self.normalize(recommended_variety)
 
         if orginal_text is not None:
             self.orginal_text = self.normalize(orginal_text)
@@ -396,6 +402,11 @@ class RecipeIngredientModel(SqlAlchemyBase, BaseMixins):
             sa.Index(
                 "ix_recipes_ingredients_original_text_normalized",
                 "original_text_normalized",
+                unique=False,
+            ),
+            sa.Index(
+                "ix_recipes_ingredients_recommended_variety_normalized",
+                "recommended_variety_normalized",
                 unique=False,
             ),
         ]
@@ -418,6 +429,15 @@ class RecipeIngredientModel(SqlAlchemyBase, BaseMixins):
                         postgresql_using="gin",
                         postgresql_ops={
                             "original_text_normalized": "gin_trgm_ops",
+                        },
+                    ),
+                    sa.Index(
+                        "ix_recipes_ingredients_recommended_variety_normalized_gin",
+                        "recommended_variety_normalized",
+                        unique=False,
+                        postgresql_using="gin",
+                        postgresql_ops={
+                            "recommended_variety_normalized": "gin_trgm_ops",
                         },
                     ),
                 ]
@@ -490,6 +510,14 @@ def receive_ingredient_note(target: RecipeIngredientModel, value: str | None, ol
         target.note_normalized = RecipeIngredientModel.normalize(value)
     else:
         target.note_normalized = None
+
+
+@event.listens_for(RecipeIngredientModel.recommended_variety, "set")
+def receive_ingredient_recommended_variety(target: RecipeIngredientModel, value: str | None, oldvalue, initiator):
+    if value is not None:
+        target.recommended_variety_normalized = RecipeIngredientModel.normalize(value)
+    else:
+        target.recommended_variety_normalized = None
 
 
 @event.listens_for(RecipeIngredientModel.original_text, "set")

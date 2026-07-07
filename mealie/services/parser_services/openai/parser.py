@@ -95,6 +95,7 @@ class OpenAIParser(ABCIngredientParser):
             unit=CreateIngredientUnit(name=openai_ing.unit) if openai_ing.unit else None,
             food=CreateIngredientFood(name=openai_ing.food) if openai_ing.food else None,
             note=openai_ing.note,
+            recommended_variety=openai_ing.recommended_variety,
         )
 
         parsed_ingredient = ParsedIngredient(

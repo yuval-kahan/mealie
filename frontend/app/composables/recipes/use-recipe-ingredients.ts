@@ -53,6 +53,7 @@ type ParsedIngredientText = {
   unit?: string;
   name?: string;
   note?: string;
+  recommendedVariety?: string;
 
   /**
    * If the ingredient is a linked recipe, an HTML link to the referenced recipe, otherwise undefined.
@@ -86,7 +87,7 @@ export function useIngredientTextParser() {
     const filteredLocales = locales.filter(lc => lc.value === locale.value);
     const pluralFoodHandling = filteredLocales.length ? filteredLocales[0].pluralFoodHandling : "without-unit";
 
-    const { quantity, food, unit, note, referencedRecipe } = ingredient;
+    const { quantity, food, unit, note, recommendedVariety, referencedRecipe } = ingredient;
     const usePluralUnit = quantity !== undefined && ((quantity || 0) * scale > 1 || (quantity || 0) * scale === 0);
     const usePluralFood = shouldUsePluralFood((quantity || 0) * scale, !!unit, pluralFoodHandling);
 
@@ -131,6 +132,7 @@ export function useIngredientTextParser() {
       unit: unitName && quantity ? sanitizeIngredientHTML(unitName) : undefined,
       name: ingName ? sanitizeIngredientHTML(ingName) : undefined,
       note: note ? sanitizeIngredientHTML(note) : undefined,
+      recommendedVariety: recommendedVariety ? sanitizeIngredientHTML(recommendedVariety) : undefined,
       recipeLink: useRecipeLink(referencedRecipe || undefined, groupSlug),
     };
   };

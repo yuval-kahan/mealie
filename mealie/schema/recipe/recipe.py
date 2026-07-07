@@ -341,6 +341,7 @@ class Recipe(RecipeSummary):
                     select(RecipeIngredientModel.id).filter(
                         or_(
                             RecipeIngredientModel.note_normalized.op("%>")(search),
+                            RecipeIngredientModel.recommended_variety_normalized.op("%>")(search),
                             RecipeIngredientModel.original_text_normalized.op("%>")(search),
                         )
                     )
@@ -370,6 +371,10 @@ class Recipe(RecipeSummary):
                     select(RecipeIngredientModel.id).filter(
                         or_(
                             *[RecipeIngredientModel.note_normalized.like(f"%{ns}%") for ns in search_list],
+                            *[
+                                RecipeIngredientModel.recommended_variety_normalized.like(f"%{ns}%")
+                                for ns in search_list
+                            ],
                             *[RecipeIngredientModel.original_text_normalized.like(f"%{ns}%") for ns in search_list],
                         )
                     )

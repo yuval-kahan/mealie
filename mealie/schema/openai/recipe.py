@@ -14,6 +14,15 @@ class OpenAIRecipeIngredient(OpenAIBase):
         description="The complete ingredient text, e.g., '1 cup of flour' or '2 cups of onions, chopped'.",
     )
 
+    recommended_variety: str | None = Field(
+        None,
+        description=(
+            "Optional recommended variety/type for this ingredient when useful, especially for vegetables, fruit, "
+            "cheese, meat cuts, pasta shapes, or similar choices. Examples: 'ripe Roma tomatoes', "
+            "'red bell pepper', 'baby spinach'. Leave null when no specific type is useful."
+        ),
+    )
+
 
 class OpenAIRecipeInstruction(OpenAIBase):
     title: str | None = Field(

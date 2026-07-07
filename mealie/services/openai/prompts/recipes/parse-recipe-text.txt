@@ -13,6 +13,7 @@ Rules:
 - Keep the original language unless the user explicitly asks for translation.
 - If translation is requested, translate every recipe field into the requested language.
 - Put ingredient section headers in the recipe ingredient title field when present.
+- For each ingredient, fill recommended_variety when a specific type/variety would materially improve the recipe or is stated/implied by the recipe. This is especially useful for vegetables and fruit, such as tomato type for shakshuka, pepper color/type, potato type, onion type, fresh herbs, mushroom type, cheese style, meat cut, or pasta shape. Keep it short and practical. Leave it null when no specific type is useful.
 - Put instruction section headers in the recipe instruction title field when present.
 - Fill recipe categories, tags, and tools when they are obvious from the recipe text.
 - Fill recipe source when the text explicitly says where the recipe came from, such as a website, blog, article, TV show, magazine, book, or page number.

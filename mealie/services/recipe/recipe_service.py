@@ -649,6 +649,9 @@ class OpenAIRecipeService(RecipeServiceBase):
         if ingredient.title:
             text = f"{ingredient.title}: {text}"
 
+        if ingredient.recommended_variety:
+            text = f"{text} recommended type: {ingredient.recommended_variety}"
+
         return self._compact_text(text, 180)
 
     @classmethod
@@ -1053,7 +1056,11 @@ class OpenAIRecipeService(RecipeServiceBase):
             prep_time=openai_recipe.prep_time,
             perform_time=openai_recipe.perform_time,
             recipe_ingredient=[
-                RecipeIngredient(title=ingredient.title, note=ingredient.text)
+                RecipeIngredient(
+                    title=ingredient.title,
+                    note=ingredient.text,
+                    recommended_variety=ingredient.recommended_variety,
+                )
                 for ingredient in openai_recipe.ingredients
                 if ingredient.text
             ],

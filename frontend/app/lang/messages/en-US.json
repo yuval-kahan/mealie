@@ -630,6 +630,7 @@
     "choose-food": "Choose Food",
     "choose-recipe": "Choose Recipe",
     "notes": "Notes",
+    "recommended-variety": "Recommended Type",
     "toggle-section": "Toggle Section",
     "see-original-text": "See Original Text",
     "original-text-with-value": "Original Text: {originalText}",

@@ -320,6 +320,7 @@ export interface RecipeIngredient {
   food?: IngredientFood | CreateIngredientFood | null;
   referencedRecipe?: Recipe | null;
   note?: string | null;
+  recommendedVariety?: string | null;
   display?: string;
   title?: string | null;
   originalText?: string | null;
@@ -534,6 +535,7 @@ export interface ShoppingListItemBase {
   food?: IngredientFood | CreateIngredientFood | null;
   referencedRecipe?: Recipe | null;
   note?: string | null;
+  recommendedVariety?: string | null;
   display?: string;
   shoppingListId: string;
   checked?: boolean;
@@ -551,6 +553,7 @@ export interface ShoppingListItemCreate {
   food?: IngredientFood | CreateIngredientFood | null;
   referencedRecipe?: Recipe | null;
   note?: string | null;
+  recommendedVariety?: string | null;
   display?: string;
   shoppingListId: string;
   checked?: boolean;
@@ -576,6 +579,7 @@ export interface ShoppingListItemOut {
   food?: IngredientFood | null;
   referencedRecipe?: Recipe | null;
   note?: string | null;
+  recommendedVariety?: string | null;
   display?: string;
   shoppingListId: string;
   checked?: boolean;
@@ -616,6 +620,7 @@ export interface ShoppingListItemUpdate {
   food?: IngredientFood | CreateIngredientFood | null;
   referencedRecipe?: Recipe | null;
   note?: string | null;
+  recommendedVariety?: string | null;
   display?: string;
   shoppingListId: string;
   checked?: boolean;
@@ -634,6 +639,7 @@ export interface ShoppingListItemUpdateBulk {
   food?: IngredientFood | CreateIngredientFood | null;
   referencedRecipe?: Recipe | null;
   note?: string | null;
+  recommendedVariety?: string | null;
   display?: string;
   shoppingListId: string;
   checked?: boolean;
@@ -787,5 +793,6 @@ export interface RecipeIngredientBase {
   food?: IngredientFood | CreateIngredientFood | null;
   referencedRecipe?: Recipe | null;
   note?: string | null;
+  recommendedVariety?: string | null;
   display?: string;
 }

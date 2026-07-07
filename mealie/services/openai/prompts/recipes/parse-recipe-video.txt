@@ -5,4 +5,5 @@ Do not create or make up any information. If insufficient data is found, return 
 - The video transcript is the primary source for instructions.
 - The caption text is the primary source for the ingredient list and title.
 - If there is a conflict (e.g., caption says "1 cup" but transcript says "1.5 cups"), trust the video transcript.
+- For each ingredient, fill recommended_variety when a specific type/variety would materially improve the recipe or is stated/implied by the recipe. This is especially useful for vegetables and fruit, such as tomato type, pepper color/type, potato type, onion type, fresh herbs, mushroom type, cheese style, meat cut, or pasta shape. Keep it short and practical. Leave it null when no specific type is useful.
 - If the title, description, caption, or transcript explicitly names a source, channel, show, chef, author, book, publisher, or organization, fill source and/or created_by accordingly. Do not invent source or creator details.

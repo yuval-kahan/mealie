@@ -103,7 +103,7 @@
       <v-col
         v-if="!state.isRecipe"
         m="12"
-        md="4"
+        md="3"
         cols="12"
         class=""
       >
@@ -161,7 +161,7 @@
       <v-col
         v-if="state.isRecipe"
         m="12"
-        md="4"
+        md="3"
         cols="12"
         class=""
       >
@@ -185,6 +185,21 @@
         >
           <template #prepend />
         </v-autocomplete>
+      </v-col>
+      <v-col
+        sm="12"
+        md="2"
+        cols="12"
+      >
+        <v-text-field
+          v-model="model.recommendedVariety"
+          hide-details
+          density="compact"
+          variant="solo"
+          :placeholder="$t('recipe.recommended-variety')"
+          class="mx-1"
+          @click="$emit('clickIngredientField', 'recommendedVariety')"
+        />
       </v-col>
       <v-col
         sm="12"

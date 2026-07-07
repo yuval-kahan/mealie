@@ -25,6 +25,13 @@ class OpenAIIngredient(OpenAIBase):
             "If there are any elements you're not sure about, put them here."
         ),
     )
+    recommended_variety: str | None = Field(
+        None,
+        description=(
+            "Optional recommended ingredient variety/type when it is explicitly present or clearly useful. "
+            "Examples: 'Roma tomatoes', 'red bell pepper', 'baby spinach'. Leave null when not relevant."
+        ),
+    )
 
     @field_validator("quantity", mode="before")
     def coerce_none_float(cls, v: Any) -> Any:

@@ -95,11 +95,19 @@
             v-for="(ingredient, ingredientIndex) in ingredientSection.ingredients"
             :key="`ingredient-${ingredientIndex}`"
           >
-            <!-- eslint-disable-next-line vue/no-v-html -->
-            <p
-              class="ingredient-body"
-              v-html="parseText(ingredient)"
-            />
+            <div class="ingredient-print-item">
+              <!-- eslint-disable-next-line vue/no-v-html -->
+              <p
+                class="ingredient-body"
+                v-html="parseText(ingredient)"
+              />
+              <p
+                v-if="ingredient.recommendedVariety"
+                class="ingredient-variety"
+              >
+                {{ $t("recipe.recommended-variety") }}: {{ ingredient.recommendedVariety }}
+              </p>
+            </div>
           </template>
         </div>
       </div>
@@ -390,6 +398,11 @@ function parseText(ingredient: RecipeIngredient) {
 .wrapper :deep(*) {
   opacity: 1 !important;
   color: black !important;
+}
+
+.ingredient-variety {
+  font-size: 0.85em;
+  margin-top: -0.4rem;
 }
 
 /* Prevents sections from being broken up between pages */

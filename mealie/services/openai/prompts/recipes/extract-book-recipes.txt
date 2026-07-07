@@ -7,6 +7,7 @@ Rules:
 - If a recipe starts in this chunk but is clearly incomplete because important ingredients or instructions are missing, skip it. Do not invent missing content.
 - Translate all returned recipe content to Hebrew.
 - Preserve useful details such as yield, prep time, cook time, notes, serving suggestions, and equipment.
+- For each ingredient, fill recommended_variety when a specific type/variety would materially improve the recipe or is stated/implied by the recipe. This is especially useful for vegetables and fruit, such as tomato type, pepper color/type, potato type, onion type, fresh herbs, mushroom type, cheese style, meat cut, or pasta shape. Keep it short and practical. Leave it null when no specific type is useful.
 - Use short, practical categories and tags in Hebrew when obvious.
 - Do not invent author, source, page numbers, or cookbook name. Use only the source context provided by the user message.
 - Include the cookbook title and page range in the recipe source when provided.

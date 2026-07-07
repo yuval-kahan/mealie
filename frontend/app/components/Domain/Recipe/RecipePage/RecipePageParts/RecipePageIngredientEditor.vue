@@ -188,6 +188,7 @@ function addIngredient(ingredients: Array<string> | null = null) {
         referenceId: uuid4(),
         title: "",
         note: x,
+        recommendedVariety: "",
         unit: undefined,
         food: undefined,
         quantity: 0,
@@ -204,6 +205,7 @@ function addIngredient(ingredients: Array<string> | null = null) {
       referenceId: uuid4(),
       title: "",
       note: "",
+      recommendedVariety: "",
       // @ts-expect-error - prop can be null-type by NoUndefinedField type forces it to be set
       unit: undefined,
       // @ts-expect-error - prop can be null-type by NoUndefinedField type forces it to be set
@@ -223,6 +225,7 @@ function addRecipe(recipes: Array<string> | null = null) {
         referenceId: refId,
         title: "",
         note: x,
+        recommendedVariety: "",
         unit: undefined,
         referencedRecipe: undefined,
         quantity: 1,
@@ -239,6 +242,7 @@ function addRecipe(recipes: Array<string> | null = null) {
       referenceId: refId,
       title: "",
       note: "",
+      recommendedVariety: "",
       // @ts-expect-error - prop can be null-type by NoUndefinedField type forces it to be set
       unit: undefined,
       // @ts-expect-error - prop can be null-type by NoUndefinedField type forces it to be set
@@ -253,6 +257,7 @@ function insertNewIngredient(dest: number) {
     referenceId: uuid4(),
     title: "",
     note: "",
+    recommendedVariety: "",
     // @ts-expect-error - prop can be null-type by NoUndefinedField type forces it to be set
     unit: undefined,
     // @ts-expect-error - prop can be null-type by NoUndefinedField type forces it to be set

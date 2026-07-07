@@ -29,6 +29,16 @@
         :source="parsedIng.note"
       />
     </template>
+    <div
+      v-if="parsedIng.recommendedVariety"
+      class="recommended-variety"
+    >
+      {{ $t("recipe.recommended-variety") }}:
+      <SafeMarkdown
+        class="d-inline"
+        :source="parsedIng.recommendedVariety"
+      />
+    </div>
   </div>
 </template>
 
@@ -98,6 +108,17 @@ const parsedIng = computed(() => {
   line-height: 1.3em;
   font-size: 0.8em;
   opacity: 0.7;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.recommended-variety {
+  flex-basis: 100%;
+  width: 100%;
+  display: block;
+  line-height: 1.3em;
+  font-size: 0.8em;
+  opacity: 0.78;
   white-space: normal;
   word-break: break-word;
 }

@@ -382,6 +382,7 @@ async function parseIngredients() {
     // Restore section titles from original ingredients — the parser doesn't return them
     data.forEach((parsed, index) => {
       parsed.ingredient.title = filteredIngredients[index]?.title || "";
+      parsed.ingredient.recommendedVariety = filteredIngredients[index]?.recommendedVariety || parsed.ingredient.recommendedVariety || "";
     });
 
     const parsed = data ?? [];
