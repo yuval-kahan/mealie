@@ -506,32 +506,29 @@
         </v-icon>
         {{ $t("new-recipe.create-manually") }}
       </v-btn>
-      <v-badge
+      <v-btn
         v-if="isOwnGroup"
-        :model-value="activeBackgroundJobCount > 0"
-        :content="activeBackgroundJobCount"
-        color="primary"
-        location="top end"
-        offset-x="10"
-        offset-y="6"
+        rounded
+        size="default"
+        class="ml-2 mt-0 mb-2 quick-create-shortcut-btn"
+        variant="tonal"
+        :color="$vuetify.theme.current.dark ? 'background-lighten-1' : 'background-darken-1'"
+        @click="backgroundJobsDialog = true"
       >
-        <v-btn
-          rounded
-          size="default"
-          class="ml-2 mt-0 mb-2 quick-create-shortcut-btn"
-          variant="tonal"
-          :color="$vuetify.theme.current.dark ? 'background-lighten-1' : 'background-darken-1'"
-          @click="backgroundJobsDialog = true"
+        <v-icon
+          start
+          color="primary"
         >
-          <v-icon
-            start
-            color="primary"
-          >
-            {{ $globals.icons.timelineText }}
-          </v-icon>
-          {{ $t("cookbook.background-jobs") }}
-        </v-btn>
-      </v-badge>
+          {{ $globals.icons.timelineText }}
+        </v-icon>
+        <span
+          v-if="activeBackgroundJobCount > 0"
+          class="background-job-inline-count"
+        >
+          {{ activeBackgroundJobCount }}
+        </span>
+        {{ $t("cookbook.background-jobs") }}
+      </v-btn>
     </AppSidebar>
     <v-main class="pt-12">
       <v-scroll-x-transition>
@@ -1686,5 +1683,21 @@ const topLinks = computed<SideBarLink[]>(() => [
 
 .quick-create-shortcut-btn :deep(.v-btn__prepend) {
   margin-inline-start: 0;
+}
+
+.background-job-inline-count {
+  align-items: center;
+  background-color: rgb(var(--v-theme-primary));
+  border-radius: 999px;
+  color: rgb(var(--v-theme-on-primary));
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 700;
+  height: 18px;
+  justify-content: center;
+  line-height: 1;
+  margin-inline-end: 6px;
+  min-width: 18px;
+  padding: 0 5px;
 }
 </style>
