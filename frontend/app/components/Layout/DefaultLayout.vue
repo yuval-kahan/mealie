@@ -525,6 +525,8 @@ const uploadedBookDeleteDialog = ref(false);
 const uploadedBookDeleting = ref(false);
 const uploadedBookTargetLanguage = ref(defaultUploadedBookTargetLanguage());
 const selectedUploadedBook = ref<UploadedBook | null>(null);
+const emptyCategoryIds = ref<Set<string>>(new Set());
+const emptyTagIds = ref<Set<string>>(new Set());
 let uploadedBookRefreshTimer: ReturnType<typeof setInterval> | null = null;
 let uploadedBookRefreshInFlight = false;
 const router = useRouter();
@@ -614,9 +616,10 @@ onBeforeUnmount(() => {
 });
 
 watch(
-  () => [isOwnGroup.value, auth.user.value?.id],
+  () => [isOwnGroup.value, auth.user.value?.id, groupSlug.value],
   () => {
     refreshUploadedBooks();
+    refreshEmptyOrganizerItems();
   },
   { immediate: true },
 );
@@ -707,6 +710,31 @@ function organizerItemAsLink(item: RecipeCategory | RecipeTag, queryKey: "catego
 
 function sortByName<T extends { name: string }>(items: T[]) {
   return [...items].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+async function refreshEmptyOrganizerItems() {
+  if (!isOwnGroup.value) {
+    emptyCategoryIds.value = new Set();
+    emptyTagIds.value = new Set();
+    return;
+  }
+
+  const [categoryResponse, tagResponse] = await Promise.allSettled([
+    api.categories.getEmpty(),
+    api.tags.getEmpty(),
+  ]);
+
+  if (categoryResponse.status === "fulfilled" && categoryResponse.value.data) {
+    emptyCategoryIds.value = new Set(categoryResponse.value.data.map(category => category.id));
+  }
+
+  if (tagResponse.status === "fulfilled" && tagResponse.value.data) {
+    emptyTagIds.value = new Set(tagResponse.value.data.map(tag => tag.id));
+  }
+}
+
+function hasLinkedRecipes(item: RecipeCategory | RecipeTag, emptyIds: Set<string>) {
+  return !!item.id && !emptyIds.has(item.id);
 }
 
 function isSupportedUploadedBookFile(file: File) {
@@ -817,12 +845,14 @@ const sidebarCookbookLinks = computed<SideBarLink[]>(() => {
 
 const categoryLinks = computed<SideBarLink[]>(() => {
   return sortByName(categories.value)
+    .filter(category => hasLinkedRecipes(category, emptyCategoryIds.value))
     .map(category => organizerItemAsLink(category, "categories", $globals.icons.categories))
     .filter((link): link is SideBarLink => !!link);
 });
 
 const tagLinks = computed<SideBarLink[]>(() => {
   return sortByName(tags.value)
+    .filter(tag => hasLinkedRecipes(tag, emptyTagIds.value))
     .map(tag => organizerItemAsLink(tag, "tags", $globals.icons.tags))
     .filter((link): link is SideBarLink => !!link);
 });
