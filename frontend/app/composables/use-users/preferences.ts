@@ -53,6 +53,7 @@ export interface UserCookbooksPreferences {
 }
 
 export interface UserOrganizerSidebarPreferences {
+  showShoppingLists: boolean;
   showCookbooks: boolean;
   showTranslatedBooks: boolean;
   showCategories: boolean;
@@ -210,11 +211,12 @@ export function useOrganizerSidebarPreferences(): Ref<UserOrganizerSidebarPrefer
   const fromStorage = useLocalStorage(
     "organizer-sidebar-preferences",
     {
+      showShoppingLists: true,
       showCookbooks: true,
       showTranslatedBooks: false,
       showCategories: true,
       showTags: true,
-      sectionOrder: ["cookbooks", "translatedBooks", "categories", "tags"],
+      sectionOrder: ["shoppingLists", "cookbooks", "translatedBooks", "categories", "tags"],
     },
     { mergeDefaults: true },
   );

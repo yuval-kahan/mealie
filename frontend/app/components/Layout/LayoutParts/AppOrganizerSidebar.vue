@@ -205,7 +205,7 @@ import { VueDraggable } from "vue-draggable-plus";
 import type { OrganizerSidebarSection, OrganizerSidebarSectionKey, SideBarLink } from "~/types/application-types";
 import type { UserOrganizerSidebarPreferences } from "~/composables/use-users/preferences";
 
-type OrganizerVisibilityPreferenceKey = "showCookbooks" | "showTranslatedBooks" | "showCategories" | "showTags";
+type OrganizerVisibilityPreferenceKey = "showShoppingLists" | "showCookbooks" | "showTranslatedBooks" | "showCategories" | "showTags";
 
 interface OrganizerPreferenceOption {
   key: OrganizerSidebarSectionKey;
@@ -214,7 +214,7 @@ interface OrganizerPreferenceOption {
   preferenceKey: OrganizerVisibilityPreferenceKey;
 }
 
-const DEFAULT_SECTION_ORDER: OrganizerSidebarSectionKey[] = ["cookbooks", "translatedBooks", "categories", "tags"];
+const DEFAULT_SECTION_ORDER: OrganizerSidebarSectionKey[] = ["shoppingLists", "cookbooks", "translatedBooks", "categories", "tags"];
 
 const props = defineProps<{
   sections: OrganizerSidebarSection[];
@@ -223,11 +223,12 @@ const props = defineProps<{
 const modelValue = defineModel<boolean>({ default: false });
 const preferences = defineModel<UserOrganizerSidebarPreferences>("preferences", {
   default: () => ({
+    showShoppingLists: true,
     showCookbooks: true,
     showTranslatedBooks: false,
     showCategories: true,
     showTags: true,
-    sectionOrder: ["cookbooks", "translatedBooks", "categories", "tags"],
+    sectionOrder: ["shoppingLists", "cookbooks", "translatedBooks", "categories", "tags"],
   }),
 });
 
@@ -251,6 +252,7 @@ const state = reactive({
 });
 
 const preferenceKeyBySection: Record<OrganizerSidebarSectionKey, OrganizerVisibilityPreferenceKey> = {
+  shoppingLists: "showShoppingLists",
   cookbooks: "showCookbooks",
   translatedBooks: "showTranslatedBooks",
   categories: "showCategories",
@@ -258,6 +260,12 @@ const preferenceKeyBySection: Record<OrganizerSidebarSectionKey, OrganizerVisibi
 };
 
 const preferenceOptions = computed<OrganizerPreferenceOption[]>(() => [
+  {
+    key: "shoppingLists",
+    icon: $globals.icons.formatListCheck,
+    title: i18n.t("shopping-list.shopping-lists"),
+    preferenceKey: "showShoppingLists" as const,
+  },
   {
     key: "cookbooks",
     icon: $globals.icons.book,

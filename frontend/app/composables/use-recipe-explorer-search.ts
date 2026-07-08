@@ -382,6 +382,12 @@ function createRecipeExplorerSearchState(groupSlug: ComputedRef<string>): Recipe
   }
 
   async function initialize() {
+    if (route.query.resetSearch === "true") {
+      reset();
+      searchQuerySession.value.recipe = "";
+      await router.replace({ query: {} });
+    }
+
     // Restore the user's last search query
     if (searchQuerySession.value.recipe && !(Object.keys(route.query).length > 0)) {
       try {
@@ -404,6 +410,14 @@ function createRecipeExplorerSearchState(groupSlug: ComputedRef<string>): Recipe
     () => route.query,
     async () => {
       if (!state.value.ready) {
+        return;
+      }
+
+      if (route.query.resetSearch === "true") {
+        reset();
+        searchQuerySession.value.recipe = "";
+        passedQuery.value = calcPassedQuery();
+        await router.replace({ query: {} });
         return;
       }
 

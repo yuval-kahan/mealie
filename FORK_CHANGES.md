@@ -241,6 +241,10 @@
 - במצב החלפה, הפריטים הקיימים ברשימת הקניות נמחקים ואז מתווספים הפריטים שנבחרו מהמתכון והפריטים הידניים.
 - במסך רשימות הקניות הראשי נוספה חסימה ליצירת רשימת קניות חדשה בשם שכבר קיים, וגם צד השרת מחזיר שגיאת כפילות אם מנסים ליצור שם זהה דרך ה-API.
 - בתפריט שלוש הנקודות נוסף "שנה שם מתכון", שמאפשר לערוך את שם המתכון במהירות בלי להיכנס למסך העריכה המלא.
+- בתפריט שלוש הנקודות נוסף "העתק מתכון", שמעתיק טקסט מסודר של שם, מקור, יוצר, רכיבים, הוראות והערות ללוח, כדי לשלוח מהר בוואטסאפ או בכל מקום אחר.
+- חלון "הוסף לרשימת קניות" מציג את רשימת הרכיבים מיד באותו חלון, בלי שלב "הבא", ועדיין מאפשר לבחור רשימה קיימת/חדשה ולהוסיף פריטים ידניים.
+- לחיצה על "מתכונים" בסרגל הצד מאפסת במפורש את סינוני החיפוש האחרונים ומחזירה לתצוגת כל המתכונים.
+- הניווט המהיר כולל עכשיו גם רשימות קניות, כדי שאפשר לעבור בין רשימות קניות מהצד גם כשכבר נמצאים בתוך רשימה.
 - דירוג מהיר של מתכון בתפריט שלוש הנקודות הועבר לסוף הרשימה, כדי ששאר הפעולות הרגילות יישארו ראשונות.
 - כרטיסי מתכונים בתצוגת הרשת קיבלו גובה אחיד: אזור הכותרת שמור תמיד לעד 3 שורות, ושורת הפעולות נשארת בגובה קבוע.
 
@@ -254,6 +258,11 @@
 - `frontend/app/components/Domain/Recipe/RecipeCardMobile.vue`
 - `frontend/app/components/Domain/Recipe/RecipeCardSection.vue`
 - `frontend/app/components/Domain/Recipe/RecipeExplorerPage/RecipeExplorerPage.vue`
+- `frontend/app/components/Layout/DefaultLayout.vue`
+- `frontend/app/components/Layout/LayoutParts/AppOrganizerSidebar.vue`
+- `frontend/app/composables/use-recipe-explorer-search.ts`
+- `frontend/app/composables/use-users/preferences.ts`
+- `frontend/app/types/application-types.ts`
 - `frontend/app/pages/shopping-lists/index.vue`
 - `mealie/services/household_services/shopping_lists.py`
 
@@ -263,6 +272,7 @@
 - הסרגל מותאם לכיוון השפה דרך Vuetify RTL/LTR.
   בעברית הוא יושב בצד הימני/התחלתי של הממשק, ובאנגלית בצד השמאלי/התחלתי.
 - הסרגל יכול להציג:
+  - רשימות קניות
   - ספרי בישול / Cookbooks
   - קטגוריות
   - תגיות

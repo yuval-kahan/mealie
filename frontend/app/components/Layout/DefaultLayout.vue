@@ -551,6 +551,7 @@ import { usePublicTagStore, useTagStore } from "~/composables/store/use-tag-stor
 import type { ReadCookBook } from "~/lib/api/types/cookbook";
 import type { RecipeCategory, RecipeTag } from "~/lib/api/types/recipe";
 import type { UploadedBook } from "~/lib/api/types/uploaded-book";
+import type { ShoppingListSummary } from "~/lib/api/types/household";
 import { useUserApi } from "~/composables/api/api-client";
 import { alert } from "~/composables/use-toast";
 
@@ -675,6 +676,7 @@ const uploadedBookDeleteDialog = ref(false);
 const uploadedBookDeleting = ref(false);
 const uploadedBookTargetLanguage = ref(defaultUploadedBookTargetLanguage());
 const selectedUploadedBook = ref<UploadedBook | null>(null);
+const shoppingLists = ref<ShoppingListSummary[]>([]);
 const backgroundJobsDialog = ref(false);
 const backgroundJobCancelling = ref<Set<string>>(new Set());
 const emptyCategoryIds = ref<Set<string>>(new Set());
@@ -774,6 +776,7 @@ watch(
   () => [isOwnGroup.value, auth.user.value?.id, groupSlug.value],
   () => {
     refreshUploadedBooks();
+    refreshShoppingLists();
     refreshOrganizerNavigationData();
   },
   { immediate: true },
@@ -903,6 +906,7 @@ async function refreshOrganizerNavigationData() {
 }
 
 function handleOrganizersUpdated() {
+  refreshShoppingLists();
   refreshOrganizerNavigationData();
 }
 
@@ -950,6 +954,16 @@ function openUploadedBookFolderPicker() {
 
 const regularUploadedBooks = computed(() => uploadedBooks.value.filter(book => !book.isTranslatedBook));
 const translatedUploadedBooks = computed(() => uploadedBooks.value.filter(book => book.isTranslatedBook));
+
+const shoppingListLinks = computed<SideBarLink[]>(() => {
+  return shoppingLists.value.map(list => ({
+    key: list.id,
+    icon: $globals.icons.formatListCheck,
+    title: list.name || i18n.t("shopping-list.shopping-list"),
+    to: `/shopping-lists/${list.id}`,
+    restricted: true,
+  }));
+});
 
 const currentUserHouseholdId = computed(() => auth.user.value?.householdId);
 const cookbookLinks = computed<SideBarLink[]>(() => {
@@ -1068,6 +1082,16 @@ async function refreshUploadedBooks() {
     uploadedBookRefreshInFlight.value = false;
     syncUploadedBookRefreshTimer();
   }
+}
+
+async function refreshShoppingLists() {
+  if (!isOwnGroup.value || !auth.user.value) {
+    shoppingLists.value = [];
+    return;
+  }
+
+  const { data } = await api.shopping.lists.getAll(1, -1, { orderBy: "name", orderDirection: "asc" });
+  shoppingLists.value = data?.items || [];
 }
 
 async function uploadBook() {
@@ -1560,6 +1584,12 @@ function defaultUploadedBookTargetLanguage() {
 
 const organizerSidebarSections = computed<OrganizerSidebarSection[]>(() => [
   {
+    key: "shoppingLists",
+    icon: $globals.icons.formatListCheck,
+    title: i18n.t("shopping-list.shopping-lists"),
+    links: shoppingListLinks.value,
+  },
+  {
     key: "cookbooks",
     icon: $globals.icons.book,
     title: i18n.t("cookbook.cookbooks"),
@@ -1618,7 +1648,7 @@ const createLinks = computed(() => [
 const topLinks = computed<SideBarLink[]>(() => [
   {
     icon: $globals.icons.silverwareForkKnife,
-    to: `/g/${groupSlug.value}`,
+    to: `/g/${groupSlug.value}?resetSearch=true`,
     title: i18n.t("general.recipes"),
     restricted: false,
   },

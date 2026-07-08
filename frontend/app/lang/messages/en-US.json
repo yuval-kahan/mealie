@@ -588,6 +588,7 @@
     "recipe-name": "Recipe Name",
     "recipe-name-required": "A recipe name is required before saving.",
     "rename-recipe": "Rename Recipe",
+    "copy-recipe": "Copy Recipe",
     "recipe-settings": "Recipe Settings",
     "recipe-update-failed": "Recipe update failed",
     "recipe-updated": "Recipe updated",

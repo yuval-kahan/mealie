@@ -248,11 +248,12 @@ const props = defineProps({
 const modelValue = defineModel<boolean>({ default: false });
 const organizerPreferences = defineModel<UserOrganizerSidebarPreferences>("organizerPreferences", {
   default: () => ({
+    showShoppingLists: true,
     showCookbooks: true,
     showTranslatedBooks: false,
     showCategories: true,
     showTags: true,
-    sectionOrder: ["cookbooks", "translatedBooks", "categories", "tags"],
+    sectionOrder: ["shoppingLists", "cookbooks", "translatedBooks", "categories", "tags"],
   }),
 });
 

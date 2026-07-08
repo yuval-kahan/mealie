@@ -588,6 +588,7 @@
     "recipe-name": "שם המתכון",
     "recipe-name-required": "לא ניתן לשמור מתכון בלי שם.",
     "rename-recipe": "שנה שם מתכון",
+    "copy-recipe": "העתק מתכון",
     "recipe-settings": "הגדרות המתכון",
     "recipe-update-failed": "עדכון מתכון נכשל",
     "recipe-updated": "מתכון עודכן",

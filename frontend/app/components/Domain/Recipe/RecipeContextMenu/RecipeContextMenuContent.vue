@@ -134,7 +134,8 @@ import { useGroupRecipeActions } from "~/composables/use-group-recipe-actions";
 import { useHouseholdSelf } from "~/composables/use-households";
 import { alert } from "~/composables/use-toast";
 import { usePlanTypeOptions } from "~/composables/use-group-mealplan";
-import type { Recipe } from "~/lib/api/types/recipe";
+import { useCopy } from "~/composables/use-copy";
+import type { Recipe, RecipeIngredient } from "~/lib/api/types/recipe";
 import type { GroupRecipeActionOut, ShoppingListSummary } from "~/lib/api/types/household";
 import type { PlanEntryType } from "~/lib/api/types/meal-plan";
 import { useDownloader } from "~/composables/api/use-downloader";
@@ -143,6 +144,7 @@ export interface ContextMenuIncludes {
   delete: boolean;
   edit: boolean;
   rename: boolean;
+  copy: boolean;
   rating: boolean;
   download: boolean;
   duplicate: boolean;
@@ -183,6 +185,7 @@ const props = withDefaults(defineProps<Props>(), {
     delete: true,
     edit: true,
     rename: true,
+    copy: true,
     rating: true,
     download: true,
     duplicate: false,
@@ -213,6 +216,7 @@ const emit = defineEmits<{
 }>();
 
 const api = useUserApi();
+const { copyText } = useCopy();
 
 const printPreferencesDialog = ref(false);
 const shareDialog = ref(false);
@@ -282,6 +286,13 @@ const defaultItems: { [key: string]: ContextMenuItem } = {
     color: undefined,
     event: "rename",
     isPublic: false,
+  },
+  copy: {
+    title: i18n.t("recipe.copy-recipe"),
+    icon: $globals.icons.contentCopy,
+    color: undefined,
+    event: "copy",
+    isPublic: true,
   },
   delete: {
     title: i18n.t("general.delete"),
@@ -494,6 +505,105 @@ async function renameRecipe() {
   emit("renamed", { slug: props.slug, name: data.name || name, recipe: data });
 }
 
+function cleanRecipeText(value?: string | null) {
+  return (value || "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function formatRecipeIngredient(ingredient: RecipeIngredient) {
+  if (ingredient.title) {
+    return `${ingredient.title}:`;
+  }
+
+  if (ingredient.referencedRecipe?.name) {
+    return `- ${ingredient.referencedRecipe.name}`;
+  }
+
+  const quantity = ingredient.quantity ? String(ingredient.quantity) : "";
+  const unit = ingredient.unit?.abbreviation || ingredient.unit?.name || "";
+  const food = ingredient.food?.name || "";
+  const note = cleanRecipeText(ingredient.note);
+  const line = [quantity, unit, food].filter(Boolean).join(" ").trim();
+
+  return `- ${[line, note].filter(Boolean).join(" - ")}`;
+}
+
+function formatRecipeForCopy(recipe: Recipe) {
+  const lines: string[] = [recipe.name || props.name];
+  const description = cleanRecipeText(recipe.description);
+  const source = cleanRecipeText(recipe.source || recipe.orgURL);
+
+  if (description) {
+    lines.push("", description);
+  }
+
+  if (source) {
+    lines.push("", `${i18n.t("recipe.source")}: ${source}`);
+  }
+
+  if (recipe.createdBy) {
+    lines.push(`${i18n.t("recipe.created-by")}: ${recipe.createdBy}`);
+  }
+
+  if (recipe.recipeYield) {
+    lines.push(`${i18n.t("recipe.recipe-yield")}: ${recipe.recipeYield}`);
+  }
+
+  if (recipe.recipeIngredient?.length) {
+    lines.push("", i18n.t("recipe.ingredients"));
+    recipe.recipeIngredient.forEach((ingredient) => {
+      const formattedIngredient = formatRecipeIngredient(ingredient);
+      if (formattedIngredient) {
+        lines.push(formattedIngredient);
+      }
+    });
+  }
+
+  if (recipe.recipeInstructions?.length) {
+    lines.push("", i18n.t("recipe.instructions"));
+    recipe.recipeInstructions.forEach((instruction, index) => {
+      const text = cleanRecipeText(instruction.text || instruction.summary);
+      const title = cleanRecipeText(instruction.title);
+      if (title) {
+        lines.push(`${index + 1}. ${title}`);
+      }
+      if (text) {
+        lines.push(title ? text : `${index + 1}. ${text}`);
+      }
+    });
+  }
+
+  if (recipe.notes?.length) {
+    lines.push("", i18n.t("recipe.notes"));
+    recipe.notes.forEach((note) => {
+      const text = cleanRecipeText(note.text);
+      if (text) {
+        lines.push(`- ${text}`);
+      }
+    });
+  }
+
+  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+async function copyRecipe() {
+  if (!recipeRef.value) {
+    await refreshRecipe();
+  }
+
+  if (!recipeRef.value) {
+    alert.error(i18n.t("events.something-went-wrong"));
+    return;
+  }
+
+  copyText(formatRecipeForCopy(recipeRef.value));
+}
+
 // Note: Print is handled as an event in the parent component
 // eslint-disable-next-line @typescript-eslint/no-invalid-void-type
 const eventHandlers: { [key: string]: () => void | Promise<any> } = {
@@ -505,6 +615,7 @@ const eventHandlers: { [key: string]: () => void | Promise<any> } = {
     recipeRenameName.value = recipeRef.value?.name || props.name;
     recipeRenameDialog.value = true;
   },
+  copy: copyRecipe,
   download: handleDownloadEvent,
   duplicate: () => {
     recipeDuplicateDialog.value = true;

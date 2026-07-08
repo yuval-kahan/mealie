@@ -268,6 +268,7 @@ async function updateOwner() {
   );
 
   if (data) {
+    window.dispatchEvent(new CustomEvent("mealie:organizers-updated"));
     refresh();
   }
 }

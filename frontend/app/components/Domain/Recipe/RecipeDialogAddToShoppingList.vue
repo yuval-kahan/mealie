@@ -3,17 +3,20 @@
     <BaseDialog
       v-if="ready"
       v-model="dialog"
-      :title="shoppingListDialogTitle"
+      :title="$t('recipe.add-to-list')"
       :icon="$globals.icons.cartCheck"
-      :width="shoppingListIngredientDialog ? '70%' : 500"
+      width="70%"
       :loading="shoppingListSelectionLoading"
-      :submit-text="shoppingListIngredientDialog ? $t('recipe.add-to-list') : $t('general.next')"
+      :submit-text="$t('recipe.add-to-list')"
       :submit-disabled="!canSubmitShoppingListDialog"
       can-submit
       keep-open
-      @submit="handleShoppingListDialogSubmit"
+      @submit="addRecipesToList"
     >
-      <v-card-text v-if="shoppingListDialog">
+      <v-card-text
+        v-if="shoppingListDialog"
+        class="pb-0"
+      >
         <v-radio-group
           v-model="shoppingListTarget"
           hide-details
@@ -86,9 +89,10 @@
         </v-alert>
       </v-card-text>
       <v-card-text
-        v-else-if="shoppingListIngredientDialog"
+        v-if="shoppingListIngredientDialog"
         class="shopping-list-preview"
       >
+        <v-divider class="mb-4" />
         <div class="d-flex flex-wrap align-center justify-space-between ga-2 mb-3">
           <div>
             <div class="text-caption text-medium-emphasis">
@@ -98,12 +102,6 @@
               {{ selectedShoppingListName }}
             </div>
           </div>
-          <BaseButton
-            small
-            :icon="$globals.icons.back"
-            :text="$t('general.back')"
-            @click="backToShoppingListSelection"
-          />
         </div>
 
         <v-alert
@@ -115,7 +113,7 @@
           {{ $t("shopping-list.replace-existing-list-warning") }}
         </v-alert>
 
-        <div style="max-height: 58vh; overflow-y: auto">
+        <div style="max-height: 48vh; overflow-y: auto">
           <v-card
             v-for="(recipeSection, recipeSectionIndex) in recipeIngredientSections"
             :key="recipeSection.recipeId + recipeSectionIndex"
@@ -395,14 +393,21 @@ const duplicateShoppingList = computed(() => {
   return findShoppingListByName(normalizedNewShoppingListName.value);
 });
 
-const selectedShoppingListName = computed(() => {
-  return selectedShoppingList.value?.name || pendingNewShoppingListName.value || normalizedNewShoppingListName.value;
+const selectedShoppingListFromTarget = computed(() => {
+  if (shoppingListTarget.value === "new") {
+    return duplicateShoppingList.value;
+  }
+
+  return filteredShoppingLists.value.find(list => list.id === shoppingListTarget.value)
+    || props.shoppingLists.find(list => list.id === shoppingListTarget.value)
+    || null;
 });
 
-const shoppingListDialogTitle = computed(() => {
-  return state.shoppingListIngredientDialog
-    ? selectedShoppingListName.value || i18n.t("recipe.add-to-list")
-    : i18n.t("recipe.add-to-list");
+const selectedShoppingListName = computed(() => {
+  return selectedShoppingList.value?.name
+    || selectedShoppingListFromTarget.value?.name
+    || pendingNewShoppingListName.value
+    || normalizedNewShoppingListName.value;
 });
 
 const hasSelectedRecipeIngredients = computed(() => {
@@ -417,46 +422,26 @@ const manualListItemHasData = computed(() => {
   return Boolean(manualListItem.value.foodId || manualListItem.value.food?.name || manualListItem.value.note?.trim());
 });
 
-const canSubmitShoppingListDialog = computed(() => {
-  if (state.shoppingListDialog) {
-    if (shoppingListTarget.value === "new") {
-      if (!normalizedNewShoppingListName.value.trim()) {
-        return false;
-      }
-
-      return duplicateShoppingList.value ? Boolean(duplicateConflictAction.value) : true;
+const hasValidShoppingListSelection = computed(() => {
+  if (shoppingListTarget.value === "new") {
+    if (!normalizedNewShoppingListName.value.trim()) {
+      return false;
     }
 
-    return Boolean(shoppingListTarget.value);
+    return duplicateShoppingList.value ? Boolean(duplicateConflictAction.value) : true;
   }
 
-  return hasSelectedRecipeIngredients.value || manualShoppingListItems.value.length > 0 || manualListItemHasData.value;
+  return Boolean(selectedShoppingListFromTarget.value);
+});
+
+const canSubmitShoppingListDialog = computed(() => {
+  return hasValidShoppingListSelection.value
+    && (hasSelectedRecipeIngredients.value || manualShoppingListItems.value.length > 0 || manualListItemHasData.value);
 });
 
 watch([dialog, () => preferences.value.viewAllLists], () => {
   if (dialog.value) {
-    currentHouseholdSlug.value = auth.user.value?.householdSlug || "";
-    filteredShoppingLists.value = props.shoppingLists.filter(
-      list => preferences.value.viewAllLists || list.userId === auth.user.value?.id,
-    );
-
-    newShoppingListName.value = defaultShoppingListName.value;
-    duplicateConflictAction.value = null;
-
-    if (props.defaultCreateNewList) {
-      shoppingListTarget.value = "new";
-      state.shoppingListDialog = true;
-      ready.value = true;
-    }
-    else if (filteredShoppingLists.value.length === 1 && !state.shoppingListShowAllToggled) {
-      selectedShoppingList.value = filteredShoppingLists.value[0];
-      openShoppingListIngredientDialog();
-    }
-    else {
-      shoppingListTarget.value = filteredShoppingLists.value[0]?.id || "new";
-      state.shoppingListDialog = true;
-      ready.value = true;
-    }
+    void initializeShoppingListDialog();
   }
   else if (!dialog.value) {
     initState();
@@ -636,13 +621,35 @@ function initState() {
 
 initState();
 
-async function openShoppingListIngredientDialog() {
+async function initializeShoppingListDialog() {
   if (!props.recipes?.length) {
     return;
   }
 
+  currentHouseholdSlug.value = auth.user.value?.householdSlug || "";
+  filteredShoppingLists.value = props.shoppingLists.filter(
+    list => preferences.value.viewAllLists || list.userId === auth.user.value?.id,
+  );
+
+  newShoppingListName.value = defaultShoppingListName.value;
+  duplicateConflictAction.value = null;
+  selectedShoppingList.value = null;
+  pendingNewShoppingListName.value = "";
+  overwriteExistingList.value = false;
+
+  if (props.defaultCreateNewList) {
+    shoppingListTarget.value = "new";
+  }
+  else if (filteredShoppingLists.value.length === 1 && !state.shoppingListShowAllToggled) {
+    shoppingListTarget.value = filteredShoppingLists.value[0].id;
+  }
+  else {
+    shoppingListTarget.value = filteredShoppingLists.value[0]?.id || "new";
+  }
+
+  ready.value = false;
   await consolidateRecipesIntoSections(props.recipes);
-  state.shoppingListDialog = false;
+  state.shoppingListDialog = true;
   state.shoppingListIngredientDialog = true;
   ready.value = true;
   manualListItem.value = manualListItemFactory();
@@ -680,6 +687,9 @@ async function prepareShoppingListSelection() {
     if (shoppingListTarget.value === "new") {
       const duplicateList = duplicateShoppingList.value;
       if (duplicateList) {
+        if (!duplicateConflictAction.value) {
+          return false;
+        }
         selectedShoppingList.value = duplicateList;
         pendingNewShoppingListName.value = "";
         overwriteExistingList.value = duplicateConflictAction.value === "overwrite";
@@ -690,37 +700,23 @@ async function prepareShoppingListSelection() {
         overwriteExistingList.value = false;
       }
 
-      await openShoppingListIngredientDialog();
-      return;
+      return true;
     }
 
-    const selectedList = filteredShoppingLists.value.find(list => list.id === shoppingListTarget.value)
-      || props.shoppingLists.find(list => list.id === shoppingListTarget.value);
+    const selectedList = selectedShoppingListFromTarget.value;
 
     if (selectedList) {
       selectedShoppingList.value = selectedList;
       pendingNewShoppingListName.value = "";
       overwriteExistingList.value = false;
-      await openShoppingListIngredientDialog();
+      return true;
     }
+
+    return false;
   }
   finally {
     shoppingListSelectionLoading.value = false;
   }
-}
-
-async function handleShoppingListDialogSubmit() {
-  if (state.shoppingListDialog) {
-    await prepareShoppingListSelection();
-    return;
-  }
-
-  await addRecipesToList();
-}
-
-function backToShoppingListSelection() {
-  state.shoppingListDialog = true;
-  state.shoppingListIngredientDialog = false;
 }
 
 function setShowAllToggled() {
@@ -791,6 +787,11 @@ function manualItemToCreatePayload(item: ShoppingListItemCreate, shoppingListId:
 }
 
 async function addRecipesToList() {
+  const hasShoppingListSelection = await prepareShoppingListSelection();
+  if (!hasShoppingListSelection) {
+    return;
+  }
+
   if (manualListItemHasData.value) {
     addManualListItem();
   }
@@ -854,6 +855,7 @@ async function addRecipesToList() {
   }
   else {
     alert.success(i18n.t("recipe.successfully-added-to-list"));
+    window.dispatchEvent(new CustomEvent("mealie:organizers-updated"));
   }
 
   state.shoppingListDialog = false;

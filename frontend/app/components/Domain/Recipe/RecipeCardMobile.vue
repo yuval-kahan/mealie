@@ -99,6 +99,7 @@
                 :use-items="{
                   edit: false,
                   rename: true,
+                  copy: true,
                   rating: true,
                   download: true,
                   mealplanner: true,

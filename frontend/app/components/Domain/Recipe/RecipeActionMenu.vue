@@ -67,6 +67,7 @@
         :use-items="{
           edit: false,
           rename: loggedIn,
+          copy: true,
           rating: loggedIn,
           download: loggedIn,
           duplicate: loggedIn,

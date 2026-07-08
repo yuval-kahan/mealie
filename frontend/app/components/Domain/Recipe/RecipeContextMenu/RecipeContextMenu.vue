@@ -48,6 +48,7 @@ interface ContextMenuIncludes {
   delete?: boolean;
   edit?: boolean;
   rename?: boolean;
+  copy?: boolean;
   rating?: boolean;
   download?: boolean;
   duplicate?: boolean;
@@ -89,6 +90,7 @@ const props = withDefaults(defineProps<Props>(), {
     delete: true,
     edit: true,
     rename: true,
+    copy: true,
     rating: true,
     download: true,
     duplicate: false,
