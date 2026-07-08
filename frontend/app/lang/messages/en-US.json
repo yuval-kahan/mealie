@@ -38,6 +38,27 @@
     "show-assets": "Show Assets",
     "error-submitting-form": "Error Submitting Form"
   },
+  "article": {
+    "article": "Article",
+    "articles": "Articles",
+    "create-article": "Create Article",
+    "edit-article": "Edit Article",
+    "manual": "Manual",
+    "ai-text": "AI from Text",
+    "ai-link": "AI from Link",
+    "title": "Title",
+    "source": "Source",
+    "author": "Author",
+    "summary": "Summary",
+    "content": "Content",
+    "article-text": "Article Text",
+    "target-language": "Target Language",
+    "url": "URL",
+    "ai-search": "AI Search",
+    "no-ai-results": "AI did not find matching articles.",
+    "no-articles": "No articles yet.",
+    "delete-confirm": "Are you sure you want to delete this article?"
+  },
   "category": {
     "categories": "Categories",
     "category-created": "Category created",

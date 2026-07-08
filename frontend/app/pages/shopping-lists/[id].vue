@@ -92,6 +92,16 @@
               />
             </v-col>
             <v-col class="d-flex justify-end">
+              <v-btn
+                color="primary"
+                variant="tonal"
+                class="me-2"
+                :prepend-icon="$globals.icons.contentCopy"
+                :disabled="!hasShoppingListItems"
+                @click="copyListItems('plain')"
+              >
+                {{ $t("general.copy") }}
+              </v-btn>
               <BaseButtonGroup
                 class="d-flex"
                 :buttons="[
@@ -429,6 +439,10 @@ const {
   removeRecipeReferenceToList,
   addRecipeReferenceToList,
 } = shoppingListPage;
+
+const hasShoppingListItems = computed(() => {
+  return Boolean(listItems.unchecked.length || listItems.checked.length);
+});
 </script>
 
 <style>

@@ -345,6 +345,16 @@ function handleNavClick(nav: SideBarLink) {
   nav.onClick?.();
 }
 
+function dropdownSignature(sections: OrganizerSidebarSection[]) {
+  return sections
+    .flatMap(section =>
+      section.links
+        .filter(link => link.children?.length)
+        .map(link => `${section.key}-${link.title}-${link.children?.length || 0}-${link.childrenStartExpanded ? 1 : 0}`),
+    )
+    .join("|");
+}
+
 watchEffect(() => {
   const normalizedOrder = normalizeSectionOrder(preferences.value.sectionOrder);
   if (JSON.stringify(preferences.value.sectionOrder) !== JSON.stringify(normalizedOrder)) {
@@ -353,11 +363,11 @@ watchEffect(() => {
 });
 
 watch(
-  () => props.sections,
-  (sections) => {
+  () => dropdownSignature(props.sections),
+  () => {
     const nextDropDowns: Record<string, boolean> = {};
 
-    sections.forEach((section) => {
+    props.sections.forEach((section) => {
       section.links.forEach((link) => {
         if (link.children?.length) {
           const key = section.key + "-" + link.title;
@@ -369,7 +379,6 @@ watch(
     state.dropDowns = nextDropDowns;
   },
   {
-    deep: true,
     immediate: true,
   },
 );

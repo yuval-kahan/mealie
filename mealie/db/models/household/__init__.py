@@ -1,5 +1,6 @@
 from .cookbook import CookBook
 from .events import GroupEventNotifierModel, GroupEventNotifierOptionsModel
+from .article import Article
 from .household import Household
 from .household_to_recipe import HouseholdToRecipe
 from .invite_tokens import GroupInviteToken
@@ -19,6 +20,7 @@ from .webhooks import GroupWebhooksModel
 
 __all__ = [
     "CookBook",
+    "Article",
     "GroupEventNotifierModel",
     "GroupEventNotifierOptionsModel",
     "GroupInviteToken",

@@ -38,6 +38,27 @@
     "show-assets": "הצגת נכסים",
     "error-submitting-form": "שגיאה בשליחת הטופס"
   },
+  "article": {
+    "article": "מאמר",
+    "articles": "מאמרים",
+    "create-article": "יצירת מאמר",
+    "edit-article": "עריכת מאמר",
+    "manual": "ידני",
+    "ai-text": "AI מטקסט",
+    "ai-link": "AI מקישור",
+    "title": "כותרת",
+    "source": "מקור",
+    "author": "כותב / מקור",
+    "summary": "תקציר",
+    "content": "תוכן",
+    "article-text": "טקסט המאמר",
+    "target-language": "שפת יעד",
+    "url": "קישור",
+    "ai-search": "חיפוש AI במאמרים",
+    "no-ai-results": "ה-AI לא מצא מאמרים מתאימים.",
+    "no-articles": "עדיין אין מאמרים.",
+    "delete-confirm": "למחוק את המאמר הזה?"
+  },
   "category": {
     "categories": "קטגוריות",
     "category-created": "קטגוריה נוצרה",

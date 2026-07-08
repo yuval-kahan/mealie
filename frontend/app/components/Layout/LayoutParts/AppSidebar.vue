@@ -283,9 +283,22 @@ const state = reactive({
 
 const allLinks = computed(() => [...props.topLink, ...(props.secondaryLinks || [])]);
 function initDropdowns() {
+  const nextDropDowns: Record<string, boolean> = {};
+
   allLinks.value.forEach((link) => {
-    state.dropDowns[link.title] = link.childrenStartExpanded || false;
+    if (link.children?.length) {
+      nextDropDowns[link.title] = state.dropDowns[link.title] ?? link.childrenStartExpanded ?? false;
+    }
   });
+
+  state.dropDowns = nextDropDowns;
+}
+
+function allLinksDropdownSignature() {
+  return allLinks.value
+    .filter(link => link.children?.length)
+    .map(link => `${link.title}-${link.children?.length || 0}-${link.childrenStartExpanded ? 1 : 0}`)
+    .join("|");
 }
 
 function openQuickApiDialog() {
@@ -362,12 +375,12 @@ async function handleQuickApiSettingsSubmit() {
   }
 }
 watch(
-  () => allLinks,
+  allLinksDropdownSignature,
   () => {
     initDropdowns();
   },
   {
-    deep: true,
+    immediate: true,
   },
 );
 </script>

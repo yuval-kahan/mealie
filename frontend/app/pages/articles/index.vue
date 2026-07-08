@@ -1,0 +1,531 @@
+<template>
+  <v-container class="articles-page">
+    <BaseDialog
+      v-model="articleDialog"
+      :title="editingArticle ? $t('article.edit-article') : $t('article.create-article')"
+      :icon="$globals.icons.fileSign"
+      width="900"
+      max-width="96vw"
+      can-submit
+      keep-open
+      :loading="saving"
+      :submit-disabled="!canSubmitArticle"
+      :submit-text="$t('general.save')"
+      @submit="submitArticle"
+      @close="resetArticleForm"
+    >
+      <v-card-text class="pt-4">
+        <v-tabs
+          v-if="!editingArticle"
+          v-model="createMode"
+          color="primary"
+          density="comfortable"
+        >
+          <v-tab value="manual">
+            {{ $t("article.manual") }}
+          </v-tab>
+          <v-tab value="ai-text">
+            {{ $t("article.ai-text") }}
+          </v-tab>
+          <v-tab value="ai-link">
+            {{ $t("article.ai-link") }}
+          </v-tab>
+        </v-tabs>
+
+        <v-window
+          v-model="createMode"
+          class="mt-4"
+        >
+          <v-window-item value="manual">
+            <v-text-field
+              v-model="form.title"
+              :label="$t('article.title')"
+              variant="outlined"
+              density="comfortable"
+            />
+            <v-row>
+              <v-col
+                cols="12"
+                md="6"
+              >
+                <v-text-field
+                  v-model="form.source"
+                  :label="$t('article.source')"
+                  variant="outlined"
+                  density="comfortable"
+                />
+              </v-col>
+              <v-col
+                cols="12"
+                md="6"
+              >
+                <v-text-field
+                  v-model="form.author"
+                  :label="$t('article.author')"
+                  variant="outlined"
+                  density="comfortable"
+                />
+              </v-col>
+            </v-row>
+            <v-textarea
+              v-model="form.summary"
+              :label="$t('article.summary')"
+              variant="outlined"
+              rows="3"
+            />
+            <v-textarea
+              v-model="form.content"
+              :label="$t('article.content')"
+              variant="outlined"
+              rows="12"
+            />
+            <ArticleOrganizerInputs
+              v-model:categories="form.categories"
+              v-model:tags="form.tags"
+              :category-items="categoryOptions"
+              :tag-items="tagOptions"
+            />
+          </v-window-item>
+
+          <v-window-item value="ai-text">
+            <v-textarea
+              v-model="aiText"
+              :label="$t('article.article-text')"
+              variant="outlined"
+              rows="14"
+            />
+            <v-combobox
+              v-model="aiLanguage"
+              :items="languageOptions"
+              :label="$t('article.target-language')"
+              variant="outlined"
+              density="comfortable"
+            />
+          </v-window-item>
+
+          <v-window-item value="ai-link">
+            <v-text-field
+              v-model="aiUrl"
+              :label="$t('article.url')"
+              variant="outlined"
+              density="comfortable"
+              :prepend-inner-icon="$globals.icons.link"
+            />
+            <v-combobox
+              v-model="aiLanguage"
+              :items="languageOptions"
+              :label="$t('article.target-language')"
+              variant="outlined"
+              density="comfortable"
+            />
+          </v-window-item>
+        </v-window>
+      </v-card-text>
+    </BaseDialog>
+
+    <BasePageTitle divider>
+      <template #header>
+        <v-icon
+          size="72"
+          color="primary"
+        >
+          {{ $globals.icons.fileSign }}
+        </v-icon>
+      </template>
+      <template #title>
+        {{ $t("article.articles") }}
+      </template>
+    </BasePageTitle>
+
+    <div class="articles-toolbar">
+      <v-text-field
+        v-model="search"
+        :label="$t('search.search')"
+        variant="outlined"
+        density="comfortable"
+        hide-details
+        clearable
+        :prepend-inner-icon="$globals.icons.search"
+      />
+      <v-combobox
+        v-model="selectedCategories"
+        :items="categoryOptions"
+        :label="$t('category.categories')"
+        variant="outlined"
+        density="comfortable"
+        hide-details
+        multiple
+        chips
+        clearable
+      />
+      <v-combobox
+        v-model="selectedTags"
+        :items="tagOptions"
+        :label="$t('tag.tags')"
+        variant="outlined"
+        density="comfortable"
+        hide-details
+        multiple
+        chips
+        clearable
+      />
+      <BaseButton
+        create
+        @click="openCreateDialog"
+      />
+    </div>
+
+    <div class="articles-ai-search">
+      <v-text-field
+        v-model="aiSearchQuery"
+        :label="$t('article.ai-search')"
+        variant="outlined"
+        density="comfortable"
+        hide-details
+        clearable
+        :prepend-inner-icon="$globals.icons.robot"
+        @keyup.enter="runAISearch"
+      />
+      <v-btn
+        color="primary"
+        :loading="aiSearching"
+        :disabled="!aiSearchQuery.trim()"
+        @click="runAISearch"
+      >
+        <v-icon start>
+          {{ $globals.icons.robot }}
+        </v-icon>
+        {{ $t("general.search") }}
+      </v-btn>
+      <v-btn
+        v-if="aiSearchActive"
+        variant="text"
+        @click="clearAISearch"
+      >
+        {{ $t("general.reset") }}
+      </v-btn>
+    </div>
+
+    <v-alert
+      v-if="aiSearchActive && !visibleArticles.length"
+      type="info"
+      variant="tonal"
+      class="mt-4"
+    >
+      {{ $t("article.no-ai-results") }}
+    </v-alert>
+
+    <v-row class="mt-2">
+      <v-col
+        v-for="article in visibleArticles"
+        :key="article.id"
+        cols="12"
+        md="6"
+        lg="4"
+      >
+        <v-card
+          class="article-card"
+          :to="`/articles/${article.id}`"
+        >
+          <v-card-title class="article-card-title">
+            {{ article.title }}
+          </v-card-title>
+          <v-card-subtitle v-if="article.author || article.source">
+            {{ [article.author, article.source].filter(Boolean).join(" · ") }}
+          </v-card-subtitle>
+          <v-card-text>
+            <p class="article-card-summary">
+              {{ article.summary || article.content }}
+            </p>
+            <p
+              v-if="aiReasons[article.id]"
+              class="text-caption text-primary mb-2"
+            >
+              {{ aiReasons[article.id] }}
+            </p>
+            <div class="d-flex flex-wrap ga-1">
+              <v-chip
+                v-for="category in article.categories.slice(0, 3)"
+                :key="`${article.id}-category-${category}`"
+                size="small"
+                color="primary"
+                variant="tonal"
+              >
+                {{ category }}
+              </v-chip>
+              <v-chip
+                v-for="tag in article.tags.slice(0, 4)"
+                :key="`${article.id}-tag-${tag}`"
+                size="small"
+                color="accent"
+                variant="tonal"
+              >
+                {{ tag }}
+              </v-chip>
+            </div>
+          </v-card-text>
+        </v-card>
+      </v-col>
+    </v-row>
+
+    <v-alert
+      v-if="ready && !visibleArticles.length && !aiSearchActive"
+      type="info"
+      variant="tonal"
+      class="mt-4"
+    >
+      {{ $t("article.no-articles") }}
+    </v-alert>
+  </v-container>
+</template>
+
+<script setup lang="ts">
+import ArticleOrganizerInputs from "~/components/Domain/Article/ArticleOrganizerInputs.vue";
+import { useUserApi } from "~/composables/api/api-client";
+import { alert } from "~/composables/use-toast";
+import type { Article, ArticleCreate } from "~/lib/api/types/article";
+
+const i18n = useI18n();
+const { $globals } = useNuxtApp();
+const api = useUserApi();
+
+useSeoMeta({
+  title: i18n.t("article.articles"),
+});
+
+const ready = ref(false);
+const articles = ref<Article[]>([]);
+const articleDialog = ref(false);
+const editingArticle = ref<Article | null>(null);
+const saving = ref(false);
+const createMode = ref<"manual" | "ai-text" | "ai-link">("manual");
+const search = ref("");
+const selectedCategories = ref<string[]>([]);
+const selectedTags = ref<string[]>([]);
+const aiSearchQuery = ref("");
+const aiSearching = ref(false);
+const aiSearchIds = ref<string[]>([]);
+const aiReasons = ref<Record<string, string>>({});
+const aiText = ref("");
+const aiUrl = ref("");
+const aiLanguage = ref(defaultLanguage());
+
+const form = reactive<ArticleCreate>({
+  title: "",
+  summary: "",
+  content: "",
+  source: "",
+  author: "",
+  categories: [],
+  tags: [],
+});
+
+const languageOptions = computed(() => [
+  i18n.t("cookbook.language-hebrew"),
+  i18n.t("cookbook.language-english"),
+  i18n.t("cookbook.language-arabic"),
+]);
+
+const categoryOptions = computed(() => sortedUnique(articles.value.flatMap(article => article.categories)));
+const tagOptions = computed(() => sortedUnique(articles.value.flatMap(article => article.tags)));
+const aiSearchActive = computed(() => aiSearchIds.value.length > 0);
+
+const canSubmitArticle = computed(() => {
+  if (editingArticle.value || createMode.value === "manual") {
+    return Boolean(form.title.trim() && form.content.trim());
+  }
+  if (createMode.value === "ai-text") {
+    return Boolean(aiText.value.trim());
+  }
+  return Boolean(aiUrl.value.trim());
+});
+
+const filteredArticles = computed(() => {
+  const query = search.value.trim().toLocaleLowerCase();
+  const selectedCategorySet = new Set(selectedCategories.value.map(item => item.toLocaleLowerCase()));
+  const selectedTagSet = new Set(selectedTags.value.map(item => item.toLocaleLowerCase()));
+
+  return articles.value.filter((article) => {
+    const articleCategories = article.categories.map(item => item.toLocaleLowerCase());
+    const articleTags = article.tags.map(item => item.toLocaleLowerCase());
+    const text = [
+      article.title,
+      article.summary,
+      article.content,
+      article.source,
+      article.author,
+      article.categories.join(" "),
+      article.tags.join(" "),
+    ].join(" ").toLocaleLowerCase();
+
+    return (!query || text.includes(query))
+      && (!selectedCategorySet.size || articleCategories.some(item => selectedCategorySet.has(item)))
+      && (!selectedTagSet.size || articleTags.some(item => selectedTagSet.has(item)));
+  });
+});
+
+const visibleArticles = computed(() => {
+  if (!aiSearchActive.value) {
+    return filteredArticles.value;
+  }
+
+  const byId = new Map(filteredArticles.value.map(article => [article.id, article]));
+  return aiSearchIds.value.map(id => byId.get(id)).filter((article): article is Article => !!article);
+});
+
+onMounted(refreshArticles);
+
+function defaultLanguage() {
+  const locale = String(i18n.locale.value || "").toLocaleLowerCase();
+  if (locale.startsWith("he")) {
+    return i18n.t("cookbook.language-hebrew");
+  }
+  if (locale.startsWith("ar")) {
+    return i18n.t("cookbook.language-arabic");
+  }
+  return i18n.t("cookbook.language-english");
+}
+
+function sortedUnique(values: string[]) {
+  return Array.from(new Set(values.map(item => item.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+}
+
+async function refreshArticles() {
+  const { data, error } = await api.articles.getAll();
+  if (error || !data) {
+    alert.error(i18n.t("events.something-went-wrong"));
+    ready.value = true;
+    return;
+  }
+  articles.value = data;
+  ready.value = true;
+}
+
+function resetArticleForm() {
+  editingArticle.value = null;
+  createMode.value = "manual";
+  form.title = "";
+  form.summary = "";
+  form.content = "";
+  form.source = "";
+  form.author = "";
+  form.categories = [];
+  form.tags = [];
+  aiText.value = "";
+  aiUrl.value = "";
+  aiLanguage.value = defaultLanguage();
+}
+
+function openCreateDialog() {
+  resetArticleForm();
+  articleDialog.value = true;
+}
+
+async function submitArticle() {
+  saving.value = true;
+  const result = await (async () => {
+    if (editingArticle.value) {
+      return await api.articles.updateOne(editingArticle.value.id, form);
+    }
+    if (createMode.value === "manual") {
+      return await api.articles.createOne(form);
+    }
+    return await api.articles.createWithAI({
+      text: createMode.value === "ai-text" ? aiText.value : null,
+      url: createMode.value === "ai-link" ? aiUrl.value : null,
+      translateLanguage: aiLanguage.value,
+    });
+  })().finally(() => {
+    saving.value = false;
+  });
+
+  if (result.error || !result.data) {
+    const detail = result.error?.response?.data?.detail;
+    const message = typeof detail?.message === "string" ? detail.message : i18n.t("events.something-went-wrong");
+    alert.error(message);
+    return;
+  }
+
+  articleDialog.value = false;
+  resetArticleForm();
+  await refreshArticles();
+}
+
+async function runAISearch() {
+  if (!aiSearchQuery.value.trim()) {
+    return;
+  }
+
+  aiSearching.value = true;
+  const { data, error } = await api.articles.searchWithAI({
+    query: aiSearchQuery.value,
+    limit: 30,
+  }).finally(() => {
+    aiSearching.value = false;
+  });
+
+  if (error || !data) {
+    alert.error(i18n.t("events.something-went-wrong"));
+    return;
+  }
+
+  aiSearchIds.value = data.items.map(item => item.id);
+  aiReasons.value = Object.fromEntries(data.items.map(item => [item.id, item.reason]));
+}
+
+function clearAISearch() {
+  aiSearchQuery.value = "";
+  aiSearchIds.value = [];
+  aiReasons.value = {};
+}
+</script>
+
+<style scoped>
+.articles-page {
+  max-width: 1180px;
+}
+
+.articles-toolbar,
+.articles-ai-search {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(180px, 1fr) minmax(160px, 240px) minmax(160px, 240px) auto;
+  margin-top: 18px;
+}
+
+.articles-ai-search {
+  grid-template-columns: minmax(220px, 1fr) auto auto;
+}
+
+.article-card {
+  border-radius: 8px;
+  height: 100%;
+}
+
+.article-card-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  min-height: 64px;
+  overflow: hidden;
+  white-space: normal;
+}
+
+.article-card-summary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  min-height: 86px;
+  overflow: hidden;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 960px) {
+  .articles-toolbar,
+  .articles-ai-search {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

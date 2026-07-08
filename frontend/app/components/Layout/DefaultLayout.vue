@@ -544,7 +544,7 @@
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import type { OrganizerSidebarSection, SideBarLink } from "~/types/application-types";
 import { useGroupSelf } from "~/composables/use-groups";
-import { useCookbookPreferences, useOrganizerSidebarPreferences } from "~/composables/use-users/preferences";
+import { useCookbookPreferences, useOrganizerSidebarPreferences, useUserSearchQuerySession } from "~/composables/use-users/preferences";
 import { useCookbookStore, usePublicCookbookStore } from "~/composables/store/use-cookbook-store";
 import { useCategoryStore, usePublicCategoryStore } from "~/composables/store/use-category-store";
 import { usePublicTagStore, useTagStore } from "~/composables/store/use-tag-store";
@@ -568,25 +568,26 @@ const groupSlug = computed(() => route.params.groupSlug as string || auth.user.v
 
 const cookbookPreferences = useCookbookPreferences();
 const organizerSidebarPreferences = useOrganizerSidebarPreferences();
+const searchQuerySession = useUserSearchQuerySession();
 const ownCookbookStore = computed(() => isOwnGroup.value ? useCookbookStore(i18n) : null);
 const ownCategoryStore = computed(() => isOwnGroup.value ? useCategoryStore(i18n) : null);
 const ownTagStore = computed(() => isOwnGroup.value ? useTagStore(i18n) : null);
-const publicCookbookStoreCache = ref<Record<string, ReturnType<typeof usePublicCookbookStore>>>({});
-const publicCategoryStoreCache = ref<Record<string, ReturnType<typeof usePublicCategoryStore>>>({});
-const publicTagStoreCache = ref<Record<string, ReturnType<typeof usePublicTagStore>>>({});
-const publicStoreCacheOrder = ref<string[]>([]);
+const publicCookbookStoreCache = new Map<string, ReturnType<typeof usePublicCookbookStore>>();
+const publicCategoryStoreCache = new Map<string, ReturnType<typeof usePublicCategoryStore>>();
+const publicTagStoreCache = new Map<string, ReturnType<typeof usePublicTagStore>>();
+let publicStoreCacheOrder: string[] = [];
 const MAX_PUBLIC_STORE_CACHE_SIZE = 8;
 
-function pruneCacheEntry<T>(cache: Ref<Record<string, T>>, slug: string) {
-  cache.value = Object.fromEntries(Object.entries(cache.value).filter(([key]) => key !== slug)) as Record<string, T>;
+function pruneCacheEntry<T>(cache: Map<string, T>, slug: string) {
+  cache.delete(slug);
 }
 
 function rememberPublicStoreSlug(slug: string) {
-  publicStoreCacheOrder.value = publicStoreCacheOrder.value.filter(item => item !== slug);
-  publicStoreCacheOrder.value.push(slug);
+  publicStoreCacheOrder = publicStoreCacheOrder.filter(item => item !== slug);
+  publicStoreCacheOrder.push(slug);
 
-  while (publicStoreCacheOrder.value.length > MAX_PUBLIC_STORE_CACHE_SIZE) {
-    const expiredSlug = publicStoreCacheOrder.value.shift();
+  while (publicStoreCacheOrder.length > MAX_PUBLIC_STORE_CACHE_SIZE) {
+    const expiredSlug = publicStoreCacheOrder.shift();
     if (!expiredSlug) {
       continue;
     }
@@ -599,26 +600,26 @@ function rememberPublicStoreSlug(slug: string) {
 
 function getPublicCookbookStore(slug: string) {
   rememberPublicStoreSlug(slug);
-  if (!publicCookbookStoreCache.value[slug]) {
-    publicCookbookStoreCache.value[slug] = usePublicCookbookStore(slug, i18n);
+  if (!publicCookbookStoreCache.has(slug)) {
+    publicCookbookStoreCache.set(slug, usePublicCookbookStore(slug, i18n));
   }
-  return publicCookbookStoreCache.value[slug];
+  return publicCookbookStoreCache.get(slug)!;
 }
 
 function getPublicCategoryStore(slug: string) {
   rememberPublicStoreSlug(slug);
-  if (!publicCategoryStoreCache.value[slug]) {
-    publicCategoryStoreCache.value[slug] = usePublicCategoryStore(slug, i18n);
+  if (!publicCategoryStoreCache.has(slug)) {
+    publicCategoryStoreCache.set(slug, usePublicCategoryStore(slug, i18n));
   }
-  return publicCategoryStoreCache.value[slug];
+  return publicCategoryStoreCache.get(slug)!;
 }
 
 function getPublicTagStore(slug: string) {
   rememberPublicStoreSlug(slug);
-  if (!publicTagStoreCache.value[slug]) {
-    publicTagStoreCache.value[slug] = usePublicTagStore(slug, i18n);
+  if (!publicTagStoreCache.has(slug)) {
+    publicTagStoreCache.set(slug, usePublicTagStore(slug, i18n));
   }
-  return publicTagStoreCache.value[slug];
+  return publicTagStoreCache.get(slug)!;
 }
 
 const cookbooks = computed(() => {
@@ -908,6 +909,10 @@ async function refreshOrganizerNavigationData() {
 function handleOrganizersUpdated() {
   refreshShoppingLists();
   refreshOrganizerNavigationData();
+}
+
+function clearRecipeSearchSession() {
+  searchQuerySession.value.recipe = "";
 }
 
 function hasLinkedRecipes(item: RecipeCategory | RecipeTag, emptyIds: Set<string>) {
@@ -1648,8 +1653,9 @@ const createLinks = computed(() => [
 const topLinks = computed<SideBarLink[]>(() => [
   {
     icon: $globals.icons.silverwareForkKnife,
-    to: `/g/${groupSlug.value}?resetSearch=true`,
+    to: `/g/${groupSlug.value}`,
     title: i18n.t("general.recipes"),
+    onClick: clearRecipeSearchSession,
     restricted: false,
   },
   {
@@ -1668,6 +1674,12 @@ const topLinks = computed<SideBarLink[]>(() => [
     icon: $globals.icons.formatListCheck,
     title: i18n.t("shopping-list.shopping-lists"),
     to: "/shopping-lists",
+    restricted: true,
+  },
+  {
+    icon: $globals.icons.fileSign,
+    title: i18n.t("article.articles"),
+    to: "/articles",
     restricted: true,
   },
   {

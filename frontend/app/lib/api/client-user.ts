@@ -26,6 +26,7 @@ import { MealPlanRulesApi } from "./user/group-mealplan-rules";
 import { GroupDataSeederApi } from "./user/group-seeder";
 import { AIProvidersAPI } from "./user/group-ai-providers";
 import { UploadedBooksAPI } from "./user/uploaded-books";
+import { ArticlesAPI } from "./user/articles";
 import type { ApiRequestInstance } from "~/lib/api/types/non-generated";
 
 export class UserApiClient {
@@ -57,6 +58,7 @@ export class UserApiClient {
   public seeders: GroupDataSeederApi;
   public aiProviders: AIProvidersAPI;
   public uploadedBooks: UploadedBooksAPI;
+  public articles: ArticlesAPI;
 
   constructor(requests: ApiRequestInstance) {
     // Recipes
@@ -86,6 +88,7 @@ export class UserApiClient {
     this.seeders = new GroupDataSeederApi(requests);
     this.aiProviders = new AIProvidersAPI(requests);
     this.uploadedBooks = new UploadedBooksAPI(requests);
+    this.articles = new ArticlesAPI(requests);
 
     // Admin
     this.backups = new BackupAPI(requests);
