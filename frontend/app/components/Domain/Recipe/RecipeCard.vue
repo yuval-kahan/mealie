@@ -4,6 +4,7 @@
     <v-hover v-slot="{ isHovering, props: hoverProps }" :open-delay="50">
       <v-card
         v-bind="hoverProps"
+        class="recipe-card"
         :class="{ 'on-hover': isHovering }"
         :style="{ cursor }"
         :elevation="isHovering ? 12 : 2"
@@ -38,7 +39,7 @@
         </v-card-title>
 
         <slot name="actions">
-          <v-card-actions v-if="showRecipeContent" class="px-1">
+          <v-card-actions v-if="showRecipeContent" class="recipe-card-actions px-1">
             <RecipeFavoriteBadge v-if="isOwnGroup" :recipe-id="recipeId" show-always />
             <div v-else class="px-1" />
             <!-- Empty div to keep the layout consistent -->
@@ -159,8 +160,16 @@ const cursor = computed(() => (showRecipeContent.value ? "pointer" : "auto"));
   overflow: hidden;
   line-height: 1.3;
   font-size: 1.25rem;
-  min-height: 1.3em;
+  height: 3.9em;
+  min-height: 3.9em;
   max-height: 3.9em;
+}
+.recipe-card-actions {
+  align-items: center;
+  flex-wrap: nowrap;
+  height: 52px;
+  min-height: 52px;
+  overflow: hidden;
 }
 .descriptionWrapper {
   display: -webkit-box;
