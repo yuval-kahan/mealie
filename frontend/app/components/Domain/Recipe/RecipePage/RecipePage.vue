@@ -326,6 +326,11 @@ const hasLinkedIngredients = computed(() => {
     step => step.ingredientReferences && step.ingredientReferences.length > 0,
   );
 });
+
+const hasParsedIngredients = computed(() => {
+  return recipe.value.recipeIngredient.some(ingredient => !!ingredient.food || !!ingredient.unit);
+});
+
 /** =============================================================
  * Set State onMounted
  */
@@ -349,8 +354,11 @@ onMounted(() => {
     setMode(PageMode.EDIT);
   }
 
-  if (paramsParse.value === "true" && isOwnGroup.value) {
+  if (paramsParse.value === "true" && isOwnGroup.value && !hasParsedIngredients.value) {
     toggleIsParsing(true);
+  }
+  else if (paramsParse.value === "true") {
+    paramsParse.value = undefined;
   }
 });
 

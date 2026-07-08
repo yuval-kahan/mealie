@@ -101,13 +101,6 @@
             :disabled="state.loading"
           />
         </template>
-        <v-checkbox
-          v-model="parseRecipe"
-          color="primary"
-          hide-details
-          :label="$t('recipe.parse-recipe-ingredients-after-import')"
-          :disabled="state.loading"
-        />
         <v-divider class="my-4" />
         <div class="d-flex flex-column ga-3">
           <RecipeCoverImageUpload
@@ -212,13 +205,12 @@ const uploadedImages = ref<File[]>([]);
 const {
   importKeywordsAsTags,
   importCategories,
-  parseRecipe,
   navigateToRecipe,
 } = useNewRecipeOptions({
   enableImportKeywords: true,
   enableImportCategories: true,
   enableStayInEditMode: true,
-  enableParseRecipe: true,
+  enableParseRecipe: false,
 });
 
 const modeDescription = computed(() => {
