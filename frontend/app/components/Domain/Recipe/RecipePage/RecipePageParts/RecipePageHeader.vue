@@ -4,26 +4,28 @@
       :recipe="recipe"
       :recipe-scale="recipeScale"
       :landscape="landscape"
-    />
-    <v-divider />
-    <RecipeActionMenu
-      :recipe="recipe"
-      :slug="recipe.slug"
-      :recipe-scale="recipeScale"
-      :can-edit="canEditRecipe"
-      :name="recipe.name"
-      :logged-in="isOwnGroup"
-      :open="isEditMode"
-      :recipe-id="recipe.id"
-      class="ml-auto mt-n7 pb-4"
-      @close="$emit('close')"
-      @json="toggleEditMode()"
-      @edit="setMode(PageMode.EDIT)"
-      @save="$emit('save')"
-      @delete="$emit('delete')"
-      @print="printRecipe"
-      @renamed="$emit('renamed', $event)"
-    />
+    >
+      <template #actions>
+        <RecipeActionMenu
+          :recipe="recipe"
+          :slug="recipe.slug"
+          :recipe-scale="recipeScale"
+          :can-edit="canEditRecipe"
+          :name="recipe.name"
+          :logged-in="isOwnGroup"
+          :open="isEditMode"
+          :recipe-id="recipe.id"
+          inline
+          @close="$emit('close')"
+          @json="toggleEditMode()"
+          @edit="setMode(PageMode.EDIT)"
+          @save="$emit('save')"
+          @delete="$emit('delete')"
+          @print="printRecipe"
+          @renamed="$emit('renamed', $event)"
+        />
+      </template>
+    </RecipePageInfoCard>
   </div>
 </template>
 

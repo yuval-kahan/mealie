@@ -15,6 +15,8 @@ export interface UploadedBook {
   translationLanguage?: string | null;
   translationStatus: "not_started" | "processing" | "retrying" | "completed" | "partial_failed" | "failed" | "cancelled" | string;
   translationPagesPerChunk: number;
+  translationPageStart?: number | null;
+  translationPageEnd?: number | null;
   translationTotalChunks: number;
   translationCompletedChunks: number;
   translationFailedChunks: number;
@@ -26,6 +28,8 @@ export interface UploadedBook {
   extractionStatus: "not_started" | "processing" | "retrying" | "completed" | "partial_failed" | "failed" | "cancelled" | string;
   extractionPagesPerChunk: number;
   extractionTranslateLanguage?: string | null;
+  extractionPageStart?: number | null;
+  extractionPageEnd?: number | null;
   extractionTotalChunks: number;
   extractionCompletedChunks: number;
   extractionFailedChunks: number;
@@ -43,9 +47,13 @@ export interface UploadedBook {
 export interface UploadedBookExtractRequest {
   pagesPerChunk: number;
   translateLanguage?: string;
+  pageStart?: number | null;
+  pageEnd?: number | null;
 }
 
 export interface UploadedBookTranslateRequest {
   pagesPerChunk: number;
   targetLanguage: string;
+  pageStart?: number | null;
+  pageEnd?: number | null;
 }

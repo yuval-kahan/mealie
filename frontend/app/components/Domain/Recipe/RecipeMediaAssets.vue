@@ -23,40 +23,6 @@
 
     <div
       v-if="mediaItems.length > 0"
-      class="recipe-media-size-control d-flex align-center ga-2 mb-2"
-    >
-      <v-btn
-        icon
-        size="small"
-        variant="text"
-        :disabled="mediaSize <= 25"
-        @click="setMediaSize(mediaSize - 5)"
-      >
-        <v-icon :icon="$globals.icons.minus" />
-      </v-btn>
-      <v-slider
-        :model-value="mediaSize"
-        :aria-label="$t('asset.video-size')"
-        min="25"
-        max="100"
-        step="5"
-        density="compact"
-        hide-details
-        @update:model-value="value => setMediaSize(Number(value))"
-      />
-      <v-btn
-        icon
-        size="small"
-        variant="text"
-        :disabled="mediaSize >= 100"
-        @click="setMediaSize(mediaSize + 5)"
-      >
-        <v-icon :icon="$globals.icons.createAlt" />
-      </v-btn>
-    </div>
-
-    <div
-      v-if="mediaItems.length > 0"
       class="recipe-media-row"
     >
       <div
@@ -64,7 +30,6 @@
         :key="item.key"
         class="recipe-media-item"
         :class="{ 'recipe-media-video-item': item.type === 'video' }"
-        :style="{ flexBasis: `${mediaSize}%`, maxWidth: `${mediaSize}%` }"
       >
         <template v-if="item.type === 'video'">
           <div class="recipe-media-video-frame">
@@ -84,7 +49,6 @@
           :alt="item.name"
           class="recipe-media-image"
           cover
-          @error="hidePrimaryImage(item)"
         />
 
         <div class="recipe-media-caption d-flex align-center justify-space-between ga-2">
@@ -105,9 +69,7 @@
 </template>
 
 <script setup lang="ts">
-import { useLocalStorage } from "@vueuse/core";
 import { useStaticRoutes, useUserApi } from "~/composables/api";
-import { usePageState } from "~/composables/recipe-page/shared-state";
 import { alert } from "~/composables/use-toast";
 import type { NoUndefinedField } from "~/lib/api/types/non-generated";
 import type { Recipe, RecipeAsset } from "~/lib/api/types/recipe";
@@ -136,27 +98,13 @@ const emit = defineEmits<{
 const api = useUserApi();
 const i18n = useI18n();
 const { $globals } = useNuxtApp();
-const { recipeAssetPath, recipeImage } = useStaticRoutes();
-const { imageKey } = usePageState(props.recipe.slug);
-const mediaSize = useLocalStorage("recipe-top-media-size-v1", 25);
-const hideRecipeImage = ref(false);
+const { recipeAssetPath } = useStaticRoutes();
 const newVideoFile = ref<File | null>(null);
 
 const assets = computed(() => model.value ?? []);
 
-const primaryImageUrl = computed(() => recipeImage(props.recipe.id, props.recipe.image, imageKey.value));
-
 const mediaItems = computed<MediaItem[]>(() => {
   const items: MediaItem[] = [];
-
-  if (!hideRecipeImage.value && props.recipe.image) {
-    items.push({
-      key: "recipe-image",
-      type: "image",
-      name: props.recipe.name || i18n.t("recipe.recipe-image"),
-      src: primaryImageUrl.value,
-    });
-  }
 
   assets.value.forEach((asset, index) => {
     if (!asset.fileName) {
@@ -188,10 +136,6 @@ const mediaItems = computed<MediaItem[]>(() => {
   return items;
 });
 
-watch(primaryImageUrl, () => {
-  hideRecipeImage.value = false;
-});
-
 function assetURL(assetName: string) {
   return recipeAssetPath(props.recipe.id, assetName);
 }
@@ -219,18 +163,8 @@ function isVideo(asset: RecipeAsset) {
   return isVideoFile(asset.fileName) || asset.icon === "mdi-play";
 }
 
-function setMediaSize(value: number) {
-  mediaSize.value = Math.min(100, Math.max(25, value));
-}
-
 function removeAsset(asset: RecipeAsset) {
   model.value = assets.value.filter(item => item !== asset);
-}
-
-function hidePrimaryImage(item: MediaItem) {
-  if (item.key === "recipe-image") {
-    hideRecipeImage.value = true;
-  }
 }
 
 function normalizeUpload(file: File | File[] | unknown | null) {
@@ -266,20 +200,15 @@ async function addMediaAsset(fileInput: File | File[] | unknown | null, type: Me
   width: 100%;
 }
 
-.recipe-media-size-control {
-  max-width: 100%;
-}
-
 .recipe-media-row {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: flex-start;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  align-items: start;
+  gap: 10px;
 }
 
 .recipe-media-item {
-  min-width: min(220px, 100%);
+  min-width: 0;
   min-height: 0;
 }
 

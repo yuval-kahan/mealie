@@ -5,7 +5,8 @@
       v-model="dialog"
       :title="$t('recipe.add-to-list')"
       :icon="$globals.icons.cartCheck"
-      width="70%"
+      width="780"
+      max-width="96vw"
       :loading="shoppingListSelectionLoading"
       :submit-text="$t('recipe.add-to-list')"
       :submit-disabled="!canSubmitShoppingListDialog"
@@ -15,7 +16,7 @@
     >
       <v-card-text
         v-if="shoppingListDialog"
-        class="pb-0"
+        class="shopping-list-target pb-0"
       >
         <v-radio-group
           v-model="shoppingListTarget"
@@ -113,7 +114,7 @@
           {{ $t("shopping-list.replace-existing-list-warning") }}
         </v-alert>
 
-        <div style="max-height: 48vh; overflow-y: auto">
+        <div class="shopping-list-preview-scroll">
           <v-card
             v-for="(recipeSection, recipeSectionIndex) in recipeIngredientSections"
             :key="recipeSection.recipeId + recipeSectionIndex"
@@ -183,38 +184,93 @@
                 >
                   {{ ingredientSection.sectionName }}
                 </v-card-title>
-                <div
-                  :class="$vuetify.display.smAndDown ? '' : 'ingredient-grid'"
-                  :style="$vuetify.display.smAndDown ? '' : { gridTemplateRows: `repeat(${Math.ceil(ingredientSection.ingredients.length / 2)}, min-content)` }"
-                >
+                <div class="shopping-ingredient-list">
                   <v-list-item
                     v-for="(ingredientData, i) in ingredientSection.ingredients"
                     :key="recipeSection.recipeId + recipeSectionIndex + ingredientSectionIndex + i"
+                    class="shopping-ingredient-row"
                     density="compact"
-                    @click="recipeIngredientSections[recipeSectionIndex]
-                      .ingredientSections[ingredientSectionIndex]
-                      .ingredients[i].checked = !recipeIngredientSections[recipeSectionIndex]
-                        .ingredientSections[ingredientSectionIndex]
-                        .ingredients[i]
-                        .checked"
+                    @click="toggleIngredientChecked(recipeSectionIndex, ingredientSectionIndex, i)"
                   >
-                    <v-container class="pa-0 ma-0">
-                      <v-row no-gutters>
-                        <v-checkbox
-                          hide-details
-                          :model-value="ingredientData.checked"
-                          class="pt-0 my-auto py-auto mr-2"
-                          color="secondary"
-                          density="compact"
+                    <template #prepend>
+                      <v-checkbox
+                        hide-details
+                        :model-value="ingredientData.checked"
+                        class="shopping-ingredient-checkbox"
+                        color="secondary"
+                        density="compact"
+                        @click.stop="toggleIngredientChecked(recipeSectionIndex, ingredientSectionIndex, i)"
+                      />
+                    </template>
+                    <v-text-field
+                      v-if="isEditingIngredient(ingredientKey(recipeSectionIndex, ingredientSectionIndex, i))"
+                      v-model="editingIngredientText"
+                      class="shopping-ingredient-edit"
+                      density="compact"
+                      variant="underlined"
+                      hide-details
+                      autofocus
+                      @click.stop
+                      @keydown.enter.stop.prevent="saveIngredientEdit(recipeSectionIndex, ingredientSectionIndex, i)"
+                      @keydown.esc.stop.prevent="cancelIngredientEdit"
+                    />
+                    <div
+                      v-else
+                      class="shopping-ingredient-text"
+                    >
+                      <div :key="`${ingredientData.ingredient?.quantity || 'no-qty'}-${i}`" class="pa-auto my-auto">
+                        <RecipeIngredientListItem
+                          :ingredient="ingredientData.ingredient"
+                          :scale="recipeSection.recipeScale"
                         />
-                        <div :key="`${ingredientData.ingredient?.quantity || 'no-qty'}-${i}`" class="pa-auto my-auto">
-                          <RecipeIngredientListItem
-                            :ingredient="ingredientData.ingredient"
-                            :scale="recipeSection.recipeScale"
-                          />
-                        </div>
-                      </v-row>
-                    </v-container>
+                      </div>
+                    </div>
+                    <template #append>
+                      <div class="shopping-ingredient-actions">
+                        <template v-if="isEditingIngredient(ingredientKey(recipeSectionIndex, ingredientSectionIndex, i))">
+                          <v-btn
+                            icon
+                            size="x-small"
+                            variant="text"
+                            color="primary"
+                            :title="$t('general.save')"
+                            @click.stop="saveIngredientEdit(recipeSectionIndex, ingredientSectionIndex, i)"
+                          >
+                            <v-icon>{{ $globals.icons.save }}</v-icon>
+                          </v-btn>
+                          <v-btn
+                            icon
+                            size="x-small"
+                            variant="text"
+                            :title="$t('general.cancel')"
+                            @click.stop="cancelIngredientEdit"
+                          >
+                            <v-icon>{{ $globals.icons.close }}</v-icon>
+                          </v-btn>
+                        </template>
+                        <template v-else>
+                          <v-btn
+                            icon
+                            size="x-small"
+                            variant="text"
+                            :title="$t('general.edit')"
+                            @click.stop="startIngredientEdit(ingredientData.ingredient, ingredientKey(recipeSectionIndex, ingredientSectionIndex, i))"
+                          >
+                            <v-icon>{{ $globals.icons.edit }}</v-icon>
+                          </v-btn>
+                          <v-btn
+                            icon
+                            size="x-small"
+                            variant="text"
+                            color="error"
+                            :title="$t('general.delete')"
+                            @click.stop="removeIngredient(recipeSectionIndex, ingredientSectionIndex, i)"
+                          >
+                            <v-icon>{{ $globals.icons.delete }}</v-icon>
+                          </v-btn>
+                        </template>
+                      </div>
+                    </template>
                   </v-list-item>
                 </div>
               </div>
@@ -364,6 +420,8 @@ const pendingNewShoppingListName = ref("");
 const duplicateConflictAction = ref<"append" | "overwrite" | null>(null);
 const overwriteExistingList = ref(false);
 const manualShoppingListItems = ref<ShoppingListItemCreate[]>([]);
+const editingIngredientKey = ref("");
+const editingIngredientText = ref("");
 
 const state = reactive({
   shoppingListDialog: false,
@@ -723,6 +781,77 @@ function setShowAllToggled() {
   state.shoppingListShowAllToggled = true;
 }
 
+function ingredientKey(recipeSectionIndex: number, ingredientSectionIndex: number, ingredientIndex: number) {
+  return `${recipeSectionIndex}-${ingredientSectionIndex}-${ingredientIndex}`;
+}
+
+function isEditingIngredient(key: string) {
+  return editingIngredientKey.value === key;
+}
+
+function toggleIngredientChecked(recipeSectionIndex: number, ingredientSectionIndex: number, ingredientIndex: number) {
+  const ingredient = recipeIngredientSections.value[recipeSectionIndex]
+    ?.ingredientSections[ingredientSectionIndex]
+    ?.ingredients[ingredientIndex];
+
+  if (ingredient) {
+    ingredient.checked = !ingredient.checked;
+  }
+}
+
+function ingredientEditableText(ingredient: RecipeIngredient) {
+  return ingredient.note?.trim()
+    || ingredient.food?.name?.trim()
+    || ingredient.display?.trim()
+    || ingredient.originalText?.trim()
+    || "";
+}
+
+function startIngredientEdit(ingredient: RecipeIngredient, key: string) {
+  editingIngredientKey.value = key;
+  editingIngredientText.value = ingredientEditableText(ingredient);
+}
+
+function cancelIngredientEdit() {
+  editingIngredientKey.value = "";
+  editingIngredientText.value = "";
+}
+
+function saveIngredientEdit(recipeSectionIndex: number, ingredientSectionIndex: number, ingredientIndex: number) {
+  const ingredient = recipeIngredientSections.value[recipeSectionIndex]
+    ?.ingredientSections[ingredientSectionIndex]
+    ?.ingredients[ingredientIndex]
+    ?.ingredient;
+
+  if (!ingredient) {
+    cancelIngredientEdit();
+    return;
+  }
+
+  const nextText = editingIngredientText.value.trim();
+  ingredient.note = nextText;
+  ingredient.food = null;
+  ingredient.display = nextText;
+  ingredient.originalText = nextText;
+  cancelIngredientEdit();
+}
+
+function removeIngredient(recipeSectionIndex: number, ingredientSectionIndex: number, ingredientIndex: number) {
+  const ingredientSection = recipeIngredientSections.value[recipeSectionIndex]?.ingredientSections[ingredientSectionIndex];
+  if (!ingredientSection) {
+    return;
+  }
+
+  ingredientSection.ingredients.splice(ingredientIndex, 1);
+  if (!ingredientSection.ingredients.length) {
+    recipeIngredientSections.value[recipeSectionIndex].ingredientSections.splice(ingredientSectionIndex, 1);
+  }
+  if (!recipeIngredientSections.value[recipeSectionIndex].ingredientSections.length) {
+    recipeIngredientSections.value.splice(recipeSectionIndex, 1);
+  }
+  cancelIngredientEdit();
+}
+
 function bulkCheckIngredients(value = true) {
   recipeIngredientSections.value.forEach((recipeSection) => {
     recipeSection.ingredientSections.forEach((ingSection) => {
@@ -865,10 +994,51 @@ async function addRecipesToList() {
 </script>
 
 <style scoped lang="css">
-.ingredient-grid {
-  display: grid;
-  grid-auto-flow: column;
-  grid-template-columns: 1fr 1fr;
-  grid-gap: 0.5rem;
+.shopping-list-target,
+.shopping-list-preview {
+  max-width: 760px;
+}
+
+.shopping-list-preview-scroll {
+  max-height: 52vh;
+  overflow-y: auto;
+  padding-inline-end: 4px;
+}
+
+.shopping-ingredient-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.shopping-ingredient-row {
+  border-radius: 6px;
+  min-height: 40px;
+}
+
+.shopping-ingredient-row :deep(.v-list-item__prepend) {
+  align-self: center;
+}
+
+.shopping-ingredient-checkbox {
+  margin-inline-end: 6px;
+}
+
+.shopping-ingredient-text,
+.shopping-ingredient-edit {
+  min-width: 0;
+  width: 100%;
+}
+
+.shopping-ingredient-actions {
+  align-items: center;
+  display: flex;
+  gap: 2px;
+  opacity: 0.7;
+}
+
+.shopping-ingredient-row:hover .shopping-ingredient-actions,
+.shopping-ingredient-row:focus-within .shopping-ingredient-actions {
+  opacity: 1;
 }
 </style>

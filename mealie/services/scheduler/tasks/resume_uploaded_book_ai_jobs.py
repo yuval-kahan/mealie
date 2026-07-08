@@ -92,6 +92,8 @@ async def _run_uploaded_book_ai_job(operation: str, book_id: UUID) -> None:
                     book.extraction_pages_per_chunk or 10,
                     book.extraction_translate_language or "Hebrew",
                     resume=True,
+                    page_start=book.extraction_page_start,
+                    page_end=book.extraction_page_end,
                 )
             else:
                 service = UploadedBookTranslator(repos, private_user, household, translator)
@@ -101,6 +103,8 @@ async def _run_uploaded_book_ai_job(operation: str, book_id: UUID) -> None:
                     book.translation_pages_per_chunk or 10,
                     book.translation_language or "Hebrew",
                     resume=True,
+                    page_start=book.translation_page_start,
+                    page_end=book.translation_page_end,
                 )
     except Exception as e:
         logger.error("Failed to resume uploaded book %s job for book %s", operation, book_id)

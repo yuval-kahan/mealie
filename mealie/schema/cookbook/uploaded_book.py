@@ -23,6 +23,8 @@ class UploadedBookOut(MealieModel):
     translation_language: str | None = None
     translation_status: str = "not_started"
     translation_pages_per_chunk: int = 10
+    translation_page_start: int | None = None
+    translation_page_end: int | None = None
     translation_total_chunks: int = 0
     translation_completed_chunks: int = 0
     translation_failed_chunks: int = 0
@@ -34,6 +36,8 @@ class UploadedBookOut(MealieModel):
     extraction_status: str = "not_started"
     extraction_pages_per_chunk: int = 10
     extraction_translate_language: str | None = None
+    extraction_page_start: int | None = None
+    extraction_page_end: int | None = None
     extraction_total_chunks: int = 0
     extraction_completed_chunks: int = 0
     extraction_failed_chunks: int = 0
@@ -53,8 +57,12 @@ class UploadedBookOut(MealieModel):
 class UploadedBookExtractRequest(MealieModel):
     pages_per_chunk: int = Field(10, ge=1, le=100)
     translate_language: str = "Hebrew"
+    page_start: int | None = Field(None, ge=1)
+    page_end: int | None = Field(None, ge=1)
 
 
 class UploadedBookTranslateRequest(MealieModel):
     pages_per_chunk: int = Field(10, ge=1, le=100)
     target_language: str = Field("Hebrew", min_length=2, max_length=80)
+    page_start: int | None = Field(None, ge=1)
+    page_end: int | None = Field(None, ge=1)

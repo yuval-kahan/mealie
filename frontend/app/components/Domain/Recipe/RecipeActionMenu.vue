@@ -1,6 +1,7 @@
 <template>
   <v-toolbar
     class="fixed-bar mt-0"
+    :class="{ 'fixed-bar--inline': inline }"
     style="z-index: 2; position: sticky; background: transparent; box-shadow: none"
     density="compact"
     elevation="0"
@@ -18,7 +19,7 @@
       </v-card-text>
     </BaseDialog>
 
-    <v-spacer />
+    <v-spacer v-if="!inline" />
     <div v-if="!open" class="custom-btn-group ma-1">
       <RecipeFavoriteBadge v-if="loggedIn" color="info" button-style :recipe-id="recipe.id!" show-always />
       <RecipeTimelineBadge
@@ -124,11 +125,13 @@ interface Props {
   loggedIn?: boolean;
   recipeId: string;
   canEdit?: boolean;
+  inline?: boolean;
 }
 withDefaults(defineProps<Props>(), {
   recipeScale: 1,
   loggedIn: false,
   canEdit: false,
+  inline: false,
 });
 
 const emit = defineEmits(["print", "input", "save", "delete", "close", "json", "edit", "renamed"]);
@@ -219,5 +222,22 @@ function emitDelete() {
 
 .fixed-bar-mobile {
   top: 1.5em !important;
+}
+
+.fixed-bar--inline {
+  position: static !important;
+  top: auto !important;
+  width: auto;
+  height: auto;
+  min-height: 0 !important;
+  padding: 0;
+  overflow: visible;
+}
+
+.fixed-bar--inline :deep(.v-toolbar__content) {
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 0;
+  overflow: visible;
 }
 </style>

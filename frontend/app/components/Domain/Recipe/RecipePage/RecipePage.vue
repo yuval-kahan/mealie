@@ -20,105 +20,115 @@
       @update:model-value="toggleIsParsing"
       @save="saveParsedIngredients"
     />
-    <v-container v-show="!isCookMode" key="recipe-page" class="px-0" :class="{ 'pa-0': $vuetify.display.smAndDown }">
+    <v-container
+      v-show="!isCookMode"
+      key="recipe-page"
+      fluid
+      class="pa-0"
+    >
       <v-card flat class="d-print-none">
-        <RecipePageHeader
-          :recipe="recipe"
-          :recipe-scale="scale"
-          :landscape="landscape"
-          @save="saveRecipe"
-          @delete="deleteRecipe"
-          @close="closeEditor"
-          @renamed="handleRecipeRenamed"
-        />
-        <RecipeMediaAssets
-          v-if="!isEditJSON"
-          v-model="recipe.assets"
-          :recipe="recipe"
-          :edit="isEditForm"
-          @asset-uploaded="recipe.settings.showAssets = true"
-        />
-        <RecipeJsonEditor
-          v-if="isEditJSON"
-          v-model="recipe"
-          class="mt-10"
-          mode="text"
-          :main-menu-bar="false"
-        />
-        <v-card-text v-else>
-          <!--
-            This is where most of the main content is rendered. Some components include state for both Edit and View modes
-            which is why some have explicit v-if statements and others use the composition API to determine and manage
-            the shared state internally.
-
-            The global recipe object is shared down the tree of components and _is_ mutated by child components. This is
-            some-what of a hack of the system and goes against the principles of Vue, but it _does_ seem to work and streamline
-            a significant amount of prop management. When we move to Vue 3 and have access to some of the newer API's the plan to update this
-            data management and mutation system we're using.
-          -->
-          <div>
-            <RecipePageInfoEditor v-if="isEditMode" v-model="recipe" />
-          </div>
-          <div>
-            <RecipePageEditorToolbar v-if="isEditForm" v-model="recipe" />
-          </div>
-          <div>
-            <RecipePageIngredientEditor v-if="isEditForm" v-model="recipe" />
-          </div>
-          <div>
-            <RecipePageScale v-model="scale" :recipe="recipe" />
-          </div>
-
-          <!--
-            This section contains the 2 column layout for the recipe steps and other content.
-          -->
-          <v-row>
+        <RecipePageHeroImage :recipe="recipe" />
+        <div class="recipe-page-body">
+          <RecipePageHeader
+            :recipe="recipe"
+            :recipe-scale="scale"
+            :landscape="landscape"
+            @save="saveRecipe"
+            @delete="deleteRecipe"
+            @close="closeEditor"
+            @renamed="handleRecipeRenamed"
+          />
+          <RecipeMediaAssets
+            v-if="!isEditJSON"
+            v-model="recipe.assets"
+            :recipe="recipe"
+            :edit="isEditForm"
+            @asset-uploaded="recipe.settings.showAssets = true"
+          />
+          <RecipeJsonEditor
+            v-if="isEditJSON"
+            v-model="recipe"
+            class="mt-10"
+            mode="text"
+            :main-menu-bar="false"
+          />
+          <v-card-text v-else>
             <!--
-              The left column is conditionally rendered based on cook mode.
+              This is where most of the main content is rendered. Some components include state for both Edit and View modes
+              which is why some have explicit v-if statements and others use the composition API to determine and manage
+              the shared state internally.
+
+              The global recipe object is shared down the tree of components and _is_ mutated by child components. This is
+              some-what of a hack of the system and goes against the principles of Vue, but it _does_ seem to work and streamline
+              a significant amount of prop management. When we move to Vue 3 and have access to some of the newer API's the plan to update this
+              data management and mutation system we're using.
             -->
-            <v-col
-              v-if="!isCookMode || isEditForm"
-              cols="12"
-              sm="12"
-              md="4"
-              :class="$vuetify.display.mdAndUp ? 'border-e-thin' : null"
-            >
-              <RecipePageIngredientToolsView v-if="!isEditForm" :recipe="recipe" :scale="scale" class="pr-2" />
-              <RecipePageOrganizers v-if="$vuetify.display.mdAndUp" v-model="recipe" class="pr-2" @item-selected="chipClicked" />
-            </v-col>
+            <div>
+              <RecipePageInfoEditor v-if="isEditMode" v-model="recipe" />
+            </div>
+            <div>
+              <RecipePageEditorToolbar v-if="isEditForm" v-model="recipe" />
+            </div>
+            <div>
+              <RecipePageIngredientEditor v-if="isEditForm" v-model="recipe" />
+            </div>
+            <div>
+              <RecipePageScale v-model="scale" :recipe="recipe" />
+            </div>
+
             <!--
-              the right column is always rendered, but it's layout width is determined by where the left column is
-              rendered.
+              This section contains the 2 column layout for the recipe steps and other content.
             -->
-            <v-col cols="12" sm="12" :md="8 + (isCookMode ? 1 : 0) * 4">
-              <RecipePageInstructions
-                v-model="recipe.recipeInstructions"
-                v-model:assets="recipe.assets"
-                :recipe="recipe"
-                :scale="scale"
-              />
-              <div v-if="isEditForm" class="d-flex">
-                <RecipeDialogBulkAdd class="ml-auto my-2 mr-1" @bulk-data="addStep" />
-                <BaseButton class="my-2" @click="addStep()">
-                  {{ $t("general.add") }}
-                </BaseButton>
-              </div>
-              <div v-if="!$vuetify.display.mdAndUp">
-                <RecipePageOrganizers v-model="recipe" />
-              </div>
-              <RecipeNotes v-model="recipe.notes" :edit="isEditForm" />
-            </v-col>
-          </v-row>
-          <RecipePageFooter v-model="recipe" />
-        </v-card-text>
+            <v-row>
+              <!--
+                The left column is conditionally rendered based on cook mode.
+              -->
+              <v-col
+                v-if="!isCookMode || isEditForm"
+                cols="12"
+                sm="12"
+                md="4"
+                :class="$vuetify.display.mdAndUp ? 'border-e-thin' : null"
+              >
+                <RecipePageIngredientToolsView v-if="!isEditForm" :recipe="recipe" :scale="scale" class="pr-2" />
+                <RecipePageOrganizers v-if="$vuetify.display.mdAndUp" v-model="recipe" class="pr-2" @item-selected="chipClicked" />
+              </v-col>
+              <!--
+                the right column is always rendered, but it's layout width is determined by where the left column is
+                rendered.
+              -->
+              <v-col cols="12" sm="12" :md="8 + (isCookMode ? 1 : 0) * 4">
+                <RecipePageInstructions
+                  v-model="recipe.recipeInstructions"
+                  v-model:assets="recipe.assets"
+                  :recipe="recipe"
+                  :scale="scale"
+                />
+                <div v-if="isEditForm" class="d-flex">
+                  <RecipeDialogBulkAdd class="ml-auto my-2 mr-1" @bulk-data="addStep" />
+                  <BaseButton class="my-2" @click="addStep()">
+                    {{ $t("general.add") }}
+                  </BaseButton>
+                </div>
+                <div v-if="!$vuetify.display.mdAndUp">
+                  <RecipePageOrganizers v-model="recipe" />
+                </div>
+                <RecipeNotes v-model="recipe.notes" :edit="isEditForm" />
+              </v-col>
+            </v-row>
+            <RecipePageFooter v-model="recipe" />
+          </v-card-text>
+        </div>
       </v-card>
-      <WakelockSwitch />
-      <RecipePageComments
-        v-if="!recipe.settings?.disableComments && !isEditForm && !isCookMode"
-        v-model="recipe"
-        class="px-1 my-4 d-print-none"
-      />
-      <RecipePrintContainer :recipe="recipe" :scale="scale" />
+      <div class="recipe-page-body">
+        <WakelockSwitch />
+        <RecipePageComments
+          v-if="!recipe.settings?.disableComments && !isEditForm && !isCookMode"
+          v-model="recipe"
+          class="px-1 my-4 d-print-none"
+        />
+        <RecipePrintContainer :recipe="recipe" :scale="scale" />
+      </div>
     </v-container>
     <!-- Cook mode displayes two columns with ingredients and instructions side by side, each being scrolled individually, allowing to view both at the same time -->
     <!-- The calc is to account for the navabar height (48px) -->
@@ -205,6 +215,7 @@ import RecipeIngredients from "../RecipeIngredients.vue";
 import RecipePageEditorToolbar from "./RecipePageParts/RecipePageEditorToolbar.vue";
 import RecipePageFooter from "./RecipePageParts/RecipePageFooter.vue";
 import RecipePageHeader from "./RecipePageParts/RecipePageHeader.vue";
+import RecipePageHeroImage from "./RecipePageParts/RecipePageHeroImage.vue";
 import RecipePageIngredientEditor from "./RecipePageParts/RecipePageIngredientEditor.vue";
 import RecipePageIngredientToolsView from "./RecipePageParts/RecipePageIngredientToolsView.vue";
 import RecipePageInstructions from "./RecipePageParts/RecipePageInstructions.vue";
@@ -519,5 +530,11 @@ const scale = ref(1);
 
 .list-group-item i {
   cursor: pointer;
+}
+
+.recipe-page-body {
+  width: 100%;
+  max-width: 1320px;
+  margin-inline: auto;
 }
 </style>

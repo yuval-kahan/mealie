@@ -329,6 +329,21 @@ class UploadedBookRecipeExtractor(BaseService):
 
         return self._text_to_pseudo_pages(path.read_text(encoding="utf-8", errors="ignore"))
 
+    @staticmethod
+    def _filter_pages_by_range(
+        pages: list[BookTextPage],
+        page_start: int | None = None,
+        page_end: int | None = None,
+    ) -> list[BookTextPage]:
+        if page_start is not None and page_end is not None and page_end < page_start:
+            raise ValueError("End page must be greater than or equal to start page")
+
+        return [
+            page
+            for page in pages
+            if (page_start is None or page.number >= page_start) and (page_end is None or page.number <= page_end)
+        ]
+
     def _build_chunks(self, pages: list[BookTextPage], pages_per_chunk: int) -> list[BookTextChunk]:
         chunks: list[BookTextChunk] = []
         current_pages: list[BookTextPage] = []
@@ -788,6 +803,8 @@ class UploadedBookRecipeExtractor(BaseService):
         pages_per_chunk: int = 10,
         translate_language: str = "Hebrew",
         resume: bool = False,
+        page_start: int | None = None,
+        page_end: int | None = None,
     ) -> None:
         if not await self._claim_job("extraction", book_id):
             self.logger.info(f"Uploaded book extraction job {book_id} is already running")
@@ -804,6 +821,8 @@ class UploadedBookRecipeExtractor(BaseService):
             book.extraction_status = EXTRACTION_PROCESSING
             book.extraction_pages_per_chunk = pages_per_chunk
             book.extraction_translate_language = translate_language
+            book.extraction_page_start = page_start
+            book.extraction_page_end = page_end
             if not resume:
                 book.extraction_total_chunks = 0
                 book.extraction_completed_chunks = 0
@@ -822,9 +841,14 @@ class UploadedBookRecipeExtractor(BaseService):
             if not pages:
                 raise ValueError("No extractable text was found in this book")
 
+            pages = self._filter_pages_by_range(pages, page_start, page_end)
+            if not pages:
+                raise ValueError("No extractable text was found in the selected page range")
+
             chunks = self._build_chunks(pages, pages_per_chunk)
             if not chunks:
                 raise ValueError("No chunks could be created from this book")
+            del pages
 
             chunk_states = self._initial_chunk_states(book, chunks, preserve_incomplete_attempts=resume)
             self._save_progress(book, chunk_states, EXTRACTION_PROCESSING)
@@ -1270,6 +1294,15 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
         title = html.escape(f"{book.name} - {target_language}")
         source = html.escape(book.original_file_name)
         language = html.escape(target_language)
+        if book.translation_page_start and book.translation_page_end:
+            page_range = f"Pages {book.translation_page_start}-{book.translation_page_end}"
+        elif book.translation_page_start:
+            page_range = f"From page {book.translation_page_start}"
+        elif book.translation_page_end:
+            page_range = f"Through page {book.translation_page_end}"
+        else:
+            page_range = "Whole book"
+        page_range = html.escape(page_range)
         page_sections: list[str] = []
 
         for page_number, text in translated_pages:
@@ -1343,7 +1376,7 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
 <body>
   <main>
     <h1>{title}</h1>
-    <div class="meta">Translated to {language} from {source}</div>
+    <div class="meta">Translated to {language} from {source} · {page_range}</div>
     {"".join(page_sections)}
   </main>
 </body>
@@ -1384,6 +1417,8 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
             translated_from_book_id=book.id,
             translation_language=target_language,
             translation_status=TRANSLATION_COMPLETED,
+            translation_page_start=book.translation_page_start,
+            translation_page_end=book.translation_page_end,
             translation_completed_at=get_utc_now(),
             session=self.repos.session,
         )
@@ -1400,6 +1435,8 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
         pages_per_chunk: int = 10,
         target_language: str = "Hebrew",
         resume: bool = False,
+        page_start: int | None = None,
+        page_end: int | None = None,
     ) -> None:
         if not await self._claim_job("translation", book_id):
             self.logger.info(f"Uploaded book translation job {book_id} is already running")
@@ -1417,6 +1454,8 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
             book.translation_status = TRANSLATION_PROCESSING
             book.translation_language = target_language
             book.translation_pages_per_chunk = pages_per_chunk
+            book.translation_page_start = page_start
+            book.translation_page_end = page_end
             if not resume:
                 book.translation_total_chunks = 0
                 book.translation_completed_chunks = 0
@@ -1433,9 +1472,14 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
             if not pages:
                 raise ValueError("No extractable text was found in this book")
 
+            pages = self._filter_pages_by_range(pages, page_start, page_end)
+            if not pages:
+                raise ValueError("No extractable text was found in the selected page range")
+
             chunks = self._build_chunks(pages, pages_per_chunk)
             if not chunks:
                 raise ValueError("No chunks could be created from this book")
+            del pages
 
             work_dir = (
                 self._translated_chunks_dir(uploaded_books_root, book, target_language)

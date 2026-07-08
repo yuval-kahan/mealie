@@ -104,7 +104,19 @@
           <v-btn
             icon
             variant="plain"
-            @click.prevent="toggleOwnerDialog(list)"
+            :title="$t('general.copy')"
+            :aria-label="$t('general.copy')"
+            :loading="isCopyingShoppingList(list.id)"
+            @click.prevent.stop="copyShoppingListById(list.id)"
+          >
+            <v-icon>
+              {{ $globals.icons.contentCopy }}
+            </v-icon>
+          </v-btn>
+          <v-btn
+            icon
+            variant="plain"
+            @click.prevent.stop="toggleOwnerDialog(list)"
           >
             <v-icon>
               {{ $globals.icons.user }}
@@ -113,7 +125,7 @@
           <v-btn
             icon
             variant="plain"
-            @click.prevent="openDelete(list.id)"
+            @click.prevent.stop="openDelete(list.id)"
           >
             <v-icon>
               {{ $globals.icons.delete }}
@@ -131,6 +143,7 @@ import { useUserApi } from "~/composables/api";
 import { useAsyncKey } from "~/composables/use-utils";
 import { useShoppingListPreferences } from "~/composables/use-users/preferences";
 import { alert } from "~/composables/use-toast";
+import { useShoppingListCopy } from "~/composables/shopping-list-page/sub-composables/use-shopping-list-copy";
 import type { UserOut } from "~/lib/api/types/user";
 
 const auth = useMealieAuth();
@@ -138,6 +151,8 @@ const i18n = useI18n();
 const ready = ref(false);
 const userApi = useUserApi();
 const route = useRoute();
+const { copyShoppingList } = useShoppingListCopy();
+const copyingShoppingListIds = ref<Set<string>>(new Set());
 
 useSeoMeta({
   title: i18n.t("shopping-list.shopping-list"),
@@ -203,6 +218,41 @@ async function fetchShoppingLists() {
 
 async function refresh() {
   shoppingLists.value = await fetchShoppingLists();
+}
+
+function setShoppingListCopying(id: string, copying: boolean) {
+  const next = new Set(copyingShoppingListIds.value);
+  if (copying) {
+    next.add(id);
+  }
+  else {
+    next.delete(id);
+  }
+  copyingShoppingListIds.value = next;
+}
+
+function isCopyingShoppingList(id: string) {
+  return copyingShoppingListIds.value.has(id);
+}
+
+async function copyShoppingListById(id: string) {
+  if (isCopyingShoppingList(id)) {
+    return;
+  }
+
+  setShoppingListCopying(id, true);
+  try {
+    const { data } = await userApi.shopping.lists.getOne(id);
+    if (data) {
+      copyShoppingList(data);
+    }
+    else {
+      alert.error(i18n.t("general.clipboard-copy-failure"));
+    }
+  }
+  finally {
+    setShoppingListCopying(id, false);
+  }
 }
 
 async function createOne() {

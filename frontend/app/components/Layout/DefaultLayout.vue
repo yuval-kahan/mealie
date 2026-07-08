@@ -45,7 +45,7 @@
         :loading="uploadedBookUploading"
         :submit-text="$t('cookbook.upload-book')"
         :submit-icon="$globals.icons.upload"
-        :submit-disabled="!uploadedBookFiles.length"
+        :submit-disabled="!uploadedBookFiles.length || (uploadedBookAction !== 'none' && uploadedBookPageRangeInvalid)"
         @submit="uploadBook"
         @close="resetUploadBookForm"
       >
@@ -137,6 +137,40 @@
             density="comfortable"
             :label="$t('cookbook.translation-language')"
           />
+          <div v-if="uploadedBookAction !== 'none'">
+            <v-row dense>
+              <v-col
+                cols="12"
+                sm="6"
+              >
+                <v-text-field
+                  v-model.number="uploadedBookPageStart"
+                  type="number"
+                  min="1"
+                  variant="outlined"
+                  density="comfortable"
+                  clearable
+                  :label="$t('cookbook.page-start')"
+                />
+              </v-col>
+              <v-col
+                cols="12"
+                sm="6"
+              >
+                <v-text-field
+                  v-model.number="uploadedBookPageEnd"
+                  type="number"
+                  min="1"
+                  variant="outlined"
+                  density="comfortable"
+                  clearable
+                  :label="$t('cookbook.page-end')"
+                  :error="uploadedBookPageRangeInvalid"
+                  :error-messages="uploadedBookPageRangeInvalid ? $t('cookbook.page-range-invalid') : ''"
+                />
+              </v-col>
+            </v-row>
+          </div>
           <v-text-field
             v-model.number="uploadedBookPagesPerChunk"
             type="number"
@@ -160,7 +194,7 @@
         :loading="uploadedBookTranslationStarting"
         :submit-text="$t('cookbook.start-translation')"
         :submit-icon="$globals.icons.translate"
-        :submit-disabled="!selectedUploadedBook || isUploadedBookExtracting(selectedUploadedBook) || isUploadedBookTranslating(selectedUploadedBook)"
+        :submit-disabled="!selectedUploadedBook || isUploadedBookExtracting(selectedUploadedBook) || isUploadedBookTranslating(selectedUploadedBook) || uploadedBookPageRangeInvalid"
         @submit="startSelectedUploadedBookTranslation"
       >
         <v-card-text class="pt-4">
@@ -177,6 +211,38 @@
             density="comfortable"
             :label="$t('cookbook.translation-language')"
           />
+          <v-row dense>
+            <v-col
+              cols="12"
+              sm="6"
+            >
+              <v-text-field
+                v-model.number="uploadedBookPageStart"
+                type="number"
+                min="1"
+                variant="outlined"
+                density="comfortable"
+                clearable
+                :label="$t('cookbook.page-start')"
+              />
+            </v-col>
+            <v-col
+              cols="12"
+              sm="6"
+            >
+              <v-text-field
+                v-model.number="uploadedBookPageEnd"
+                type="number"
+                min="1"
+                variant="outlined"
+                density="comfortable"
+                clearable
+                :label="$t('cookbook.page-end')"
+                :error="uploadedBookPageRangeInvalid"
+                :error-messages="uploadedBookPageRangeInvalid ? $t('cookbook.page-range-invalid') : ''"
+              />
+            </v-col>
+          </v-row>
           <v-text-field
             v-model.number="uploadedBookPagesPerChunk"
             type="number"
@@ -249,7 +315,7 @@
         :loading="uploadedBookExtractionStarting"
         :submit-text="$t('cookbook.start-extraction')"
         :submit-icon="$globals.icons.robot"
-        :submit-disabled="!selectedUploadedBook || isUploadedBookExtracting(selectedUploadedBook) || isUploadedBookTranslating(selectedUploadedBook)"
+        :submit-disabled="!selectedUploadedBook || isUploadedBookExtracting(selectedUploadedBook) || isUploadedBookTranslating(selectedUploadedBook) || uploadedBookPageRangeInvalid"
         @submit="startSelectedUploadedBookExtraction"
       >
         <v-card-text class="pt-4">
@@ -259,6 +325,38 @@
           >
             {{ selectedUploadedBook.name }}
           </div>
+          <v-row dense>
+            <v-col
+              cols="12"
+              sm="6"
+            >
+              <v-text-field
+                v-model.number="uploadedBookPageStart"
+                type="number"
+                min="1"
+                variant="outlined"
+                density="comfortable"
+                clearable
+                :label="$t('cookbook.page-start')"
+              />
+            </v-col>
+            <v-col
+              cols="12"
+              sm="6"
+            >
+              <v-text-field
+                v-model.number="uploadedBookPageEnd"
+                type="number"
+                min="1"
+                variant="outlined"
+                density="comfortable"
+                clearable
+                :label="$t('cookbook.page-end')"
+                :error="uploadedBookPageRangeInvalid"
+                :error-messages="uploadedBookPageRangeInvalid ? $t('cookbook.page-range-invalid') : ''"
+              />
+            </v-col>
+          </v-row>
           <v-text-field
             v-model.number="uploadedBookPagesPerChunk"
             type="number"
@@ -554,6 +652,7 @@ import type { UploadedBook } from "~/lib/api/types/uploaded-book";
 import type { ShoppingListSummary } from "~/lib/api/types/household";
 import { useUserApi } from "~/composables/api/api-client";
 import { alert } from "~/composables/use-toast";
+import { useShoppingListCopy } from "~/composables/shopping-list-page/sub-composables/use-shopping-list-copy";
 
 const i18n = useI18n();
 const { $globals } = useNuxtApp();
@@ -562,6 +661,7 @@ const auth = useMealieAuth();
 const { isOwnGroup } = useLoggedInState();
 const { group } = useGroupSelf();
 const api = useUserApi(i18n);
+const { copyShoppingList } = useShoppingListCopy();
 
 const route = useRoute();
 const groupSlug = computed(() => route.params.groupSlug as string || auth.user.value?.groupSlug || "");
@@ -669,6 +769,8 @@ const uploadedBookUploading = ref(false);
 const uploadedBooks = ref<UploadedBook[]>([]);
 const uploadedBookAction = ref<"none" | "extract" | "translate">("none");
 const uploadedBookPagesPerChunk = ref(10);
+const uploadedBookPageStart = ref<number | null>(null);
+const uploadedBookPageEnd = ref<number | null>(null);
 const uploadedBookExtractionDialog = ref(false);
 const uploadedBookExtractionStarting = ref(false);
 const uploadedBookTranslationDialog = ref(false);
@@ -678,6 +780,7 @@ const uploadedBookDeleting = ref(false);
 const uploadedBookTargetLanguage = ref(defaultUploadedBookTargetLanguage());
 const selectedUploadedBook = ref<UploadedBook | null>(null);
 const shoppingLists = ref<ShoppingListSummary[]>([]);
+const copyingShoppingListIds = ref<Set<string>>(new Set());
 const backgroundJobsDialog = ref(false);
 const backgroundJobCancelling = ref<Set<string>>(new Set());
 const emptyCategoryIds = ref<Set<string>>(new Set());
@@ -762,6 +865,36 @@ const uploadedBookAccept = [
   "application/epub+zip",
 ].join(",");
 const hasMultipleUploadedBookFiles = computed(() => uploadedBookFiles.value.length > 1);
+const uploadedBookNormalizedPageStart = computed(() => normalizeUploadedBookPage(uploadedBookPageStart.value));
+const uploadedBookNormalizedPageEnd = computed(() => normalizeUploadedBookPage(uploadedBookPageEnd.value));
+const uploadedBookPageRangeInvalid = computed(() => {
+  const pageStart = uploadedBookNormalizedPageStart.value;
+  const pageEnd = uploadedBookNormalizedPageEnd.value;
+  return pageStart !== null && pageEnd !== null && pageEnd < pageStart;
+});
+
+function normalizeUploadedBookPage(value: number | string | null | undefined) {
+  const page = Number(value);
+  return Number.isFinite(page) && page >= 1 ? Math.floor(page) : null;
+}
+
+function uploadedBookPageRangeText(pageStart?: number | null, pageEnd?: number | null) {
+  if (pageStart && pageEnd) {
+    return i18n.t("cookbook.pages-range", { start: pageStart, end: pageEnd });
+  }
+  if (pageStart) {
+    return i18n.t("cookbook.pages-from", { start: pageStart });
+  }
+  if (pageEnd) {
+    return i18n.t("cookbook.pages-to", { end: pageEnd });
+  }
+  return i18n.t("cookbook.all-pages");
+}
+
+function uploadedBookStatusWithRange(text: string, rangeLabel: string) {
+  return `${text} · ${rangeLabel}`;
+}
+
 onMounted(() => {
   sidebar.value = display.lgAndUp.value;
   window.addEventListener(ORGANIZERS_UPDATED_EVENT, handleOrganizersUpdated);
@@ -932,6 +1065,8 @@ function setUploadedBookFiles(files: File[]) {
   if (supportedFiles.length > 1) {
     uploadedBookName.value = "";
     uploadedBookAction.value = "none";
+    uploadedBookPageStart.value = null;
+    uploadedBookPageEnd.value = null;
   }
 }
 
@@ -966,6 +1101,15 @@ const shoppingListLinks = computed<SideBarLink[]>(() => {
     icon: $globals.icons.formatListCheck,
     title: list.name || i18n.t("shopping-list.shopping-list"),
     to: `/shopping-lists/${list.id}`,
+    actions: [
+      {
+        key: "copy",
+        icon: $globals.icons.contentCopy,
+        title: i18n.t("general.copy"),
+        loading: copyingShoppingListIds.value.has(list.id),
+        onClick: () => copyShoppingListById(list.id),
+      },
+    ],
     restricted: true,
   }));
 });
@@ -1062,6 +1206,8 @@ function resetUploadBookForm() {
   uploadedBookName.value = "";
   uploadedBookAction.value = "none";
   uploadedBookPagesPerChunk.value = 10;
+  uploadedBookPageStart.value = null;
+  uploadedBookPageEnd.value = null;
   uploadedBookTargetLanguage.value = defaultUploadedBookTargetLanguage();
 }
 
@@ -1072,6 +1218,7 @@ async function refreshUploadedBooks() {
 
   if (!isOwnGroup.value || !auth.user.value) {
     uploadedBooks.value = [];
+    clearUploadedBookRefreshTimer();
     return;
   }
 
@@ -1099,9 +1246,49 @@ async function refreshShoppingLists() {
   shoppingLists.value = data?.items || [];
 }
 
+function setShoppingListCopying(id: string, copying: boolean) {
+  const next = new Set(copyingShoppingListIds.value);
+  if (copying) {
+    next.add(id);
+  }
+  else {
+    next.delete(id);
+  }
+  copyingShoppingListIds.value = next;
+}
+
+function isCopyingShoppingList(id: string) {
+  return copyingShoppingListIds.value.has(id);
+}
+
+async function copyShoppingListById(id: string) {
+  if (isCopyingShoppingList(id)) {
+    return;
+  }
+
+  setShoppingListCopying(id, true);
+  try {
+    const { data } = await api.shopping.lists.getOne(id);
+    if (data) {
+      copyShoppingList(data);
+    }
+    else {
+      alert.error(i18n.t("general.clipboard-copy-failure"));
+    }
+  }
+  finally {
+    setShoppingListCopying(id, false);
+  }
+}
+
 async function uploadBook() {
   const files = uploadedBookFiles.value;
   if (!files.length) {
+    return;
+  }
+
+  if (uploadedBookAction.value !== "none" && uploadedBookPageRangeInvalid.value) {
+    alert.error(i18n.t("cookbook.page-range-invalid"));
     return;
   }
 
@@ -1243,7 +1430,7 @@ function uploadedBookBackgroundJob(book: UploadedBook, type: BackgroundJobType):
   const active = ["processing", "retrying"].includes(status);
   const error = isExtraction ? book.extractionError : book.translationError;
   const stale = active && isBackgroundJobStale(book);
-  const detailText = isExtraction
+  const detailTextBase = isExtraction
     ? i18n.t("cookbook.background-job-extraction-detail", {
         found: book.extractionRecipesFound,
         created: book.extractionRecipesCreated,
@@ -1255,6 +1442,14 @@ function uploadedBookBackgroundJob(book: UploadedBook, type: BackgroundJobType):
         failed,
         retries,
       });
+  const rangeText = uploadedBookPageRangeText(
+    isExtraction ? book.extractionPageStart : book.translationPageStart,
+    isExtraction ? book.extractionPageEnd : book.translationPageEnd,
+  );
+  const detailText = uploadedBookStatusWithRange(
+    detailTextBase,
+    i18n.t("cookbook.background-job-page-range", { range: rangeText }),
+  );
 
   return {
     key: `${type}-${book.id}`,
@@ -1354,10 +1549,14 @@ async function retryBackgroundJob(job: BackgroundJob) {
 
   if (job.type === "extraction") {
     uploadedBookTargetLanguage.value = job.book.extractionTranslateLanguage || defaultUploadedBookTargetLanguage();
+    uploadedBookPageStart.value = job.book.extractionPageStart || null;
+    uploadedBookPageEnd.value = job.book.extractionPageEnd || null;
     await startUploadedBookExtraction(job.book, false);
   }
   else {
     uploadedBookTargetLanguage.value = job.book.translationLanguage || defaultUploadedBookTargetLanguage();
+    uploadedBookPageStart.value = job.book.translationPageStart || null;
+    uploadedBookPageEnd.value = job.book.translationPageEnd || null;
     await startUploadedBookTranslation(job.book, false);
   }
 }
@@ -1405,72 +1604,82 @@ function uploadedBookTranslationActionTitle(book: UploadedBook) {
 }
 
 function uploadedBookExtractionStatusText(book: UploadedBook) {
+  const rangeText = i18n.t("cookbook.last-extraction-range", {
+    range: uploadedBookPageRangeText(book.extractionPageStart, book.extractionPageEnd),
+  });
+
   if (isUploadedBookExtracting(book)) {
-    return i18n.t("cookbook.extraction-progress", {
+    return uploadedBookStatusWithRange(i18n.t("cookbook.extraction-progress", {
       completed: book.extractionCompletedChunks,
       total: book.extractionTotalChunks || "?",
       created: book.extractionRecipesCreated,
       failed: book.extractionFailedChunks || 0,
       retries: book.extractionRetryCount || 0,
-    });
+    }), rangeText);
   }
   if (book.extractionStatus === "completed") {
-    return i18n.t("cookbook.extraction-completed", {
+    return uploadedBookStatusWithRange(i18n.t("cookbook.extraction-completed", {
       found: book.extractionRecipesFound,
       created: book.extractionRecipesCreated,
-    });
+    }), rangeText);
   }
   if (book.extractionStatus === "partial_failed") {
-    return i18n.t("cookbook.extraction-partial-failed", {
+    return uploadedBookStatusWithRange(i18n.t("cookbook.extraction-partial-failed", {
       completed: book.extractionCompletedChunks,
       total: book.extractionTotalChunks || "?",
       failed: book.extractionFailedChunks || 0,
       created: book.extractionRecipesCreated,
-    });
+    }), rangeText);
   }
   if (book.extractionStatus === "failed") {
-    return book.extractionError || i18n.t("cookbook.extraction-failed");
+    return uploadedBookStatusWithRange(book.extractionError || i18n.t("cookbook.extraction-failed"), rangeText);
   }
   if (book.extractionStatus === "cancelled") {
-    return i18n.t("cookbook.extraction-cancelled");
+    return uploadedBookStatusWithRange(i18n.t("cookbook.extraction-cancelled"), rangeText);
   }
-  return i18n.t("cookbook.extraction-not-started");
+  return uploadedBookStatusWithRange(i18n.t("cookbook.extraction-not-started"), rangeText);
 }
 
 function uploadedBookTranslationStatusText(book: UploadedBook) {
+  const rangeText = i18n.t("cookbook.last-translation-range", {
+    range: uploadedBookPageRangeText(book.translationPageStart, book.translationPageEnd),
+  });
+
   if (isUploadedBookTranslating(book)) {
-    return i18n.t("cookbook.translation-progress", {
+    return uploadedBookStatusWithRange(i18n.t("cookbook.translation-progress", {
       completed: book.translationCompletedChunks,
       total: book.translationTotalChunks || "?",
       failed: book.translationFailedChunks || 0,
       retries: book.translationRetryCount || 0,
-    });
+    }), rangeText);
   }
   if (book.translationStatus === "completed") {
-    return i18n.t("cookbook.translation-completed", {
+    return uploadedBookStatusWithRange(i18n.t("cookbook.translation-completed", {
       language: book.translationLanguage || uploadedBookTargetLanguage.value,
-    });
+    }), rangeText);
   }
   if (book.translationStatus === "partial_failed") {
-    return i18n.t("cookbook.translation-partial-failed", {
+    return uploadedBookStatusWithRange(i18n.t("cookbook.translation-partial-failed", {
       completed: book.translationCompletedChunks,
       total: book.translationTotalChunks || "?",
       failed: book.translationFailedChunks || 0,
-    });
+    }), rangeText);
   }
   if (book.translationStatus === "failed") {
-    return book.translationError || i18n.t("cookbook.translation-failed");
+    return uploadedBookStatusWithRange(book.translationError || i18n.t("cookbook.translation-failed"), rangeText);
   }
   if (book.translationStatus === "cancelled") {
-    return i18n.t("cookbook.translation-cancelled");
+    return uploadedBookStatusWithRange(i18n.t("cookbook.translation-cancelled"), rangeText);
   }
-  return i18n.t("cookbook.translation-not-started");
+  return uploadedBookStatusWithRange(i18n.t("cookbook.translation-not-started"), rangeText);
 }
 
 function openUploadedBookExtractionDialog(book: UploadedBook) {
   selectedUploadedBook.value = book;
   uploadedBookPagesPerChunk.value = book.extractionPagesPerChunk || 10;
   uploadedBookTargetLanguage.value = book.extractionTranslateLanguage || defaultUploadedBookTargetLanguage();
+  uploadedBookPageStart.value = book.extractionPageStart || null;
+  uploadedBookPageEnd.value = book.extractionPageEnd || null;
   uploadedBookExtractionDialog.value = true;
 }
 
@@ -1478,6 +1687,8 @@ function openUploadedBookTranslationDialog(book: UploadedBook) {
   selectedUploadedBook.value = book;
   uploadedBookPagesPerChunk.value = book.translationPagesPerChunk || 10;
   uploadedBookTargetLanguage.value = book.translationLanguage || defaultUploadedBookTargetLanguage();
+  uploadedBookPageStart.value = book.translationPageStart || null;
+  uploadedBookPageEnd.value = book.translationPageEnd || null;
   uploadedBookTranslationDialog.value = true;
 }
 
@@ -1524,11 +1735,18 @@ async function deleteSelectedUploadedBook() {
 }
 
 async function startUploadedBookExtraction(book: UploadedBook, closeDialog: boolean) {
+  if (uploadedBookPageRangeInvalid.value) {
+    alert.error(i18n.t("cookbook.page-range-invalid"));
+    return;
+  }
+
   const pagesPerChunk = Math.min(Math.max(Number(uploadedBookPagesPerChunk.value) || 10, 1), 100);
   uploadedBookExtractionStarting.value = true;
   const { data, error } = await api.uploadedBooks.extractRecipes(book.id, {
     pagesPerChunk,
     translateLanguage: "Hebrew",
+    pageStart: uploadedBookNormalizedPageStart.value,
+    pageEnd: uploadedBookNormalizedPageEnd.value,
   }).finally(() => {
     uploadedBookExtractionStarting.value = false;
   });
@@ -1550,12 +1768,19 @@ async function startUploadedBookExtraction(book: UploadedBook, closeDialog: bool
 }
 
 async function startUploadedBookTranslation(book: UploadedBook, closeDialog: boolean) {
+  if (uploadedBookPageRangeInvalid.value) {
+    alert.error(i18n.t("cookbook.page-range-invalid"));
+    return;
+  }
+
   const pagesPerChunk = Math.min(Math.max(Number(uploadedBookPagesPerChunk.value) || 10, 1), 100);
   const targetLanguage = (uploadedBookTargetLanguage.value || defaultUploadedBookTargetLanguage()).trim();
   uploadedBookTranslationStarting.value = true;
   const { data, error } = await api.uploadedBooks.translate(book.id, {
     pagesPerChunk,
     targetLanguage,
+    pageStart: uploadedBookNormalizedPageStart.value,
+    pageEnd: uploadedBookNormalizedPageEnd.value,
   }).finally(() => {
     uploadedBookTranslationStarting.value = false;
   });

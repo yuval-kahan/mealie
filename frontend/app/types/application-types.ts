@@ -1,3 +1,12 @@
+export interface SideBarLinkAction {
+  key?: string;
+  icon: string;
+  title: string;
+  loading?: boolean;
+  disabled?: boolean;
+  onClick?: () => void | Promise<void>;
+}
+
 export interface SideBarLink {
   key?: string;
   icon: string;
@@ -6,6 +15,7 @@ export interface SideBarLink {
   title: string;
   children?: SideBarLink[];
   childrenStartExpanded?: boolean;
+  actions?: SideBarLinkAction[];
   onClick?: () => void;
   restricted: boolean;
 }

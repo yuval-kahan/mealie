@@ -121,6 +121,14 @@ class UploadedBooksController(BasePublicController):
         if book.translation_status in {"processing", "retrying"}:
             raise HTTPException(status.HTTP_409_CONFLICT, detail="Book translation is already running")
 
+    @staticmethod
+    def _assert_valid_page_range(page_start: int | None, page_end: int | None) -> None:
+        if page_start is not None and page_end is not None and page_end < page_start:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="End page must be greater than or equal to start page",
+            )
+
     def _cancel_active_extraction(self, book: UploadedBook) -> UploadedBook:
         if book.extraction_status not in {"processing", "retrying"}:
             return book
@@ -238,17 +246,22 @@ class UploadedBooksController(BasePublicController):
             raise HTTPException(status.HTTP_409_CONFLICT, detail="Book extraction is already running")
         if book.translation_status in {"processing", "retrying"}:
             raise HTTPException(status.HTTP_409_CONFLICT, detail="Book translation is already running")
+        self._assert_valid_page_range(data.page_start, data.page_end)
 
         resume = (
             book.extraction_status == "partial_failed"
             and book.extraction_pages_per_chunk == data.pages_per_chunk
             and (book.extraction_translate_language or data.translate_language) == data.translate_language
+            and book.extraction_page_start == data.page_start
+            and book.extraction_page_end == data.page_end
             and bool(book.extraction_chunk_status)
         )
 
         book.extraction_status = "processing"
         book.extraction_pages_per_chunk = data.pages_per_chunk
         book.extraction_translate_language = data.translate_language
+        book.extraction_page_start = data.page_start
+        book.extraction_page_end = data.page_end
         if not resume:
             book.extraction_total_chunks = 0
             book.extraction_completed_chunks = 0
@@ -273,6 +286,8 @@ class UploadedBooksController(BasePublicController):
             data.pages_per_chunk,
             data.translate_language,
             resume,
+            data.page_start,
+            data.page_end,
         )
 
         return UploadedBookOut.model_validate(book)
@@ -298,17 +313,22 @@ class UploadedBooksController(BasePublicController):
         if book.is_translated_book:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Translated books cannot be translated again")
         self._assert_book_not_processing(book)
+        self._assert_valid_page_range(data.page_start, data.page_end)
 
         resume = (
             book.translation_status == "partial_failed"
             and book.translation_pages_per_chunk == data.pages_per_chunk
             and (book.translation_language or data.target_language) == data.target_language
+            and book.translation_page_start == data.page_start
+            and book.translation_page_end == data.page_end
             and bool(book.translation_chunk_status)
         )
 
         book.translation_status = "processing"
         book.translation_language = data.target_language
         book.translation_pages_per_chunk = data.pages_per_chunk
+        book.translation_page_start = data.page_start
+        book.translation_page_end = data.page_end
         if not resume:
             book.translation_total_chunks = 0
             book.translation_completed_chunks = 0
@@ -331,6 +351,8 @@ class UploadedBooksController(BasePublicController):
             data.pages_per_chunk,
             data.target_language,
             resume,
+            data.page_start,
+            data.page_end,
         )
 
         return UploadedBookOut.model_validate(book)

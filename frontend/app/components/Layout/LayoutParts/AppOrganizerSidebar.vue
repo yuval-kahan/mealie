@@ -162,7 +162,31 @@
               :prepend-icon="child.icon"
               :title="child.title"
               @click="handleNavClick(child)"
-            />
+            >
+              <template
+                v-if="child.actions?.length"
+                #append
+              >
+                <div class="app-organizer-sidebar__item-actions">
+                  <v-btn
+                    v-for="action in child.actions"
+                    :key="action.key || action.title"
+                    icon
+                    size="x-small"
+                    variant="text"
+                    :title="action.title"
+                    :aria-label="action.title"
+                    :loading="action.loading"
+                    :disabled="action.disabled"
+                    @click.stop.prevent="handleNavActionClick(action)"
+                  >
+                    <v-icon size="small">
+                      {{ action.icon }}
+                    </v-icon>
+                  </v-btn>
+                </div>
+              </template>
+            </v-list-item>
           </v-list-group>
 
           <v-list-item
@@ -177,7 +201,31 @@
             :prepend-icon="nav.icon"
             :title="nav.title"
             @click="handleNavClick(nav)"
-          />
+          >
+            <template
+              v-if="nav.actions?.length"
+              #append
+            >
+              <div class="app-organizer-sidebar__item-actions">
+                <v-btn
+                  v-for="action in nav.actions"
+                  :key="action.key || action.title"
+                  icon
+                  size="x-small"
+                  variant="text"
+                  :title="action.title"
+                  :aria-label="action.title"
+                  :loading="action.loading"
+                  :disabled="action.disabled"
+                  @click.stop.prevent="handleNavActionClick(action)"
+                >
+                  <v-icon size="small">
+                    {{ action.icon }}
+                  </v-icon>
+                </v-btn>
+              </div>
+            </template>
+          </v-list-item>
         </template>
       </template>
     </v-list>
@@ -202,7 +250,7 @@
 <script setup lang="ts">
 import { useLocalStorage } from "@vueuse/core";
 import { VueDraggable } from "vue-draggable-plus";
-import type { OrganizerSidebarSection, OrganizerSidebarSectionKey, SideBarLink } from "~/types/application-types";
+import type { OrganizerSidebarSection, OrganizerSidebarSectionKey, SideBarLink, SideBarLinkAction } from "~/types/application-types";
 import type { UserOrganizerSidebarPreferences } from "~/composables/use-users/preferences";
 
 type OrganizerVisibilityPreferenceKey = "showShoppingLists" | "showCookbooks" | "showTranslatedBooks" | "showCategories" | "showTags";
@@ -345,6 +393,14 @@ function handleNavClick(nav: SideBarLink) {
   nav.onClick?.();
 }
 
+function handleNavActionClick(action: SideBarLinkAction) {
+  if (action.disabled || action.loading) {
+    return;
+  }
+
+  void action.onClick?.();
+}
+
 function dropdownSignature(sections: OrganizerSidebarSection[]) {
   return sections
     .flatMap(section =>
@@ -404,6 +460,12 @@ watch(
   align-items: center;
   display: flex;
   gap: 4px;
+}
+
+.app-organizer-sidebar__item-actions {
+  align-items: center;
+  display: flex;
+  margin-inline-start: 4px;
 }
 
 .organizer-sidebar-sort-handle {
