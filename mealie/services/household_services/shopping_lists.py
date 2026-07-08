@@ -1,3 +1,5 @@
+import json
+from datetime import UTC, datetime
 from typing import cast
 
 from fastapi import HTTPException, status
@@ -21,6 +23,8 @@ from mealie.schema.household.group_shopping_list import (
     ShoppingListOut,
     ShoppingListSave,
 )
+from mealie.schema.labels.multi_purpose_label import MultiPurposeLabelCreate
+from mealie.schema.openai.shopping_list import OpenAIShoppingListOrganization
 from mealie.schema.recipe.recipe import Recipe
 from mealie.schema.recipe.recipe_ingredient import (
     IngredientFood,
@@ -28,12 +32,28 @@ from mealie.schema.recipe.recipe_ingredient import (
     RecipeIngredient,
 )
 from mealie.schema.response.pagination import OrderDirection, PaginationQuery
+from mealie.services.group_services.labels_service import MultiPurposeLabelService
+from mealie.services.openai import OpenAIService
 from mealie.services.parser_services._base import DataMatcher
 from mealie.services.parser_services.parser_utils import UnitConverter, merge_quantity_and_unit
 
 
 class ShoppingListService:
     DEFAULT_FOOD_FUZZY_MATCH_THRESHOLD = 80
+    AI_ORGANIZED_EXTRA_KEY = "aiOrganized"
+    AI_ORGANIZED_AT_EXTRA_KEY = "aiOrganizedAt"
+    AI_LABEL_COLORS = {
+        "ירקות ופירות": "#4CAF50",
+        "מוצרי חלב וביצים": "#42A5F5",
+        "בשר עוף ודגים": "#EF5350",
+        "מזווה ויבשים": "#8D6E63",
+        "תבלינים ורטבים": "#FF9800",
+        "אפייה": "#AB47BC",
+        "קפואים": "#26C6DA",
+        "משקאות": "#5C6BC0",
+        "ניקיון וחד פעמי": "#78909C",
+        "שונות": "#959595",
+    }
 
     def __init__(self, repos: AllRepositories):
         self.repos = repos
@@ -42,6 +62,136 @@ class ShoppingListService:
         self.list_item_refs = repos.group_shopping_list_item_references
         self.list_refs = repos.group_shopping_list_recipe_refs
         self.data_matcher = DataMatcher(self.repos, food_fuzzy_match_threshold=self.DEFAULT_FOOD_FUZZY_MATCH_THRESHOLD)
+
+    @staticmethod
+    def _normalize_ai_label_name(name: str | None) -> str:
+        return " ".join(str(name or "").split()).strip()
+
+    @classmethod
+    def _ai_label_key(cls, name: str | None) -> str:
+        return cls._normalize_ai_label_name(name).casefold()
+
+    @staticmethod
+    def _shopping_list_item_ai_text(item: ShoppingListItemOut) -> str:
+        item_parts: list[str] = []
+        if item.quantity:
+            item_parts.append(str(item.quantity))
+        if item.unit and item.unit.name:
+            item_parts.append(item.unit.name)
+        if item.food and item.food.name:
+            item_parts.append(item.food.name)
+        if item.note:
+            item_parts.append(item.note)
+
+        return " ".join(item_parts).strip() or item.display or ""
+
+    def _get_or_create_ai_labels(self, category_names: list[str]):
+        labels_page = self.repos.group_multi_purpose_labels.page_all(PaginationQuery(page=1, per_page=-1))
+        labels_by_key = {self._ai_label_key(label.name): label for label in labels_page.items}
+        label_service = MultiPurposeLabelService(self.repos)
+
+        for category_name in category_names:
+            normalized_name = self._normalize_ai_label_name(category_name)
+            key = self._ai_label_key(normalized_name)
+            if not key or key in labels_by_key:
+                continue
+
+            label = label_service.create_one(
+                MultiPurposeLabelCreate(
+                    name=normalized_name,
+                    color=self.AI_LABEL_COLORS.get(normalized_name, "#959595"),
+                )
+            )
+            labels_by_key[key] = label
+
+        return labels_by_key
+
+    def _shopping_list_ai_payload(self, shopping_list: ShoppingListOut) -> list[dict]:
+        return [
+            {
+                "id": str(item.id),
+                "text": self._shopping_list_item_ai_text(item),
+                "currentCategory": item.label.name if item.label else None,
+                "checked": item.checked,
+            }
+            for item in shopping_list.list_items
+            if self._shopping_list_item_ai_text(item)
+        ]
+
+    async def organize_with_ai(self, list_id: UUID4) -> tuple[ShoppingListOut, ShoppingListItemsCollectionOut]:
+        shopping_list = self.shopping_lists.get_one(list_id)
+        if shopping_list is None:
+            raise UnexpectedNone("Shopping list not found")
+
+        items_payload = self._shopping_list_ai_payload(shopping_list)
+        if not items_payload:
+            raise ValueError("Shopping list is empty")
+
+        openai_service = OpenAIService(self.repos)
+        if not (openai_service.provider_settings and openai_service.provider_settings.ai_enabled):
+            raise ValueError("OpenAI services are not available")
+
+        existing_categories = [
+            label_setting.label.name
+            for label_setting in shopping_list.label_settings
+            if label_setting.label and label_setting.label.name
+        ]
+        prompt = openai_service.get_prompt("shopping-lists.organize-shopping-list")
+        message = (
+            "Organize the shopping list items into practical grocery categories.\n\n"
+            f"Existing categories JSON:\n{json.dumps(existing_categories, ensure_ascii=False)}\n\n"
+            f"Shopping list items JSON:\n{json.dumps(items_payload, ensure_ascii=False)}"
+        )
+
+        response = await openai_service.get_response(
+            prompt,
+            message,
+            response_schema=OpenAIShoppingListOrganization,
+        )
+        if not response:
+            raise ValueError("AI returned an empty response")
+
+        valid_items_by_id = {str(item.id): item for item in shopping_list.list_items}
+        category_by_item_id: dict[str, str] = {}
+        for assignment in response.assignments:
+            item_id = str(assignment.item_id)
+            if item_id not in valid_items_by_id:
+                continue
+
+            category_name = self._normalize_ai_label_name(assignment.category) or "שונות"
+            category_by_item_id[item_id] = category_name
+
+        # Make sure every item receives a stable category even if the model omitted one.
+        for item_id, item in valid_items_by_id.items():
+            if item_id not in category_by_item_id:
+                category_by_item_id[item_id] = item.label.name if item.label else "שונות"
+
+        labels_by_key = self._get_or_create_ai_labels(list(category_by_item_id.values()))
+
+        update_items: list[ShoppingListItemUpdateBulk] = []
+        for item_id, category_name in category_by_item_id.items():
+            item = valid_items_by_id[item_id]
+            label = labels_by_key.get(self._ai_label_key(category_name))
+            if not label or item.label_id == label.id:
+                continue
+
+            item.label_id = label.id
+            update_items.append(item.cast(ShoppingListItemUpdateBulk, id=item.id))
+
+        updated_items = cast(list[ShoppingListItemOut], self.list_items.update_many(update_items) if update_items else [])
+
+        updated_list = cast(ShoppingListOut, self.shopping_lists.get_one(list_id))
+        extras = dict(updated_list.extras or {})
+        extras[self.AI_ORGANIZED_EXTRA_KEY] = "true"
+        extras[self.AI_ORGANIZED_AT_EXTRA_KEY] = datetime.now(UTC).isoformat()
+        updated_list.extras = extras
+        updated_list = self.shopping_lists.update(updated_list.id, updated_list)
+
+        return updated_list, ShoppingListItemsCollectionOut(
+            created_items=[],
+            updated_items=updated_items,
+            deleted_items=[],
+        )
 
     def can_merge(self, item1: ShoppingListItemBase, item2: ShoppingListItemBase) -> bool:
         """Check to see if this item can be merged with another item"""

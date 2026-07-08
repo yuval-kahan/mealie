@@ -81,7 +81,7 @@ export function useShoppingListCrud(
       return;
     }
 
-    // set a temporary updatedAt timestamp prior to refresh so it appears at the top of the checked items
+    // set a temporary updatedAt timestamp prior to refresh so optimistic updates stay consistent
     item.updatedAt = new Date().toISOString();
 
     // make updates reflect immediately

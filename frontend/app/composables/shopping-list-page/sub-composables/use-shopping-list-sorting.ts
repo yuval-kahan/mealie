@@ -32,17 +32,13 @@ export function useShoppingListSorting() {
       return;
     }
 
-    const checkedItemKey = "__checkedItem";
     const listItemGroupsMap = new Map<string, ListItemGroup>();
-    listItemGroupsMap.set(checkedItemKey, { position: Number.MAX_SAFE_INTEGER, createdAt: "", items: [] });
 
-    // group items by checked status, food, or note
+    // Group by food or note. Checked items stay in their original group so they remain visible in place.
     shoppingList.listItems.forEach((item) => {
-      const key = item.checked
-        ? checkedItemKey
-        : item.food?.name
-          ? item.food.name
-          : item.note || "";
+      const key = item.food?.name
+        ? item.food.name
+        : item.note || "";
 
       const group = listItemGroupsMap.get(key);
       if (!group) {
@@ -79,16 +75,20 @@ export function useShoppingListSorting() {
     shoppingList.listItems.sort(sortItems);
   }
 
+  function sortItemsWithCheckedLast(a: ShoppingListItemOut, b: ShoppingListItemOut) {
+    if (a.checked !== b.checked) {
+      return a.checked ? 1 : -1;
+    }
+
+    return sortItems(a, b);
+  }
+
   function updateItemsByLabel(shoppingList: ShoppingListOut) {
     const items: { [prop: string]: ShoppingListItemOut[] } = {};
     const noLabelText = t("shopping-list.no-label");
     const noLabel = [] as ShoppingListItemOut[];
 
     shoppingList?.listItems?.forEach((item) => {
-      if (item.checked) {
-        return;
-      }
-
       if (item.labelId) {
         if (item.label && item.label.name in items) {
           items[item.label.name].push(item);
@@ -105,6 +105,8 @@ export function useShoppingListSorting() {
     if (noLabel.length > 0) {
       items[noLabelText] = noLabel;
     }
+
+    Object.values(items).forEach(itemsInLabel => itemsInLabel.sort(sortItemsWithCheckedLast));
 
     // sort the map by label order
     const orderedLabelNames = shoppingList?.labelSettings?.map(labelSetting => labelSetting.label.name);
@@ -128,6 +130,7 @@ export function useShoppingListSorting() {
 
   return {
     sortItems,
+    sortItemsWithCheckedLast,
     groupAndSortListItemsByFood,
     sortListItems,
     updateItemsByLabel,

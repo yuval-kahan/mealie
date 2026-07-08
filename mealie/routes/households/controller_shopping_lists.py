@@ -26,7 +26,7 @@ from mealie.schema.household.group_shopping_list import (
     ShoppingListUpdate,
 )
 from mealie.schema.response.pagination import PaginationQuery
-from mealie.schema.response.responses import SuccessResponse
+from mealie.schema.response.responses import ErrorResponse, SuccessResponse
 from mealie.services.event_bus_service.event_types import (
     EventOperation,
     EventShoppingListData,
@@ -252,6 +252,40 @@ class ShoppingListController(BaseCrudController):
         )
 
         return updated_list
+
+    @router.post("/{item_id}/organize-ai", response_model=ShoppingListOut)
+    async def organize_shopping_list_with_ai(self, item_id: UUID4):
+        ai_settings = self.group.ai_provider_settings
+        if not (ai_settings and ai_settings.ai_enabled):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=ErrorResponse.respond("OpenAI services are not enabled"),
+            )
+
+        try:
+            shopping_list, items = await self.service.organize_with_ai(item_id)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=ErrorResponse.respond(str(e)),
+            ) from e
+        except Exception as e:
+            self.logger.exception("Failed to organize shopping list with AI")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=ErrorResponse.respond("AI shopping list organization failed"),
+            ) from e
+
+        publish_list_item_events(self.publish_event, items)
+        self.publish_event(
+            event_type=EventTypes.shopping_list_updated,
+            document_data=EventShoppingListData(operation=EventOperation.update, shopping_list_id=shopping_list.id),
+            group_id=shopping_list.group_id,
+            household_id=shopping_list.household_id,
+            message=self.t("notifications.generic-updated", name=shopping_list.name),
+        )
+
+        return shopping_list
 
     @router.post("/{item_id}/recipe", response_model=ShoppingListOut)
     def add_recipe_ingredients_to_list(self, item_id: UUID4, data: list[ShoppingListAddRecipeParamsBulk]):

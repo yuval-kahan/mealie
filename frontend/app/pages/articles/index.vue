@@ -12,7 +12,7 @@
       :submit-disabled="!canSubmitArticle"
       :submit-text="$t('general.save')"
       @submit="submitArticle"
-      @close="resetArticleForm"
+      @close="closeArticleDialog"
     >
       <v-card-text class="pt-4">
         <v-tabs
@@ -94,12 +94,12 @@
               variant="outlined"
               rows="14"
             />
-            <v-combobox
-              v-model="aiLanguage"
-              :items="languageOptions"
+            <v-text-field
+              :model-value="displayLanguage"
               :label="$t('article.target-language')"
               variant="outlined"
               density="comfortable"
+              readonly
             />
           </v-window-item>
 
@@ -111,12 +111,12 @@
               density="comfortable"
               :prepend-inner-icon="$globals.icons.link"
             />
-            <v-combobox
-              v-model="aiLanguage"
-              :items="languageOptions"
+            <v-text-field
+              :model-value="displayLanguage"
               :label="$t('article.target-language')"
               variant="outlined"
               density="comfortable"
+              readonly
             />
           </v-window-item>
         </v-window>
@@ -288,6 +288,9 @@ import type { Article, ArticleCreate } from "~/lib/api/types/article";
 const i18n = useI18n();
 const { $globals } = useNuxtApp();
 const api = useUserApi();
+const route = useRoute();
+const router = useRouter();
+const ARTICLES_UPDATED_EVENT = "mealie:articles-updated";
 
 useSeoMeta({
   title: i18n.t("article.articles"),
@@ -308,7 +311,6 @@ const aiSearchIds = ref<string[]>([]);
 const aiReasons = ref<Record<string, string>>({});
 const aiText = ref("");
 const aiUrl = ref("");
-const aiLanguage = ref(defaultLanguage());
 
 const form = reactive<ArticleCreate>({
   title: "",
@@ -320,12 +322,7 @@ const form = reactive<ArticleCreate>({
   tags: [],
 });
 
-const languageOptions = computed(() => [
-  i18n.t("cookbook.language-hebrew"),
-  i18n.t("cookbook.language-english"),
-  i18n.t("cookbook.language-arabic"),
-]);
-
+const displayLanguage = computed(defaultLanguage);
 const categoryOptions = computed(() => sortedUnique(articles.value.flatMap(article => article.categories)));
 const tagOptions = computed(() => sortedUnique(articles.value.flatMap(article => article.tags)));
 const aiSearchActive = computed(() => aiSearchIds.value.length > 0);
@@ -373,7 +370,22 @@ const visibleArticles = computed(() => {
   return aiSearchIds.value.map(id => byId.get(id)).filter((article): article is Article => !!article);
 });
 
-onMounted(refreshArticles);
+onMounted(async () => {
+  await refreshArticles();
+  openCreateDialogFromRoute();
+  window.addEventListener(ARTICLES_UPDATED_EVENT, handleArticlesUpdated);
+});
+
+onUnmounted(() => {
+  window.removeEventListener(ARTICLES_UPDATED_EVENT, handleArticlesUpdated);
+});
+
+watch(
+  () => route.query.create,
+  () => {
+    openCreateDialogFromRoute();
+  },
+);
 
 function defaultLanguage() {
   const locale = String(i18n.locale.value || "").toLocaleLowerCase();
@@ -413,12 +425,32 @@ function resetArticleForm() {
   form.tags = [];
   aiText.value = "";
   aiUrl.value = "";
-  aiLanguage.value = defaultLanguage();
 }
 
 function openCreateDialog() {
   resetArticleForm();
   articleDialog.value = true;
+}
+
+function openCreateDialogFromRoute() {
+  if (route.query.create === "1" || route.query.create === "true") {
+    openCreateDialog();
+  }
+}
+
+function closeArticleDialog() {
+  resetArticleForm();
+  clearCreateQuery();
+}
+
+function clearCreateQuery() {
+  if (!route.query.create) {
+    return;
+  }
+
+  const nextQuery = { ...route.query };
+  delete nextQuery.create;
+  void router.replace({ path: route.path, query: nextQuery });
 }
 
 async function submitArticle() {
@@ -433,7 +465,7 @@ async function submitArticle() {
     return await api.articles.createWithAI({
       text: createMode.value === "ai-text" ? aiText.value : null,
       url: createMode.value === "ai-link" ? aiUrl.value : null,
-      translateLanguage: aiLanguage.value,
+      translateLanguage: displayLanguage.value,
     });
   })().finally(() => {
     saving.value = false;
@@ -448,6 +480,7 @@ async function submitArticle() {
 
   articleDialog.value = false;
   resetArticleForm();
+  clearCreateQuery();
   await refreshArticles();
 }
 
@@ -477,6 +510,10 @@ function clearAISearch() {
   aiSearchQuery.value = "";
   aiSearchIds.value = [];
   aiReasons.value = {};
+}
+
+function handleArticlesUpdated() {
+  void refreshArticles();
 }
 </script>
 

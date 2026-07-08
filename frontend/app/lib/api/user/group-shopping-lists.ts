@@ -16,6 +16,7 @@ const prefix = "/api";
 const routes = {
   shoppingLists: `${prefix}/households/shopping/lists`,
   shoppingListsId: (id: string) => `${prefix}/households/shopping/lists/${id}`,
+  shoppingListIdOrganizeAi: (id: string) => `${prefix}/households/shopping/lists/${id}/organize-ai`,
   shoppingListIdAddRecipe: (id: string) => `${prefix}/households/shopping/lists/${id}/recipe`,
   shoppingListIdRemoveRecipe: (id: string, recipeId: string) => `${prefix}/households/shopping/lists/${id}/recipe/${recipeId}/delete`,
   shoppingListIdUpdateLabelSettings: (id: string) => `${prefix}/households/shopping/lists/${id}/label-settings`,
@@ -39,6 +40,10 @@ export class ShoppingListsApi extends BaseCRUDAPI<ShoppingListCreate, ShoppingLi
 
   async updateLabelSettings(itemId: string, listSettings: ShoppingListMultiPurposeLabelUpdate[]) {
     return await this.requests.put(routes.shoppingListIdUpdateLabelSettings(itemId), listSettings);
+  }
+
+  async organizeWithAi(itemId: string) {
+    return await this.requests.post<ShoppingListOut>(routes.shoppingListIdOrganizeAi(itemId), {});
   }
 }
 

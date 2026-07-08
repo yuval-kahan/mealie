@@ -24,12 +24,11 @@
           offset-y
           nudge-bottom="3"
         >
-          <template #activator="{ props }">
+          <template #activator="{ props: sortMenuProps }">
             <v-btn
-              class="ml-auto"
               size="small"
               color="accent"
-              v-bind="props"
+              v-bind="sortMenuProps"
             >
               <v-icon :start="!$vuetify.display.xs">
                 {{ state.orderDirection === "asc" ? $globals.icons.sortDescending : $globals.icons.sortAscending }}
@@ -74,6 +73,21 @@
           </v-card>
         </v-menu>
 
+        <v-btn
+          type="button"
+          size="small"
+          color="primary"
+          variant="tonal"
+          class="recipe-finder-toggle-btn"
+          :active="finderOpenModel"
+          @click="finderOpenModel = !finderOpenModel"
+        >
+          <v-icon :start="!$vuetify.display.xs">
+            {{ $globals.icons.search }}
+          </v-icon>
+          {{ $vuetify.display.xs ? null : $t("recipe-finder.recipe-finder") }}
+        </v-btn>
+
         <!-- Settings -->
         <v-menu
           offset-y
@@ -82,12 +96,13 @@
           nudge-bottom="3"
           :close-on-content-click="false"
         >
-          <template #activator="{ props }">
+          <template #activator="{ props: settingsMenuProps }">
             <v-btn
               size="small"
               color="accent"
               dark
-              v-bind="props"
+              class="search-settings-btn"
+              v-bind="settingsMenuProps"
             >
               <v-icon size="small">
                 {{ $globals.icons.cog }}
@@ -137,8 +152,15 @@
 import RecipeExplorerPageSearchFilters from "./RecipeExplorerPageSearchFilters.vue";
 import { useRecipeExplorerSearch, clearRecipeExplorerSearchState } from "~/composables/use-recipe-explorer-search";
 
+const props = withDefaults(defineProps<{
+  finderOpen?: boolean;
+}>(), {
+  finderOpen: false,
+});
+
 const emit = defineEmits<{
-  ready: [];
+  "ready": [];
+  "update:finderOpen": [value: boolean];
 }>();
 
 const auth = useMealieAuth();
@@ -146,6 +168,10 @@ const route = useRoute();
 const { $globals } = useNuxtApp();
 const i18n = useI18n();
 const showRandomLoading = ref(false);
+const finderOpenModel = computed({
+  get: () => props.finderOpen,
+  set: value => emit("update:finderOpen", value),
+});
 
 const groupSlug = computed(() => route.params.groupSlug as string || auth.user.value?.groupSlug || "");
 
@@ -237,6 +263,14 @@ async function setRandomOrderByWrapper() {
   flex-wrap: wrap;
   gap: 0.65rem;
   margin-top: 1rem;
+}
+
+.recipe-finder-toggle-btn {
+  min-width: 122px;
+}
+
+.search-settings-btn {
+  margin-inline-start: auto;
 }
 
 .search-container {

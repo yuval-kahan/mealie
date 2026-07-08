@@ -67,98 +67,122 @@
       </v-card>
     </BaseDialog>
 
-    <BasePageTitle divider>
+    <BasePageTitle divider class="shopping-list-title-block">
       <template #header>
-        <v-container class="px-0">
-          <v-row no-gutters>
-            <v-col
-              class="text-left"
+        <div class="shopping-list-header">
+          <div class="shopping-list-header-nav">
+            <ButtonLink
+              :to="`/shopping-lists?disableRedirect=true`"
+              :text="$t('shopping-list.all-lists')"
+              :icon="$globals.icons.backArrow"
+            />
+          </div>
+          <div
+            v-if="mdAndUp"
+            class="shopping-list-header-hero"
+          >
+            <v-img
+              max-height="100"
+              max-width="100"
+              src="/svgs/shopping-cart.svg"
+            />
+          </div>
+          <div class="shopping-list-header-actions">
+            <v-chip
+              size="small"
+              :color="shoppingListAiOrganized ? 'success' : 'grey'"
+              :variant="shoppingListAiOrganized ? 'tonal' : 'outlined'"
+              class="shopping-list-ai-chip"
             >
-              <ButtonLink
-                :to="`/shopping-lists?disableRedirect=true`"
-                :text="$t('shopping-list.all-lists')"
-                :icon="$globals.icons.backArrow"
-              />
-            </v-col>
-            <v-col
-              v-if="mdAndUp"
-              cols="6"
-              class="d-none d-sm-flex justify-center"
+              <v-icon start size="small">
+                {{ $globals.icons.robot }}
+              </v-icon>
+              {{ shoppingListAiOrganized ? $t("shopping-list.ai-organized") : $t("shopping-list.ai-not-organized") }}
+            </v-chip>
+            <v-btn
+              color="success"
+              variant="tonal"
+              :prepend-icon="$globals.icons.robot"
+              :loading="aiOrganizing"
+              :disabled="!hasShoppingListItems || isOffline"
+              @click="organizeShoppingListWithAI"
             >
-              <v-img
-                max-height="100"
-                max-width="100"
-                src="/svgs/shopping-cart.svg"
-              />
-            </v-col>
-            <v-col class="d-flex justify-end">
-              <v-btn
-                color="primary"
-                variant="tonal"
-                class="me-2"
-                :prepend-icon="$globals.icons.contentCopy"
-                :disabled="!hasShoppingListItems"
-                @click="copyListItems('plain')"
-              >
-                {{ $t("general.copy") }}
-              </v-btn>
-              <BaseButtonGroup
-                class="d-flex"
-                :buttons="[
-                  {
-                    icon: $globals.icons.contentCopy,
-                    text: '',
-                    event: 'edit',
-                    children: [
-                      {
-                        icon: $globals.icons.contentCopy,
-                        text: $t('shopping-list.copy-as-text'),
-                        event: 'copy-plain',
-                      },
-                      {
-                        icon: $globals.icons.contentCopy,
-                        text: $t('shopping-list.copy-as-markdown'),
-                        event: 'copy-markdown',
-                      },
-                    ],
-                  },
-                  {
-                    icon: $globals.icons.checkboxOutline,
-                    text: $t('shopping-list.check-all-items'),
-                    event: 'check',
-                  },
-                  {
-                    icon: $globals.icons.dotsVertical,
-                    text: '',
-                    event: 'three-dot',
-                    children: [
-                      {
-                        icon: $globals.icons.tags,
-                        text: $t('shopping-list.reorder-labels'),
-                        event: 'reorder-labels',
-                      },
-                      {
-                        icon: $globals.icons.tags,
-                        text: $t('shopping-list.manage-labels'),
-                        event: 'manage-labels',
-                      },
-                    ],
-                  },
-                ]"
-                @edit="edit = true"
-                @three-dot="threeDot = true"
-                @check="openCheckAll"
-                @copy-plain="copyListItems('plain')"
-                @copy-markdown="copyListItems('markdown')"
-                @reorder-labels="toggleReorderLabelsDialog()"
-                @manage-labels="$router.push(`/group/data/labels`)"
-              />
-            </v-col>
-          </v-row>
-        </v-container>
+              {{ $t("shopping-list.organize-with-ai") }}
+            </v-btn>
+            <v-btn
+              :color="shoppingListGroceriesReady ? 'success' : 'grey'"
+              :variant="shoppingListGroceriesReady ? 'tonal' : 'outlined'"
+              :prepend-icon="$globals.icons.cartCheck"
+              :disabled="!hasShoppingListItems || isOffline"
+              @click="toggleShoppingListGroceriesReady"
+            >
+              {{ shoppingListGroceriesReady ? $t("shopping-list.all-groceries-ready") : $t("shopping-list.mark-all-groceries-ready") }}
+            </v-btn>
+            <v-btn
+              color="primary"
+              variant="tonal"
+              :prepend-icon="$globals.icons.contentCopy"
+              :disabled="!hasShoppingListItems"
+              @click="copyListItems('plain')"
+            >
+              {{ $t("general.copy") }}
+            </v-btn>
+            <BaseButtonGroup
+              class="d-flex"
+              :buttons="[
+                {
+                  icon: $globals.icons.contentCopy,
+                  text: '',
+                  event: 'edit',
+                  children: [
+                    {
+                      icon: $globals.icons.contentCopy,
+                      text: $t('shopping-list.copy-as-text'),
+                      event: 'copy-plain',
+                    },
+                    {
+                      icon: $globals.icons.contentCopy,
+                      text: $t('shopping-list.copy-as-markdown'),
+                      event: 'copy-markdown',
+                    },
+                  ],
+                },
+                {
+                  icon: $globals.icons.checkboxOutline,
+                  text: $t('shopping-list.check-all-items'),
+                  event: 'check',
+                },
+                {
+                  icon: $globals.icons.dotsVertical,
+                  text: '',
+                  event: 'three-dot',
+                  children: [
+                    {
+                      icon: $globals.icons.tags,
+                      text: $t('shopping-list.reorder-labels'),
+                      event: 'reorder-labels',
+                    },
+                    {
+                      icon: $globals.icons.tags,
+                      text: $t('shopping-list.manage-labels'),
+                      event: 'manage-labels',
+                    },
+                  ],
+                },
+              ]"
+              @edit="edit = true"
+              @three-dot="threeDot = true"
+              @check="openCheckAll"
+              @copy-plain="copyListItems('plain')"
+              @copy-markdown="copyListItems('markdown')"
+              @reorder-labels="toggleReorderLabelsDialog()"
+              @manage-labels="$router.push(`/group/data/labels`)"
+            />
+          </div>
+        </div>
       </template>
       <template #title>
-        {{ shoppingList.name }}
+        <span class="shopping-list-page-title">{{ shoppingList.name }}</span>
       </template>
     </BasePageTitle>
     <BannerWarning
@@ -204,94 +228,78 @@
         />
       </div>
 
-      <TransitionGroup name="scroll-x-transition">
-        <BaseExpansionPanels v-for="(value, key) in itemsByLabel" :key="key" :v-model="0" start-open>
-          <v-expansion-panel class="shopping-list-section">
-            <v-expansion-panel-title
-              :color="getLabelColor(key)"
-              class="body-1 font-weight-bold section-title"
+      <v-sheet class="shopping-list-items-sheet border-solid border-thin rounded">
+        <TransitionGroup name="scroll-x-transition">
+          <section
+            v-for="(value, key) in itemsByLabel"
+            :key="key"
+            class="shopping-list-section"
+          >
+            <div
+              class="shopping-list-section-title body-1 font-weight-bold"
+              :style="{ backgroundColor: getLabelColor(key) }"
             >
               {{ key }}
-            </v-expansion-panel-title>
-            <v-expansion-panel-text eager>
-              <VueDraggable
-                :model-value="value"
-                handle=".handle"
-                :delay="250"
-                :delay-on-touch-only="true"
-                @start="loadingCounter += 1"
-                @end="loadingCounter -= 1"
-                @update:model-value="updateIndexUncheckedByLabel(key.toString(), $event)"
-              >
-                <TransitionGroup name="scroll-x-transition">
-                  <ShoppingListItem
-                    v-for="(item, index) in value"
-                    :key="item.id"
-                    v-model="value[index]"
-                    class="ml-2 my-2 w-auto"
-                    :labels="allLabels || []"
-                    :units="allUnits || []"
-                    :foods="allFoods || []"
-                    :recipes="recipeMap"
-                    @checked="(item) => {
-                      saveListItem(item);
-                      itemCheckedToast(item);
-                    }"
-                    @save="saveListItem"
-                    @delete="deleteListItem(item)"
-                  />
-                </TransitionGroup>
-              </VueDraggable>
-            </v-expansion-panel-text>
-          </v-expansion-panel>
-        </BaseExpansionPanels>
-      </TransitionGroup>
-      <!-- Checked Items -->
-      <v-expansion-panels flat>
-        <v-expansion-panel v-if="listItems.checked && listItems.checked.length > 0">
-          <v-expansion-panel-title class="border-solid border-thin py-1">
-            <div class="d-flex align-center flex-0-1-100">
-              <div class="flex-1-0">
-                {{ $t('shopping-list.items-checked-count', listItems.checked ? listItems.checked.length : 0) }}
-              </div>
-              <div class="justify-end">
-                <BaseButtonGroup
-                  :buttons="[
-                    {
-                      icon: $globals.icons.checkboxBlankOutline,
-                      text: $t('shopping-list.uncheck-all-items'),
-                      event: 'uncheck',
-                    },
-                    {
-                      icon: $globals.icons.delete,
-                      text: $t('shopping-list.delete-checked'),
-                      event: 'delete',
-                    },
-                  ]"
-                  @uncheck="openUncheckAll"
-                  @delete="openDeleteChecked"
-                />
-              </div>
             </div>
-          </v-expansion-panel-title>
-          <v-expansion-panel-text eager>
-            <TransitionGroup name="scroll-x-transition">
-              <div v-for="(item, idx) in listItems.checked" :key="item.id">
+            <VueDraggable
+              :model-value="value"
+              handle=".handle"
+              :delay="250"
+              :delay-on-touch-only="true"
+              @start="loadingCounter += 1"
+              @end="loadingCounter -= 1"
+              @update:model-value="updateIndexUncheckedByLabel(key.toString(), $event)"
+            >
+              <TransitionGroup name="scroll-x-transition">
                 <ShoppingListItem
-                  v-model="listItems.checked[idx]"
-                  class="strike-through-note"
+                  v-for="(item, index) in value"
+                  :key="item.id"
+                  v-model="value[index]"
+                  class="shopping-list-section-item ml-2 my-2 w-auto"
                   :labels="allLabels || []"
                   :units="allUnits || []"
                   :foods="allFoods || []"
-                  @checked="saveListItem"
+                  :recipes="recipeMap"
+                  @checked="(item) => {
+                    saveListItem(item);
+                    if (item.checked) {
+                      itemCheckedToast(item);
+                    }
+                  }"
                   @save="saveListItem"
                   @delete="deleteListItem(item)"
                 />
-              </div>
-            </TransitionGroup>
-          </v-expansion-panel-text>
-        </v-expansion-panel>
-      </v-expansion-panels>
+              </TransitionGroup>
+            </VueDraggable>
+          </section>
+        </TransitionGroup>
+      </v-sheet>
+      <v-sheet
+        v-if="listItems.checked && listItems.checked.length > 0"
+        class="checked-items-actions border-solid border-thin rounded pa-2"
+      >
+        <div class="d-flex align-center flex-wrap ga-2">
+          <div class="flex-1-0">
+            {{ $t('shopping-list.items-checked-count', listItems.checked ? listItems.checked.length : 0) }}
+          </div>
+          <BaseButtonGroup
+            :buttons="[
+              {
+                icon: $globals.icons.checkboxBlankOutline,
+                text: $t('shopping-list.uncheck-all-items'),
+                event: 'uncheck',
+              },
+              {
+                icon: $globals.icons.delete,
+                text: $t('shopping-list.delete-checked'),
+                event: 'delete',
+              },
+            ]"
+            @uncheck="openUncheckAll"
+            @delete="openDeleteChecked"
+          />
+        </div>
+      </v-sheet>
     </section>
 
     <!-- Recipe References -->
@@ -420,6 +428,11 @@ const {
   threeDot,
   openCheckAll,
   copyListItems,
+  organizeShoppingListWithAI,
+  aiOrganizing,
+  shoppingListAiOrganized,
+  shoppingListGroceriesReady,
+  toggleShoppingListGroceriesReady,
   toggleReorderLabelsDialog,
   isOffline,
   createEditorOpen,
@@ -450,14 +463,117 @@ const hasShoppingListItems = computed(() => {
   max-width: 50px;
 }
 
-.shopping-list-section {
-  .section-title {
-    font-size: 1rem;
-    min-height: 48px !important;
+.shopping-list-header {
+  align-items: start;
+  direction: ltr;
+  display: grid;
+  grid-template-areas:
+    "nav hero spacer"
+    "actions actions actions";
+  grid-template-columns: minmax(0, 1fr) 120px minmax(0, 1fr);
+  row-gap: 12px;
+}
+
+.shopping-list-header-nav {
+  direction: rtl;
+  grid-area: nav;
+  justify-self: start;
+}
+
+.shopping-list-header-hero {
+  display: flex;
+  grid-area: hero;
+  justify-content: center;
+  min-height: 104px;
+  pointer-events: none;
+}
+
+.shopping-list-header-actions {
+  align-items: center;
+  direction: rtl;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  grid-area: actions;
+  justify-content: flex-end;
+  min-height: 40px;
+  position: relative;
+  z-index: 1;
+}
+
+.shopping-list-header-actions > * {
+  direction: rtl;
+}
+
+.shopping-list-title-block :deep(h2) {
+  font-size: 4rem !important;
+  line-height: 1;
+  margin: 2px 0 0 !important;
+}
+
+.shopping-list-title-block :deep(.subtitle-1) {
+  display: none;
+  margin: 0 !important;
+}
+
+.shopping-list-title-block :deep(.v-divider) {
+  margin-top: 0 !important;
+}
+
+.shopping-list-page-title {
+  font-weight: 700;
+}
+
+.shopping-list-ai-chip {
+  font-weight: 700;
+}
+
+@media (max-width: 600px) {
+  .shopping-list-header {
+    grid-template-areas:
+      "nav"
+      "actions";
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .v-expansion-panel-text__wrapper {
-    padding: 0;
+  .shopping-list-header-actions {
+    justify-content: flex-end;
   }
+
+  .shopping-list-title-block :deep(h2) {
+    font-size: 2.6rem !important;
+  }
+}
+
+.shopping-list-items-sheet {
+  background-color: rgb(var(--v-theme-surface));
+  overflow: hidden;
+}
+
+.shopping-list-section + .shopping-list-section {
+  border-top: thin solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+.shopping-list-section-title {
+  align-items: center;
+  display: flex;
+  font-size: 1rem;
+  justify-content: flex-start;
+  justify-content: start;
+  min-height: 44px;
+  padding: 0 16px;
+  text-align: start;
+}
+
+.shopping-list-section-item {
+  border-bottom: thin solid rgba(var(--v-border-color), 0.08);
+}
+
+.shopping-list-section-item:last-child {
+  border-bottom: 0;
+}
+
+.checked-items-actions {
+  background-color: rgb(var(--v-theme-surface));
 }
 </style>

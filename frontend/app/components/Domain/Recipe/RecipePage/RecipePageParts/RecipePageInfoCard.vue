@@ -26,82 +26,88 @@
             </div>
           </div>
           <div class="recipe-info-card__details">
-            <SafeMarkdown
-              :source="recipe.description"
-              class="recipe-info-card__description my-3"
-            />
-            <div
-              v-if="recipe.source || recipe.createdBy"
-              class="recipe-origin-meta my-3"
-            >
-              <div
-                v-if="recipe.createdBy"
-                class="recipe-origin-meta__item"
-              >
-                <v-icon
-                  size="small"
-                  color="primary"
+            <div class="recipe-info-card__details-row">
+              <div class="recipe-info-card__meta-column">
+                <SafeMarkdown
+                  :source="recipe.description"
+                  class="recipe-info-card__description my-3"
+                />
+                <div
+                  v-if="recipe.source || recipe.createdBy"
+                  class="recipe-origin-meta my-3"
                 >
-                  {{ $globals.icons.chefHat }}
-                </v-icon>
-                <span class="font-weight-medium">{{ $t("recipe.created-by") }}:</span>
-                <span>{{ recipe.createdBy }}</span>
+                  <div
+                    v-if="recipe.createdBy"
+                    class="recipe-origin-meta__item"
+                  >
+                    <v-icon
+                      size="small"
+                      color="primary"
+                    >
+                      {{ $globals.icons.chefHat }}
+                    </v-icon>
+                    <span class="font-weight-medium">{{ $t("recipe.created-by") }}:</span>
+                    <span>{{ recipe.createdBy }}</span>
+                  </div>
+                  <div
+                    v-if="recipe.source"
+                    class="recipe-origin-meta__item"
+                  >
+                    <v-icon
+                      size="small"
+                      color="primary"
+                    >
+                      {{ $globals.icons.book }}
+                    </v-icon>
+                    <span class="font-weight-medium">{{ $t("recipe.source") }}:</span>
+                    <a
+                      v-if="recipeSourceUrl"
+                      :href="recipeSourceUrl"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="recipe-origin-meta__link"
+                    >
+                      {{ recipe.source }}
+                    </a>
+                    <span v-else>{{ recipe.source }}</span>
+                  </div>
+                </div>
               </div>
               <div
-                v-if="recipe.source"
-                class="recipe-origin-meta__item"
+                v-if="recipe.recipeYieldQuantity || recipe.recipeYield || isOwnGroup || hasAllGroceries"
+                class="recipe-info-card__quick-stats"
               >
-                <v-icon
-                  size="small"
-                  color="primary"
+                <v-chip
+                  v-if="hasAllGroceries"
+                  color="success"
+                  variant="tonal"
+                  class="mb-4 recipe-info-card__ready-chip"
                 >
-                  {{ $globals.icons.book }}
-                </v-icon>
-                <span class="font-weight-medium">{{ $t("recipe.source") }}:</span>
-                <a
-                  v-if="recipeSourceUrl"
-                  :href="recipeSourceUrl"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="recipe-origin-meta__link"
-                >
-                  {{ recipe.source }}
-                </a>
-                <span v-else>{{ recipe.source }}</span>
+                  <v-icon start size="small">
+                    {{ $globals.icons.cartCheck }}
+                  </v-icon>
+                  {{ $t("recipe.all-ingredients-available") }}
+                </v-chip>
+                <RecipeYield
+                  v-if="recipe.recipeYieldQuantity || recipe.recipeYield"
+                  :yield-quantity="recipe.recipeYieldQuantity"
+                  :yield-text="recipe.recipeYield"
+                  :scale="recipeScale"
+                  class="mb-4"
+                />
+                <RecipeLastMade
+                  v-if="isOwnGroup"
+                  :recipe="recipe"
+                  class="mb-4"
+                />
               </div>
             </div>
-            <v-divider v-if="recipe.description || recipe.source || recipe.createdBy" />
-            <v-container class="recipe-info-card__stats px-0">
-              <div class="recipe-info-card__stat-group">
-                <v-row no-gutters>
-                  <v-col
-                    v-if="recipe.recipeYieldQuantity || recipe.recipeYield"
-                    cols="12"
-                    class="d-flex flex-wrap justify-start"
-                  >
-                    <RecipeYield
-                      :yield-quantity="recipe.recipeYieldQuantity"
-                      :yield-text="recipe.recipeYield"
-                      :scale="recipeScale"
-                      class="mb-4"
-                    />
-                  </v-col>
-                </v-row>
-                <v-row no-gutters>
-                  <v-col
-                    cols="12"
-                    class="d-flex flex-wrap justify-start"
-                  >
-                    <RecipeLastMade
-                      v-if="isOwnGroup"
-                      :recipe="recipe"
-                      class="mb-4"
-                    />
-                  </v-col>
-                </v-row>
-              </div>
+            <v-divider v-if="recipe.description || recipe.source || recipe.createdBy || recipe.recipeYieldQuantity || recipe.recipeYield || isOwnGroup || hasAllGroceries" />
+            <v-container
+              v-if="recipe.prepTime || recipe.totalTime || recipe.performTime"
+              class="recipe-info-card__stats px-0"
+            >
               <div
-                v-if="recipe.prepTime || recipe.totalTime || recipe.performTime"
                 class="recipe-info-card__stat-group"
               >
                 <RecipeTimeCard
@@ -128,6 +134,7 @@ import RecipeTimeCard from "~/components/Domain/Recipe/RecipeTimeCard.vue";
 import RecipeYield from "~/components/Domain/Recipe/RecipeYield.vue";
 import type { Recipe } from "~/lib/api/types/recipe";
 import type { NoUndefinedField } from "~/lib/api/types/non-generated";
+import { useShoppingListAvailability } from "~/composables/shopping-list-page/use-shopping-list-availability";
 
 interface Props {
   recipe: NoUndefinedField<Recipe>;
@@ -140,6 +147,12 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const { isOwnGroup } = useLoggedInState();
+const { ensureAvailability, hasAllGroceriesForRecipe } = useShoppingListAvailability();
+const hasAllGroceries = computed(() => hasAllGroceriesForRecipe(props.recipe.name));
+
+onMounted(() => {
+  void ensureAvailability();
+});
 
 const recipeSourceUrl = computed(() => {
   return externalUrlFromSource(props.recipe.source);
@@ -175,6 +188,27 @@ function externalUrlFromSource(source?: string | null) {
   width: min(100%, 920px);
   margin-inline: auto;
   text-align: start;
+}
+
+.recipe-info-card__details-row {
+  display: flex;
+  flex-direction: column;
+  gap: 12px 48px;
+}
+
+.recipe-info-card__meta-column {
+  min-width: 0;
+}
+
+.recipe-info-card__quick-stats {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: min(100%, 240px);
+}
+
+.recipe-info-card__ready-chip {
+  font-weight: 700;
 }
 
 .recipe-info-card__description {
@@ -238,9 +272,25 @@ function externalUrlFromSource(source?: string | null) {
 
 @media (min-width: 960px) {
   .recipe-info-card__details {
-    width: calc(33.333333% - 8px);
+    width: calc(66.666667% - 8px);
     margin-inline-start: 0;
     margin-inline-end: auto;
+  }
+
+  .recipe-info-card__details-row {
+    flex-direction: row;
+    justify-content: flex-start;
+  }
+
+  .recipe-info-card__meta-column {
+    flex: 1 1 440px;
+    max-width: 520px;
+  }
+
+  .recipe-info-card__quick-stats {
+    flex: 0 0 260px;
+    align-items: center;
+    padding-top: 12px;
   }
 }
 </style>

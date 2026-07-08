@@ -61,6 +61,17 @@ describe("use-shopping-list-sorting", () => {
       expect(sortedList.listItems).toEqual(undefined);
     });
   });
+  describe("sortItemsWithCheckedLast", () => {
+    const { sortItemsWithCheckedLast } = wrapper();
+    test("sorts unchecked items before checked items", () => {
+      const checkedItem = { ...MOCK_ITEM, checked: true, position: 0 };
+      const uncheckedItem = { ...MOCK_ITEM, checked: false, position: 1 };
+      expect([checkedItem, uncheckedItem].sort(sortItemsWithCheckedLast)).toEqual([
+        uncheckedItem,
+        checkedItem,
+      ]);
+    });
+  });
   describe("updateItemsByLabel", () => {
     const { updateItemsByLabel, t } = wrapper();
     test("sorts by group", () => {
@@ -86,13 +97,13 @@ describe("use-shopping-list-sorting", () => {
         ],
       });
     });
-    test("ignores checked items", () => {
+    test("keeps checked items visible in their label group", () => {
       const sortedList = {
         ...MOCK_SHOPPING_LIST, listItems: [
           MOCK_ITEM,
+          { ...MOCK_ITEM, label: MOCK_LABEL.label, labelId: "1", checked: true, position: 0 },
           { ...MOCK_ITEM, label: MOCK_LABEL2.label, labelId: "2" },
-          { ...MOCK_ITEM, label: MOCK_LABEL.label, labelId: "1" },
-          { ...MOCK_ITEM, label: MOCK_LABEL.label, labelId: "1", checked: true },
+          { ...MOCK_ITEM, label: MOCK_LABEL.label, labelId: "1", position: 1 },
         ],
       };
       const result = updateItemsByLabel(sortedList);
@@ -101,7 +112,8 @@ describe("use-shopping-list-sorting", () => {
           MOCK_ITEM,
         ],
         [MOCK_LABEL.label.name]: [
-          { ...MOCK_ITEM, label: MOCK_LABEL.label, labelId: "1" },
+          { ...MOCK_ITEM, label: MOCK_LABEL.label, labelId: "1", position: 1 },
+          { ...MOCK_ITEM, label: MOCK_LABEL.label, labelId: "1", checked: true, position: 0 },
         ],
         [MOCK_LABEL2.label.name]: [
           { ...MOCK_ITEM, label: MOCK_LABEL2.label, labelId: "2" },
@@ -129,6 +141,7 @@ describe("use-shopping-list-sorting", () => {
         ],
         [MOCK_LABEL.label.name]: [
           { ...MOCK_ITEM, label: MOCK_LABEL.label, labelId: "1" },
+          { ...MOCK_ITEM, label: MOCK_LABEL.label, labelId: "1", checked: true },
         ],
       });
     });
@@ -140,7 +153,7 @@ describe("use-shopping-list-sorting", () => {
       groupAndSortListItemsByFood(sortedList);
       expect(sortedList.listItems).toEqual(MOCK_SHOPPING_LIST.listItems);
     });
-    test("groups checked items together", () => {
+    test("keeps checked items in the normal item order", () => {
       const sortedList: ShoppingListOut = {
         ...MOCK_SHOPPING_LIST, listItems: [
           { ...MOCK_ITEM, checked: true, food: MOCK_FOOD },

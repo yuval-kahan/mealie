@@ -32,6 +32,7 @@
 
       <RecipeContextMenuContent
         v-if="isMenuContentLoaded"
+        ref="menuContent"
         v-bind="contentProps"
         @print="$emit('print')"
         @deleted="$emit('deleted', $event)"
@@ -123,6 +124,10 @@ defineEmits<{
 const { $globals } = useNuxtApp();
 
 const isMenuContentLoaded = ref(false);
+const menuContent = ref<{
+  openMealplannerDialog: () => void;
+  openShoppingListDialog: () => Promise<void>;
+} | null>(null);
 
 const icon = computed(() => {
   return props.menuIcon || $globals.icons.dotsVertical;
@@ -139,6 +144,33 @@ function onMenuToggle(isOpen: boolean) {
     isMenuContentLoaded.value = true;
   }
 }
+
+async function ensureMenuContentLoaded() {
+  if (!isMenuContentLoaded.value) {
+    isMenuContentLoaded.value = true;
+    await nextTick();
+  }
+
+  for (let attempt = 0; attempt < 10 && !menuContent.value; attempt++) {
+    await new Promise(resolve => setTimeout(resolve, 10));
+    await nextTick();
+  }
+}
+
+async function openMealplannerDialog() {
+  await ensureMenuContentLoaded();
+  menuContent.value?.openMealplannerDialog();
+}
+
+async function openShoppingListDialog() {
+  await ensureMenuContentLoaded();
+  await menuContent.value?.openShoppingListDialog();
+}
+
+defineExpose({
+  openMealplannerDialog,
+  openShoppingListDialog,
+});
 
 const RecipeContextMenuContent = defineAsyncComponent(() => import("./RecipeContextMenuContent.vue"));
 </script>

@@ -97,25 +97,41 @@
       </template>
     </BaseDialog>
 
-    <div class="d-flex justify-space-between justify-start">
+    <div class="d-flex align-center flex-wrap ga-2">
       <h2
         v-if="!isCookMode"
         class="mt-1 text-h5 font-weight-medium opacity-80"
       >
         {{ $t("recipe.instructions") }}
       </h2>
-      <BaseButton
+      <div
         v-if="!isEditForm && !isCookMode"
-        minor
-        cancel
-        color="primary"
-        @click="toggleCookMode()"
+        class="ml-auto d-flex align-center flex-wrap ga-2 justify-end"
       >
-        <template #icon>
-          {{ $globals.icons.primary }}
-        </template>
-        {{ $t("recipe.cook-mode") }}
-      </BaseButton>
+        <AppButtonCopy
+          :icon="false"
+          size="small"
+          :label="$t('recipe.copy-instructions')"
+          :copy-text="instructionCopyText"
+        />
+        <AppButtonCopy
+          :icon="false"
+          size="small"
+          :label="$t('recipe.copy-ingredients-and-instructions')"
+          :copy-text="ingredientsAndInstructionsCopyText"
+        />
+        <BaseButton
+          minor
+          cancel
+          color="primary"
+          @click="toggleCookMode()"
+        >
+          <template #icon>
+            {{ $globals.icons.primary }}
+          </template>
+          {{ $t("recipe.cook-mode") }}
+        </BaseButton>
+      </div>
     </div>
     <VueDraggable
       v-model="instructionList"
@@ -194,6 +210,7 @@
                   <div
                     v-else
                     class="summary-wrapper"
+                    :class="{ 'recipe-completed-item': isChecked(index) && userExperiencePreferences.strikeCompletedRecipeItems }"
                   >
                     <template v-if="step.summary">
                       <SafeMarkdown
@@ -331,7 +348,7 @@
               </DropZone>
               <v-expand-transition>
                 <div
-                  v-if="!isChecked(index) && !isEditForm"
+                  v-if="!isEditForm"
                   class="m-0 p-0"
                 >
                   <v-card-text class="markdown">
@@ -390,6 +407,8 @@ import type { NoUndefinedField } from "~/lib/api/types/non-generated";
 import DropZone from "~/components/global/DropZone.vue";
 import RecipeIngredients from "~/components/Domain/Recipe/RecipeIngredients.vue";
 import RecipeIngredientHtml from "~/components/Domain/Recipe/RecipeIngredientHtml.vue";
+import { useRecipeCopy } from "~/composables/recipes/use-recipe-copy";
+import { useUserExperiencePreferences } from "~/composables/use-users/preferences";
 
 interface MergerHistory {
   target: number;
@@ -416,6 +435,11 @@ const emit = defineEmits(["click-instruction-field", "update:assets"]);
 
 const { isCookMode, toggleCookMode, isEditForm } = usePageState(props.recipe.slug);
 const { extractIngredientReferences } = useExtractIngredientReferences();
+const {
+  formatRecipeIngredientsAndInstructionsForCopy,
+  formatRecipeInstructionsForCopy,
+} = useRecipeCopy();
+const userExperiencePreferences = useUserExperiencePreferences();
 
 const dialog = ref(false);
 const disabledSteps = ref<number[]>([]);
@@ -423,6 +447,8 @@ const unusedIngredients = ref<RecipeIngredient[]>([]);
 const usedIngredients = ref<RecipeIngredient[]>([]);
 
 const showTitleEditor = ref<{ [key: string]: boolean }>({});
+const instructionCopyText = computed(() => formatRecipeInstructionsForCopy(props.recipe));
+const ingredientsAndInstructionsCopyText = computed(() => formatRecipeIngredientsAndInstructionsForCopy(props.recipe));
 
 // ===============================================================
 // UI State Helpers
@@ -851,5 +877,10 @@ function openImageUpload(index: number) {
   white-space: normal;
   overflow-wrap: anywhere;
   cursor: pointer;
+}
+
+.recipe-completed-item,
+.recipe-completed-item :deep(*) {
+  text-decoration: line-through;
 }
 </style>

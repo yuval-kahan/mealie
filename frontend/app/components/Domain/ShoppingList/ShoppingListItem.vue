@@ -131,19 +131,6 @@
           />
         </v-col>
       </v-row>
-      <v-row
-        v-if="listItem.checked"
-        no-gutters
-        class="mb-2"
-      >
-        <v-col cols="auto">
-          <div class="text-caption font-weight-light font-italic">
-            {{ $t("shopping-list.completed-on", {
-              date: listItem.updatedAt ? $d(new Date(listItem.updatedAt)) : '',
-            }) }}
-          </div>
-        </v-col>
-      </v-row>
     </v-container>
     <div
       v-else
@@ -218,7 +205,7 @@ onMounted(() => {
 });
 const i18n = useI18n();
 const displayRecipeRefs = ref(false);
-const itemLabelCols = computed<string>(() => (model.value?.checked ? "auto" : "6"));
+const itemLabelCols = computed<string>(() => "6");
 const online = useOnline();
 const isOffline = computed(() => online.value === false);
 

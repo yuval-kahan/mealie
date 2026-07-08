@@ -34,6 +34,128 @@
         />
       </BaseDialog>
       <BaseDialog
+        v-model="quickArticleDialog"
+        :title="$t('article.create-article')"
+        :icon="$globals.icons.fileSign"
+        width="900"
+        max-width="96vw"
+        can-submit
+        keep-open
+        disable-submit-on-enter
+        :loading="quickArticleSaving"
+        :submit-disabled="!canSubmitQuickArticle"
+        :submit-text="$t('general.save')"
+        @submit="submitQuickArticle"
+        @close="resetQuickArticleForm"
+      >
+        <v-card-text class="pt-4">
+          <v-tabs
+            v-model="quickArticleCreateMode"
+            color="primary"
+            density="comfortable"
+          >
+            <v-tab value="manual">
+              {{ $t("article.manual") }}
+            </v-tab>
+            <v-tab value="ai-text">
+              {{ $t("article.ai-text") }}
+            </v-tab>
+            <v-tab value="ai-link">
+              {{ $t("article.ai-link") }}
+            </v-tab>
+          </v-tabs>
+
+          <v-window
+            v-model="quickArticleCreateMode"
+            class="mt-4"
+          >
+            <v-window-item value="manual">
+              <v-text-field
+                v-model="quickArticleForm.title"
+                :label="$t('article.title')"
+                variant="outlined"
+                density="comfortable"
+              />
+              <v-row>
+                <v-col
+                  cols="12"
+                  md="6"
+                >
+                  <v-text-field
+                    v-model="quickArticleForm.source"
+                    :label="$t('article.source')"
+                    variant="outlined"
+                    density="comfortable"
+                  />
+                </v-col>
+                <v-col
+                  cols="12"
+                  md="6"
+                >
+                  <v-text-field
+                    v-model="quickArticleForm.author"
+                    :label="$t('article.author')"
+                    variant="outlined"
+                    density="comfortable"
+                  />
+                </v-col>
+              </v-row>
+              <v-textarea
+                v-model="quickArticleForm.summary"
+                :label="$t('article.summary')"
+                variant="outlined"
+                rows="3"
+              />
+              <v-textarea
+                v-model="quickArticleForm.content"
+                :label="$t('article.content')"
+                variant="outlined"
+                rows="12"
+              />
+              <ArticleOrganizerInputs
+                v-model:categories="quickArticleForm.categories"
+                v-model:tags="quickArticleForm.tags"
+                :category-items="quickArticleCategoryOptions"
+                :tag-items="quickArticleTagOptions"
+              />
+            </v-window-item>
+
+            <v-window-item value="ai-text">
+              <v-textarea
+                v-model="quickArticleAiText"
+                :label="$t('article.article-text')"
+                variant="outlined"
+                rows="14"
+              />
+              <v-text-field
+                :model-value="quickArticleTargetLanguage"
+                :label="$t('article.target-language')"
+                variant="outlined"
+                density="comfortable"
+                readonly
+              />
+            </v-window-item>
+
+            <v-window-item value="ai-link">
+              <v-text-field
+                v-model="quickArticleAiUrl"
+                :label="$t('article.url')"
+                variant="outlined"
+                density="comfortable"
+                :prepend-inner-icon="$globals.icons.link"
+              />
+              <v-text-field
+                :model-value="quickArticleTargetLanguage"
+                :label="$t('article.target-language')"
+                variant="outlined"
+                density="comfortable"
+                readonly
+              />
+            </v-window-item>
+          </v-window>
+        </v-card-text>
+      </BaseDialog>
+      <BaseDialog
         v-model="uploadedBookDialog"
         :title="$t('cookbook.upload-book')"
         :icon="$globals.icons.upload"
@@ -650,9 +772,11 @@ import type { ReadCookBook } from "~/lib/api/types/cookbook";
 import type { RecipeCategory, RecipeTag } from "~/lib/api/types/recipe";
 import type { UploadedBook } from "~/lib/api/types/uploaded-book";
 import type { ShoppingListSummary } from "~/lib/api/types/household";
+import type { Article, ArticleCreate } from "~/lib/api/types/article";
 import { useUserApi } from "~/composables/api/api-client";
 import { alert } from "~/composables/use-toast";
 import { useShoppingListCopy } from "~/composables/shopping-list-page/sub-composables/use-shopping-list-copy";
+import ArticleOrganizerInputs from "~/components/Domain/Article/ArticleOrganizerInputs.vue";
 
 const i18n = useI18n();
 const { $globals } = useNuxtApp();
@@ -759,6 +883,22 @@ const showImageImport = computed(() => group.value?.aiProviderSettings?.imagePro
 
 const sidebar = ref<boolean>(false);
 const quickTextRecipeDialog = ref(false);
+const quickArticleDialog = ref(false);
+const quickArticleSaving = ref(false);
+const quickArticleCreateMode = ref<"manual" | "ai-text" | "ai-link">("manual");
+const quickArticleAiText = ref("");
+const quickArticleAiUrl = ref("");
+const quickArticleCategoryOptions = ref<string[]>([]);
+const quickArticleTagOptions = ref<string[]>([]);
+const quickArticleForm = reactive<ArticleCreate>({
+  title: "",
+  summary: "",
+  content: "",
+  source: "",
+  author: "",
+  categories: [],
+  tags: [],
+});
 const manualDraftCreateLoading = ref(false);
 const uploadedBookDialog = ref(false);
 const uploadedBookFile = ref<File | null>(null);
@@ -800,6 +940,16 @@ const uploadedBookTranslationLanguageOptions = computed(() => [
   i18n.t("cookbook.language-german"),
   i18n.t("cookbook.language-russian"),
 ]);
+const quickArticleTargetLanguage = computed(defaultUploadedBookTargetLanguage);
+const canSubmitQuickArticle = computed(() => {
+  if (quickArticleCreateMode.value === "manual") {
+    return Boolean(quickArticleForm.title.trim() && quickArticleForm.content.trim());
+  }
+  if (quickArticleCreateMode.value === "ai-text") {
+    return Boolean(quickArticleAiText.value.trim());
+  }
+  return Boolean(quickArticleAiUrl.value.trim());
+});
 const uploadedBookSupportedExtensions = [
   ".pdf",
   ".epub",
@@ -1812,6 +1962,68 @@ function defaultUploadedBookTargetLanguage() {
   return i18n.t("cookbook.language-english");
 }
 
+function sortedQuickArticleTerms(values: string[]) {
+  return Array.from(new Set(values.map(item => item.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+}
+
+function resetQuickArticleForm() {
+  quickArticleCreateMode.value = "manual";
+  quickArticleAiText.value = "";
+  quickArticleAiUrl.value = "";
+  quickArticleForm.title = "";
+  quickArticleForm.summary = "";
+  quickArticleForm.content = "";
+  quickArticleForm.source = "";
+  quickArticleForm.author = "";
+  quickArticleForm.categories = [];
+  quickArticleForm.tags = [];
+}
+
+async function refreshQuickArticleOrganizerOptions() {
+  const { data } = await api.articles.getAll();
+  if (!data) {
+    return;
+  }
+
+  quickArticleCategoryOptions.value = sortedQuickArticleTerms(data.flatMap((article: Article) => article.categories));
+  quickArticleTagOptions.value = sortedQuickArticleTerms(data.flatMap((article: Article) => article.tags));
+}
+
+function openQuickArticleDialog() {
+  resetQuickArticleForm();
+  quickArticleDialog.value = true;
+  void refreshQuickArticleOrganizerOptions();
+}
+
+async function submitQuickArticle() {
+  quickArticleSaving.value = true;
+  const result = await (async () => {
+    if (quickArticleCreateMode.value === "manual") {
+      return await api.articles.createOne(quickArticleForm);
+    }
+
+    return await api.articles.createWithAI({
+      text: quickArticleCreateMode.value === "ai-text" ? quickArticleAiText.value : null,
+      url: quickArticleCreateMode.value === "ai-link" ? quickArticleAiUrl.value : null,
+      translateLanguage: quickArticleTargetLanguage.value,
+    });
+  })().finally(() => {
+    quickArticleSaving.value = false;
+  });
+
+  if (result.error || !result.data) {
+    const detail = result.error?.response?.data?.detail;
+    const message = typeof detail?.message === "string" ? detail.message : i18n.t("events.something-went-wrong");
+    alert.error(message);
+    return;
+  }
+
+  quickArticleDialog.value = false;
+  resetQuickArticleForm();
+  window.dispatchEvent(new CustomEvent("mealie:articles-updated"));
+  alert.success(i18n.t("article.article-created"));
+}
+
 const organizerSidebarSections = computed<OrganizerSidebarSection[]>(() => [
   {
     key: "shoppingLists",
@@ -1884,12 +2096,6 @@ const topLinks = computed<SideBarLink[]>(() => [
     restricted: false,
   },
   {
-    icon: $globals.icons.search,
-    to: `/g/${groupSlug.value}/recipes/finder`,
-    title: i18n.t("recipe-finder.recipe-finder"),
-    restricted: false,
-  },
-  {
     icon: $globals.icons.calendarMultiselect,
     title: i18n.t("meal-plan.meal-planner"),
     to: "/household/mealplan/planner/view",
@@ -1905,6 +2111,12 @@ const topLinks = computed<SideBarLink[]>(() => [
     icon: $globals.icons.fileSign,
     title: i18n.t("article.articles"),
     to: "/articles",
+    restricted: true,
+  },
+  {
+    icon: $globals.icons.createAlt,
+    title: i18n.t("article.create-article"),
+    onClick: openQuickArticleDialog,
     restricted: true,
   },
   {

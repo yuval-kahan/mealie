@@ -37,6 +37,7 @@ export interface UserRecipePreferences {
 
 export interface UserShoppingListPreferences {
   viewAllLists: boolean;
+  openListsInline: boolean;
 }
 
 export interface UserTimelinePreferences {
@@ -85,6 +86,7 @@ export interface UserActivityPreferences {
 
 export interface UserExperiencePreferences {
   lockScreen: boolean;
+  strikeCompletedRecipeItems: boolean;
 }
 
 export function useUserMealPlanPreferences(): Ref<UserMealPlanPreferences> {
@@ -163,6 +165,7 @@ export function useShoppingListPreferences(): Ref<UserShoppingListPreferences> {
     "shopping-list-preferences",
     {
       viewAllLists: false,
+      openListsInline: true,
     },
     { mergeDefaults: true },
   );
@@ -280,6 +283,7 @@ export function useUserExperiencePreferences(): Ref<UserExperiencePreferences> {
     "user-experience-preferences",
     {
       lockScreen: true,
+      strikeCompletedRecipeItems: true,
     },
     { mergeDefaults: true },
   );

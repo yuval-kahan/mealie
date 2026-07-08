@@ -1,5 +1,5 @@
 <template>
-  <RecipeDialogShare v-model="shareDialog" :recipe-id="recipeId" :name="name" />
+  <RecipeDialogShare v-model="shareDialog" :recipe-id="recipeId" :name="name" :recipe="recipeRef" />
   <RecipeDialogPrintPreferences v-model="printPreferencesDialog" :recipe="recipeRef" />
   <BaseDialog
     v-model="recipeDeleteDialog"
@@ -134,8 +134,8 @@ import { useGroupRecipeActions } from "~/composables/use-group-recipe-actions";
 import { useHouseholdSelf } from "~/composables/use-households";
 import { alert } from "~/composables/use-toast";
 import { usePlanTypeOptions } from "~/composables/use-group-mealplan";
-import { useCopy } from "~/composables/use-copy";
-import type { Recipe, RecipeIngredient } from "~/lib/api/types/recipe";
+import { useRecipeCopy } from "~/composables/recipes/use-recipe-copy";
+import type { Recipe } from "~/lib/api/types/recipe";
 import type { GroupRecipeActionOut, ShoppingListSummary } from "~/lib/api/types/household";
 import type { PlanEntryType } from "~/lib/api/types/meal-plan";
 import { useDownloader } from "~/composables/api/use-downloader";
@@ -216,7 +216,7 @@ const emit = defineEmits<{
 }>();
 
 const api = useUserApi();
-const { copyText } = useCopy();
+const { copyRecipeText } = useRecipeCopy();
 
 const printPreferencesDialog = ref(false);
 const shareDialog = ref(false);
@@ -505,92 +505,6 @@ async function renameRecipe() {
   emit("renamed", { slug: props.slug, name: data.name || name, recipe: data });
 }
 
-function cleanRecipeText(value?: string | null) {
-  return (value || "")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/p>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/\r\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-function formatRecipeIngredient(ingredient: RecipeIngredient) {
-  if (ingredient.title) {
-    return `${ingredient.title}:`;
-  }
-
-  if (ingredient.referencedRecipe?.name) {
-    return `- ${ingredient.referencedRecipe.name}`;
-  }
-
-  const quantity = ingredient.quantity ? String(ingredient.quantity) : "";
-  const unit = ingredient.unit?.abbreviation || ingredient.unit?.name || "";
-  const food = ingredient.food?.name || "";
-  const note = cleanRecipeText(ingredient.note);
-  const line = [quantity, unit, food].filter(Boolean).join(" ").trim();
-
-  return `- ${[line, note].filter(Boolean).join(" - ")}`;
-}
-
-function formatRecipeForCopy(recipe: Recipe) {
-  const lines: string[] = [recipe.name || props.name];
-  const description = cleanRecipeText(recipe.description);
-  const source = cleanRecipeText(recipe.source || recipe.orgURL);
-
-  if (description) {
-    lines.push("", description);
-  }
-
-  if (source) {
-    lines.push("", `${i18n.t("recipe.source")}: ${source}`);
-  }
-
-  if (recipe.createdBy) {
-    lines.push(`${i18n.t("recipe.created-by")}: ${recipe.createdBy}`);
-  }
-
-  if (recipe.recipeYield) {
-    lines.push(`${i18n.t("recipe.recipe-yield")}: ${recipe.recipeYield}`);
-  }
-
-  if (recipe.recipeIngredient?.length) {
-    lines.push("", i18n.t("recipe.ingredients"));
-    recipe.recipeIngredient.forEach((ingredient) => {
-      const formattedIngredient = formatRecipeIngredient(ingredient);
-      if (formattedIngredient) {
-        lines.push(formattedIngredient);
-      }
-    });
-  }
-
-  if (recipe.recipeInstructions?.length) {
-    lines.push("", i18n.t("recipe.instructions"));
-    recipe.recipeInstructions.forEach((instruction, index) => {
-      const text = cleanRecipeText(instruction.text || instruction.summary);
-      const title = cleanRecipeText(instruction.title);
-      if (title) {
-        lines.push(`${index + 1}. ${title}`);
-      }
-      if (text) {
-        lines.push(title ? text : `${index + 1}. ${text}`);
-      }
-    });
-  }
-
-  if (recipe.notes?.length) {
-    lines.push("", i18n.t("recipe.notes"));
-    recipe.notes.forEach((note) => {
-      const text = cleanRecipeText(note.text);
-      if (text) {
-        lines.push(`- ${text}`);
-      }
-    });
-  }
-
-  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
-}
-
 async function copyRecipe() {
   if (!recipeRef.value) {
     await refreshRecipe();
@@ -601,7 +515,7 @@ async function copyRecipe() {
     return;
   }
 
-  copyText(formatRecipeForCopy(recipeRef.value));
+  copyRecipeText(recipeRef.value, props.name);
 }
 
 // Note: Print is handled as an event in the parent component
@@ -620,29 +534,40 @@ const eventHandlers: { [key: string]: () => void | Promise<any> } = {
   duplicate: () => {
     recipeDuplicateDialog.value = true;
   },
-  mealplanner: () => {
-    mealplannerDialog.value = true;
-  },
+  mealplanner: openMealplannerDialog,
   printPreferences: async () => {
     if (!recipeRef.value) {
       await refreshRecipe();
     }
     printPreferencesDialog.value = true;
   },
-  shoppingList: () => {
-    const promises: Promise<void>[] = [getShoppingLists()];
+  shoppingList: openShoppingListDialog,
+  share: async () => {
     if (!recipeRef.value) {
-      promises.push(refreshRecipe());
+      await refreshRecipe();
     }
-
-    Promise.allSettled(promises).then(() => {
-      shoppingListDialog.value = true;
-    });
-  },
-  share: () => {
     shareDialog.value = true;
   },
 };
+
+function openMealplannerDialog() {
+  mealplannerDialog.value = true;
+}
+
+async function openShoppingListDialog() {
+  const promises: Promise<void>[] = [getShoppingLists()];
+  if (!recipeRef.value) {
+    promises.push(refreshRecipe());
+  }
+
+  await Promise.allSettled(promises);
+  shoppingListDialog.value = true;
+}
+
+defineExpose({
+  openMealplannerDialog,
+  openShoppingListDialog,
+});
 
 function contextMenuEventHandler(eventKey: string) {
   const handler = eventHandlers[eventKey];

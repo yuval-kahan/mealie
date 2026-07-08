@@ -61,6 +61,35 @@
             <v-list-item-title>
               {{ $t("recipe-share.expires-at") + ' ' + $d(new Date(token.expiresAt!), "short") }}
             </v-list-item-title>
+            <div class="recipe-share-channel-actions mt-2" @click.stop>
+              <v-btn
+                size="small"
+                variant="tonal"
+                color="primary"
+                :prepend-icon="$globals.icons.shareVariant"
+                @click.stop="shareRecipe(token.id)"
+              >
+                {{ $t("recipe-share.device-share") }}
+              </v-btn>
+              <v-btn
+                size="small"
+                variant="tonal"
+                color="primary"
+                :prepend-icon="$globals.icons.shareVariant"
+                @click.stop="shareWhatsApp(token.id)"
+              >
+                WhatsApp
+              </v-btn>
+              <v-btn
+                size="small"
+                variant="tonal"
+                color="primary"
+                :prepend-icon="$globals.icons.email"
+                @click.stop="shareEmail(token.id)"
+              >
+                {{ $t("recipe-share.email") }}
+              </v-btn>
+            </div>
           </div>
 
           <v-btn
@@ -91,14 +120,16 @@
 
 <script setup lang="ts">
 import { useClipboard, useShare, whenever } from "@vueuse/core";
-import type { RecipeShareToken } from "~/lib/api/types/recipe";
+import type { Recipe, RecipeShareToken } from "~/lib/api/types/recipe";
 import { useUserApi } from "~/composables/api";
+import { useRecipeCopy } from "~/composables/recipes/use-recipe-copy";
 import { useHouseholdSelf } from "~/composables/use-households";
 import { alert } from "~/composables/use-toast";
 
 interface Props {
   recipeId: string;
   name: string;
+  recipe?: Recipe | null;
 }
 const props = defineProps<Props>();
 
@@ -161,13 +192,23 @@ async function refreshTokens() {
 
 const { share, isSupported: shareIsSupported } = useShare();
 const { copy, copied, isSupported } = useClipboard();
+const { formatRecipeIngredientsAndInstructionsForCopy } = useRecipeCopy();
 
 function getRecipeText() {
-  return i18n.t("recipe.share-recipe-message", [props.name]);
+  const recipeText = props.recipe ? formatRecipeIngredientsAndInstructionsForCopy(props.recipe) : "";
+  return recipeText || i18n.t("recipe.share-recipe-message", [props.name]);
 }
 
 function getTokenLink(token: string) {
   return `${window.location.origin}/g/${groupSlug.value}/shared/r/${token}`;
+}
+
+function getShareMessage(token: string) {
+  return `${getRecipeText()}\n\n${getTokenLink(token)}`;
+}
+
+function openShareWindow(url: string) {
+  window.open(url, "_blank", "noopener,noreferrer");
 }
 
 async function copyTokenLink(token: string) {
@@ -186,8 +227,8 @@ async function copyTokenLink(token: string) {
 }
 
 async function shareRecipe(token: string) {
-  if (shareIsSupported) {
-    share({
+  if (shareIsSupported.value) {
+    await share({
       title: props.name,
       url: getTokenLink(token),
       text: getRecipeText() as string,
@@ -197,4 +238,20 @@ async function shareRecipe(token: string) {
     await copyTokenLink(token);
   }
 }
+
+function shareWhatsApp(token: string) {
+  openShareWindow(`https://wa.me/?text=${encodeURIComponent(getShareMessage(token))}`);
+}
+
+function shareEmail(token: string) {
+  window.location.href = `mailto:?subject=${encodeURIComponent(props.name)}&body=${encodeURIComponent(getShareMessage(token))}`;
+}
 </script>
+
+<style scoped>
+.recipe-share-channel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+</style>

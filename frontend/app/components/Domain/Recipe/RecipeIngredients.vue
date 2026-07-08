@@ -38,7 +38,9 @@
               density="comfortable"
             />
           </template>
-          <v-list-item-title>
+          <v-list-item-title
+            :class="{ 'recipe-completed-item': checked[index] && userExperiencePreferences.strikeCompletedRecipeItems }"
+          >
             <RecipeIngredientListItem
               :ingredient="ingredient"
               :scale="scale"
@@ -53,6 +55,7 @@
 <script setup lang="ts">
 import RecipeIngredientListItem from "./RecipeIngredientListItem.vue";
 import { useIngredientTextParser } from "~/composables/recipes";
+import { useUserExperiencePreferences } from "~/composables/use-users/preferences";
 import type { RecipeIngredient } from "~/lib/api/types/recipe";
 
 interface Props {
@@ -67,6 +70,7 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const { parseIngredientText } = useIngredientTextParser();
+const userExperiencePreferences = useUserExperiencePreferences();
 
 function validateTitle(title?: string | null) {
   return !(title === undefined || title === "" || title === null);
@@ -102,5 +106,10 @@ function toggleChecked(index: number) {
 <style>
 .dense-markdown p {
   margin: auto !important;
+}
+
+.recipe-completed-item,
+.recipe-completed-item * {
+  text-decoration: line-through;
 }
 </style>

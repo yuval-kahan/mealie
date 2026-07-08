@@ -184,6 +184,14 @@
             persistent-hint
           />
           <v-checkbox
+            v-model="experiencePreferences.strikeCompletedRecipeItems"
+            hide-details="auto"
+            :label="$t('user.strike-completed-recipe-items')"
+            :hint="$t('user.strike-completed-recipe-items-hint')"
+            color="primary"
+            persistent-hint
+          />
+          <v-checkbox
             v-model="userCopy.showAnnouncements"
             hide-details
             :label="$t('announcements.show-announcements-from-mealie')"
@@ -227,7 +235,7 @@ import { useUserApi } from "~/composables/api";
 import UserAvatar from "~/components/Domain/User/UserAvatar.vue";
 import UserPasswordStrength from "~/components/Domain/User/UserPasswordStrength.vue";
 import { validators } from "~/composables/use-validators";
-import { useUserActivityPreferences } from "~/composables/use-users/preferences";
+import { useUserActivityPreferences, useUserExperiencePreferences } from "~/composables/use-users/preferences";
 import useDefaultActivity from "~/composables/use-default-activity";
 import { ActivityKey } from "~/lib/api/types/activity";
 import type { UserBase } from "~/lib/api/types/user";
@@ -242,6 +250,7 @@ useSeoMeta({
 });
 
 const activityPreferences = useUserActivityPreferences();
+const experiencePreferences = useUserExperiencePreferences();
 const activityOptions = getDefaultActivityLabels(i18n);
 const selectedDefaultActivity = ref(getActivityLabel(i18n, activityPreferences.value.defaultActivity));
 watch(selectedDefaultActivity, () => {

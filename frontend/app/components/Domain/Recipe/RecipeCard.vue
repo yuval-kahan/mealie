@@ -37,6 +37,29 @@
         <v-card-title class="recipe-card-title px-4">
           {{ displayName }}
         </v-card-title>
+        <div class="recipe-card-tags px-4">
+          <v-chip
+            v-if="hasAllGroceries"
+            size="x-small"
+            color="success"
+            variant="tonal"
+            class="recipe-card-ready-chip"
+            :title="$t('recipe.all-ingredients-available')"
+          >
+            <v-icon start size="x-small">
+              {{ $globals.icons.cartCheck }}
+            </v-icon>
+            {{ $t("recipe.all-ingredients-available-short") }}
+          </v-chip>
+          <RecipeChips
+            :truncate="true"
+            :items="tags"
+            :title="false"
+            small
+            url-prefix="tags"
+            v-bind="$attrs"
+          />
+        </div>
 
         <slot name="actions">
           <v-card-actions v-if="showRecipeContent" class="recipe-card-actions px-1">
@@ -46,19 +69,51 @@
 
             <RecipeCardRating :model-value="rating" :recipe-id="recipeId" />
             <v-spacer />
-            <RecipeChips
-              :truncate="true"
-              :items="tags"
-              :title="false"
-              :limit="2"
-              small
-              url-prefix="tags"
-              v-bind="$attrs"
-            />
+
+            <div v-if="isOwnGroup" class="recipe-card-quick-actions">
+              <v-btn
+                icon
+                variant="text"
+                size="x-small"
+                class="recipe-card-action-btn"
+                color="primary"
+                :loading="copyLoading"
+                :title="$t('recipe.copy-recipe')"
+                :aria-label="$t('recipe.copy-recipe')"
+                @click.stop.prevent="copyRecipeFromCard"
+              >
+                <v-icon>{{ $globals.icons.contentCopy }}</v-icon>
+              </v-btn>
+              <v-btn
+                icon
+                variant="text"
+                size="x-small"
+                class="recipe-card-action-btn"
+                color="primary"
+                :title="$t('recipe.add-to-plan')"
+                :aria-label="$t('recipe.add-to-plan')"
+                @click.stop.prevent="openMealplannerFromCard"
+              >
+                <v-icon>{{ $globals.icons.calendar }}</v-icon>
+              </v-btn>
+              <v-btn
+                icon
+                variant="text"
+                size="x-small"
+                class="recipe-card-action-btn"
+                color="primary"
+                :title="$t('recipe.add-to-list')"
+                :aria-label="$t('recipe.add-to-list')"
+                @click.stop.prevent="openShoppingListFromCard"
+              >
+                <v-icon>{{ $globals.icons.cartCheck }}</v-icon>
+              </v-btn>
+            </div>
 
             <!-- If we're not logged-in, no items display, so we hide this menu -->
             <RecipeContextMenu
               v-if="isOwnGroup && showRecipeContent"
+              ref="recipeContextMenu"
               color="grey-darken-2"
               :slug="slug"
               :menu-icon="$globals.icons.dotsVertical"
@@ -69,7 +124,7 @@
               :use-items="{
                 edit: false,
                 rename: true,
-                copy: true,
+                copy: false,
                 rating: true,
                 download: true,
                 mealplanner: true,
@@ -96,7 +151,11 @@ import RecipeChips from "./RecipeChips.vue";
 import RecipeContextMenu from "./RecipeContextMenu/RecipeContextMenu.vue";
 import RecipeCardImage from "./RecipeCardImage.vue";
 import RecipeCardRating from "./RecipeCardRating.vue";
+import { useUserApi } from "~/composables/api/api-client";
+import { useRecipeCopy } from "~/composables/recipes/use-recipe-copy";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
+import { useShoppingListAvailability } from "~/composables/shopping-list-page/use-shopping-list-availability";
+import { alert } from "~/composables/use-toast";
 
 interface Props {
   name: string;
@@ -125,8 +184,17 @@ const emit = defineEmits<{
 }>();
 
 const auth = useMealieAuth();
+const api = useUserApi();
+const { copyRecipeText } = useRecipeCopy();
+const i18n = useI18n();
 const { isOwnGroup } = useLoggedInState();
+const { ensureAvailability, hasAllGroceriesForRecipe } = useShoppingListAvailability();
 const displayName = ref(props.name);
+const copyLoading = ref(false);
+const recipeContextMenu = ref<{
+  openMealplannerDialog: () => Promise<void>;
+  openShoppingListDialog: () => Promise<void>;
+} | null>(null);
 
 watch(
   () => props.name,
@@ -142,10 +210,43 @@ const recipeRoute = computed<string>(() => {
   return showRecipeContent.value ? `/g/${groupSlug.value}/r/${props.slug}` : "";
 });
 const cursor = computed(() => (showRecipeContent.value ? "pointer" : "auto"));
+const hasAllGroceries = computed(() => hasAllGroceriesForRecipe(displayName.value));
+
+onMounted(() => {
+  void ensureAvailability();
+});
 
 function handleRenamed(payload: { slug: string; name: string; recipe?: any }) {
   displayName.value = payload.name;
   emit("renamed", payload);
+}
+
+async function copyRecipeFromCard() {
+  if (copyLoading.value || !showRecipeContent.value) {
+    return;
+  }
+
+  copyLoading.value = true;
+  try {
+    const { data } = await api.recipes.getOne(props.slug);
+    if (!data) {
+      alert.error(i18n.t("events.something-went-wrong"));
+      return;
+    }
+
+    copyRecipeText(data, displayName.value);
+  }
+  finally {
+    copyLoading.value = false;
+  }
+}
+
+async function openMealplannerFromCard() {
+  await recipeContextMenu.value?.openMealplannerDialog();
+}
+
+async function openShoppingListFromCard() {
+  await recipeContextMenu.value?.openShoppingListDialog();
 }
 </script>
 
@@ -187,6 +288,51 @@ function handleRenamed(payload: { slug: string; name: string; recipe?: any }) {
   height: 52px;
   min-height: 52px;
   overflow: hidden;
+}
+.recipe-card-quick-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0;
+  max-width: 96px;
+  overflow: hidden;
+}
+.recipe-card-action-btn {
+  flex: 0 0 32px;
+  height: 32px !important;
+  min-width: 32px !important;
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease,
+    color 0.15s ease;
+  width: 32px !important;
+}
+.recipe-card-action-btn:hover,
+.recipe-card-action-btn:focus-visible {
+  background-color: rgba(var(--v-theme-primary), 0.14) !important;
+  box-shadow: inset 0 0 0 1px rgba(var(--v-theme-primary), 0.28);
+  color: rgb(var(--v-theme-primary)) !important;
+}
+.recipe-card-tags {
+  align-items: center;
+  display: flex;
+  flex-wrap: nowrap;
+  height: 32px;
+  min-height: 32px;
+  overflow: hidden;
+}
+.recipe-card-tags > div {
+  display: flex;
+  flex-wrap: nowrap;
+  min-width: 0;
+  overflow: hidden;
+}
+.recipe-card-tags .v-chip {
+  flex: 0 0 auto;
+  margin-top: 0 !important;
+}
+.recipe-card-ready-chip {
+  font-weight: 700;
+  margin-inline-end: 4px;
 }
 .descriptionWrapper {
   display: -webkit-box;

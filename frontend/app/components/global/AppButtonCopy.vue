@@ -13,6 +13,7 @@
         variant="flat"
         :icon="icon"
         :color="color"
+        :size="size"
         retain-focus-on-click
         :class="btnClass"
         :disabled="copyText !== '' ? false : true"
@@ -20,7 +21,7 @@
         @click="textToClipboard()"
       >
         <v-icon>{{ $globals.icons.contentCopy }}</v-icon>
-        {{ icon ? "" : $t("general.copy") }}
+        {{ icon ? "" : label || $t("general.copy") }}
       </v-btn>
     </template>
     <span v-if="!isSupported || copiedSuccess !== null">
@@ -52,6 +53,14 @@ const props = defineProps({
   btnClass: {
     type: String,
     default: "",
+  },
+  label: {
+    type: String,
+    default: "",
+  },
+  size: {
+    type: String,
+    default: undefined,
   },
 });
 

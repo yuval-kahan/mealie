@@ -6,11 +6,21 @@ import { useShoppingListLabels } from "~/composables/shopping-list-page/sub-comp
 import { useShoppingListCopy } from "~/composables/shopping-list-page/sub-composables/use-shopping-list-copy";
 import { useShoppingListCrud } from "~/composables/shopping-list-page/sub-composables/use-shopping-list-crud";
 import { useShoppingListRecipes } from "~/composables/shopping-list-page/sub-composables/use-shopping-list-recipes";
+import { useUserApi } from "~/composables/api/api-client";
+import { alert } from "~/composables/use-toast";
+import {
+  buildShoppingListReadyExtras,
+  isShoppingListGroceriesReady,
+  useShoppingListAvailability,
+} from "~/composables/shopping-list-page/use-shopping-list-availability";
 
 /**
  * Main composable that orchestrates all shopping list page functionality
  */
 export function useShoppingListPage(listId: string) {
+  const i18n = useI18n();
+  const userApi = useUserApi();
+
   // Initialize state
   const state = useShoppingListState();
   const {
@@ -28,6 +38,13 @@ export function useShoppingListPage(listId: string) {
 
   // Track items organized by label
   const itemsByLabel = ref<{ [key: string]: ShoppingListItemOut[] }>({});
+  const aiOrganizing = ref(false);
+  const { updateAvailabilityForListName } = useShoppingListAvailability();
+  const shoppingListAiOrganized = computed(() => {
+    const value = shoppingList.value?.extras?.aiOrganized;
+    return value === true || value === "true";
+  });
+  const shoppingListGroceriesReady = computed(() => isShoppingListGroceriesReady(shoppingList.value));
 
   function updateListItemOrder() {
     if (!shoppingList.value) return;
@@ -82,13 +99,16 @@ export function useShoppingListPage(listId: string) {
       return;
     }
 
+    const checkedItems = itemsByLabel.value[labelName].filter(item => item.checked);
+    const uncheckedItems = labeledUncheckedItems.filter(item => !item.checked);
+
     // update this label's item order
-    itemsByLabel.value[labelName] = labeledUncheckedItems;
+    itemsByLabel.value[labelName] = [...uncheckedItems, ...checkedItems];
 
     // reset list order of all items
     const allUncheckedItems: ShoppingListItemOut[] = [];
     for (const labelKey in itemsByLabel.value) {
-      allUncheckedItems.push(...itemsByLabel.value[labelKey]);
+      allUncheckedItems.push(...itemsByLabel.value[labelKey].filter(item => !item.checked));
     }
 
     // since the user has manually reordered the list, we should preserve this order
@@ -139,6 +159,69 @@ export function useShoppingListPage(listId: string) {
     copyManager.copyListItems(itemsByLabel.value, copyType);
   }
 
+  async function organizeShoppingListWithAI() {
+    if (!shoppingList.value || aiOrganizing.value) {
+      return;
+    }
+
+    if (!shoppingList.value.listItems?.length) {
+      alert.error(i18n.t("shopping-list.ai-organize-empty"));
+      return;
+    }
+
+    aiOrganizing.value = true;
+    loadingCounter.value += 1;
+    try {
+      await shoppingListItemActions.process();
+      const { data, error } = await userApi.shopping.lists.organizeWithAi(shoppingList.value.id);
+      if (error || !data) {
+        alert.error(i18n.t("shopping-list.ai-organize-failed"));
+        return;
+      }
+
+      preserveItemOrder.value = false;
+      shoppingList.value = data;
+      updateListItemOrder();
+      window.dispatchEvent(new CustomEvent("mealie:organizers-updated"));
+      alert.success(i18n.t("shopping-list.ai-organize-complete"));
+    }
+    catch {
+      alert.error(i18n.t("shopping-list.ai-organize-failed"));
+    }
+    finally {
+      loadingCounter.value -= 1;
+      aiOrganizing.value = false;
+    }
+  }
+
+  async function toggleShoppingListGroceriesReady() {
+    if (!shoppingList.value) {
+      return;
+    }
+
+    loadingCounter.value += 1;
+    try {
+      await shoppingListItemActions.process();
+      const nextReady = !shoppingListGroceriesReady.value;
+      const payload = {
+        ...shoppingList.value,
+        extras: buildShoppingListReadyExtras(shoppingList.value, nextReady),
+      };
+      const { data, error } = await userApi.shopping.lists.updateOne(shoppingList.value.id, payload);
+      if (error || !data) {
+        alert.error(i18n.t("events.something-went-wrong"));
+        return;
+      }
+
+      shoppingList.value = data;
+      updateAvailabilityForListName(data.name, nextReady);
+      window.dispatchEvent(new CustomEvent("mealie:organizers-updated"));
+    }
+    finally {
+      loadingCounter.value -= 1;
+    }
+  }
+
   // Label reordering helpers
   function toggleReorderLabelsDialog() {
     crud.toggleReorderLabelsDialog(state.reorderLabelsDialog);
@@ -175,6 +258,11 @@ export function useShoppingListPage(listId: string) {
     // Specialized functions
     updateIndexUncheckedByLabel,
     copyListItems,
+    organizeShoppingListWithAI,
+    aiOrganizing,
+    shoppingListAiOrganized,
+    shoppingListGroceriesReady,
+    toggleShoppingListGroceriesReady,
 
     // Dialog actions
     openCheckAll,

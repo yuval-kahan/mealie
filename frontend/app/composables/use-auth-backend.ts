@@ -70,7 +70,7 @@ export const useAuthBackend = function (): AuthState {
     catch (error: any) {
       console.error("Failed to fetch user session:", error);
       handleAuthError(error);
-      authStatus.value = "unauthenticated";
+      authStatus.value = tokenCookie.value && authUser.value ? "authenticated" : "unauthenticated";
     }
   }
 

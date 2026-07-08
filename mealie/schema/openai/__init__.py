@@ -12,6 +12,7 @@ from .recipe import (
 )
 from .recipe_ingredient import OpenAIIngredient, OpenAIIngredients
 from .recipe_search import OpenAIRecipeSearchItem, OpenAIRecipeSearchResponse
+from .shopping_list import OpenAIShoppingListAssignment, OpenAIShoppingListOrganization
 
 __all__ = [
     "OpenAIIngredient",
@@ -26,5 +27,7 @@ __all__ = [
     "OpenAIRecipeSearchItem",
     "OpenAIRecipeSearchResponse",
     "OpenAIRecipeTextParse",
+    "OpenAIShoppingListAssignment",
+    "OpenAIShoppingListOrganization",
     "OpenAIText",
 ]

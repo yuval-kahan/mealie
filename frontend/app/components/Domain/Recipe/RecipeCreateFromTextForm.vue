@@ -101,6 +101,13 @@
             :disabled="state.loading"
           />
         </template>
+        <v-checkbox
+          v-model="shouldCreateShoppingList"
+          color="primary"
+          hide-details
+          :label="$t('recipe.create-ai-shopping-list-description')"
+          :disabled="state.loading"
+        />
         <v-divider class="my-4" />
         <div class="d-flex flex-column ga-3">
           <RecipeCoverImageUpload
@@ -138,12 +145,13 @@
 </template>
 
 <script setup lang="ts">
-import { useUserApi } from "~/composables/api";
+import { useUserApi } from "~/composables/api/api-client";
 import { useCategoryStore } from "~/composables/store/use-category-store";
 import { useTagStore } from "~/composables/store/use-tag-store";
 import { useNewRecipeOptions } from "~/composables/use-new-recipe-options";
 import { alert } from "~/composables/use-toast";
 import { validators } from "~/composables/use-validators";
+import type { Recipe } from "~/lib/api/types/recipe";
 import type { VForm } from "~/types/auto-forms";
 
 type CreateMode = "text" | "url" | "image";
@@ -175,6 +183,7 @@ const categories = useCategoryStore();
 const tags = useTagStore();
 const domCreateForm = ref<VForm | null>(null);
 const shouldTranslate = ref(true);
+const shouldCreateShoppingList = ref(true);
 const recipeImageFile = ref<File | null>(null);
 const additionalImageFiles = ref<File[]>([]);
 const videoFile = ref<File | null>(null);
@@ -338,6 +347,7 @@ async function createRecipeFromText() {
   }
 
   await attachMediaToRecipe(data);
+  await createShoppingListForRecipe(data);
   await refreshRecipeOrganizers();
 
   emit("created", data);
@@ -360,6 +370,7 @@ async function createRecipeFromImages() {
   }
 
   await attachMediaToRecipe(data);
+  await createShoppingListForRecipe(data);
   await refreshRecipeOrganizers();
   emit("created", data);
   navigateToRecipe(data, groupSlug.value, props.returnTo || route.path);
@@ -390,6 +401,7 @@ async function createRecipeFromUrl() {
   }
 
   await attachMediaToRecipe(response.data);
+  await createShoppingListForRecipe(response.data);
   await refreshRecipeOrganizers();
   emit("created", response.data);
   navigateToRecipe(response.data, groupSlug.value, props.returnTo || route.path);
@@ -454,5 +466,85 @@ async function attachAdditionalImagesToRecipe(recipeSlug: string) {
   if (hasError) {
     alert.error(i18n.t("events.something-went-wrong"));
   }
+}
+
+async function createShoppingListForRecipe(recipeSlug: string) {
+  if (!shouldCreateShoppingList.value) {
+    return;
+  }
+
+  createStatus.value = i18n.t("recipe.creating-ai-shopping-list");
+
+  try {
+    const { data: recipe } = await api.recipes.getOne(recipeSlug);
+    if (!recipe?.id) {
+      alert.error(i18n.t("recipe.ai-shopping-list-create-failed"));
+      return;
+    }
+
+    const shoppingList = await createUniqueShoppingList(recipe);
+    if (!shoppingList?.id) {
+      alert.error(i18n.t("recipe.ai-shopping-list-create-failed"));
+      return;
+    }
+
+    const { error: addError } = await api.shopping.lists.addRecipes(shoppingList.id, [
+      {
+        recipeId: recipe.id,
+        recipeIncrementQuantity: 1,
+        recipeIngredients: recipe.recipeIngredient || null,
+      },
+    ]);
+
+    if (addError) {
+      alert.error(i18n.t("recipe.ai-shopping-list-create-failed"));
+      return;
+    }
+
+    createStatus.value = i18n.t("recipe.organizing-ai-shopping-list");
+    const { error: organizeError } = await api.shopping.lists.organizeWithAi(shoppingList.id);
+    if (organizeError) {
+      alert.error(i18n.t("recipe.ai-shopping-list-organize-failed"));
+      return;
+    }
+
+    if (import.meta.client) {
+      window.dispatchEvent(new CustomEvent("mealie:organizers-updated"));
+    }
+    alert.success(i18n.t("recipe.ai-shopping-list-created"));
+  }
+  catch (e) {
+    console.error("Failed to create AI shopping list", e);
+    alert.error(i18n.t("recipe.ai-shopping-list-create-failed"));
+  }
+}
+
+async function createUniqueShoppingList(recipe: Recipe) {
+  const baseName = (recipe.name || recipe.slug || i18n.t("shopping-list.shopping-list")).trim();
+  const { data: shoppingLists } = await api.shopping.lists.getAll(1, -1, { orderBy: "name", orderDirection: "asc" });
+  const existingNames = new Set(
+    (shoppingLists?.items || []).map(list => (list.name || "").trim().toLocaleLowerCase()).filter(Boolean),
+  );
+
+  let name = baseName;
+  let suffix = 2;
+  while (existingNames.has(name.toLocaleLowerCase())) {
+    name = `${baseName} (${suffix})`;
+    suffix += 1;
+  }
+
+  const { data, error } = await api.shopping.lists.createOne({
+    name,
+    extras: {
+      aiCreatedFromRecipeSlug: recipe.slug || null,
+      aiCreatedFromRecipeId: recipe.id || null,
+    },
+  });
+
+  if (error || !data) {
+    return null;
+  }
+
+  return data;
 }
 </script>

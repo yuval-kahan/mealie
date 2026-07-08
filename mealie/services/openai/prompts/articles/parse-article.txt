@@ -5,7 +5,9 @@ Return structured JSON only.
 Rules:
 - If the input is not a usable article or article-like educational text, return is_article=false and leave the other fields empty.
 - Preserve all important information from the article. Do not invent facts.
-- If a target language is requested, translate the article into that language while preserving meaning and details.
+- If a target language is requested, return the title, summary, full content, categories, and tags in that target language, even when the source article is written in another language.
+- If the input is already written in the requested target language, do not translate it; only cleanly structure, preserve, and tag it.
+- Preserve meaning and details while translating. Do not summarize away important information.
 - Keep the content readable with paragraphs and headings when helpful.
 - Extract source and author when present.
 - Create useful categories and tags for later search.
