@@ -109,9 +109,13 @@
           :disabled="state.loading"
         />
         <v-divider class="my-4" />
-        <div class="d-flex align-center flex-wrap ga-3">
+        <div class="d-flex flex-column ga-3">
           <RecipeCoverImageUpload
             v-model="recipeImageFile"
+            :disabled="state.loading"
+          />
+          <RecipeAdditionalImagesUpload
+            v-model="additionalImageFiles"
             :disabled="state.loading"
           />
           <RecipeVideoAssetUpload
@@ -177,6 +181,7 @@ const tags = useTagStore();
 const domCreateForm = ref<VForm | null>(null);
 const shouldTranslate = ref(true);
 const recipeImageFile = ref<File | null>(null);
+const additionalImageFiles = ref<File[]>([]);
 const videoFile = ref<File | null>(null);
 const createStatus = ref<string | null>(null);
 const { attachVideoToRecipe } = useRecipeVideoAsset();
@@ -284,6 +289,11 @@ function createTextErrorMessage(error: unknown) {
 function createLinkErrorMessage(error: unknown) {
   const typedError = error as { message?: string; response?: { data?: { detail?: { message?: string } } } };
   return typedError.response?.data?.detail?.message || i18n.t("recipe.recipe-link-import-error");
+}
+
+function fileBaseName(fileName: string) {
+  const lastDot = fileName.lastIndexOf(".");
+  return lastDot > 0 ? fileName.substring(0, lastDot) : fileName;
 }
 
 async function createRecipe() {
@@ -407,6 +417,38 @@ async function attachMediaToRecipe(recipeSlug: string) {
     }
   }
 
+  await attachAdditionalImagesToRecipe(recipeSlug);
   await attachVideoToRecipe(recipeSlug, videoFile.value);
+}
+
+async function attachAdditionalImagesToRecipe(recipeSlug: string) {
+  if (!additionalImageFiles.value.length) {
+    return;
+  }
+
+  let hasError = false;
+
+  for (const file of additionalImageFiles.value) {
+    try {
+      const { error } = await api.recipes.createAsset(recipeSlug, {
+        name: fileBaseName(file.name),
+        icon: "mdi-file-image",
+        file,
+        extension: file.name.split(".").pop() || "",
+      });
+
+      if (error) {
+        hasError = true;
+      }
+    }
+    catch (e) {
+      hasError = true;
+      console.error("Failed to upload additional recipe image", e);
+    }
+  }
+
+  if (hasError) {
+    alert.error(i18n.t("events.something-went-wrong"));
+  }
 }
 </script>
