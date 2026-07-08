@@ -73,14 +73,6 @@
             :label="$t('recipe.should-translate-description')"
             :disabled="state.loading"
           />
-          <v-checkbox
-            v-if="uploadedImages.length"
-            v-model="parseRecipe"
-            color="primary"
-            hide-details
-            :label="$t('recipe.parse-recipe-ingredients-after-import')"
-            :disabled="state.loading"
-          />
         </v-card-text>
         <v-card-actions v-if="uploadedImages.length">
           <div class="w-100 d-flex flex-column align-center">
@@ -123,7 +115,9 @@ const uploadedImagesPreviewUrls = ref<string[]>([]);
 const shouldTranslate = ref(true);
 const videoFile = ref<File | null>(null);
 
-const { parseRecipe, navigateToRecipe } = useNewRecipeOptions();
+const { navigateToRecipe } = useNewRecipeOptions({
+  enableParseRecipe: false,
+});
 const { attachVideoToRecipe } = useRecipeVideoAsset();
 
 function uploadImages(files: File[]) {
