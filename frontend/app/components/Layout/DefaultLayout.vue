@@ -683,6 +683,7 @@ let uploadedBookRefreshTimer: ReturnType<typeof setInterval> | null = null;
 const uploadedBookRefreshInFlight = ref(false);
 const router = useRouter();
 const MANUAL_DRAFT_RECIPE_PREFIX = "__mealie_manual_draft__";
+const ORGANIZERS_UPDATED_EVENT = "mealie:organizers-updated";
 const uploadedBookTranslationLanguageOptions = computed(() => [
   i18n.t("cookbook.language-hebrew"),
   i18n.t("cookbook.language-english"),
@@ -760,10 +761,12 @@ const uploadedBookAccept = [
 const hasMultipleUploadedBookFiles = computed(() => uploadedBookFiles.value.length > 1);
 onMounted(() => {
   sidebar.value = display.lgAndUp.value;
+  window.addEventListener(ORGANIZERS_UPDATED_EVENT, handleOrganizersUpdated);
   syncUploadedBookRefreshTimer();
 });
 
 onBeforeUnmount(() => {
+  window.removeEventListener(ORGANIZERS_UPDATED_EVENT, handleOrganizersUpdated);
   clearUploadedBookRefreshTimer();
 });
 
@@ -771,7 +774,7 @@ watch(
   () => [isOwnGroup.value, auth.user.value?.id, groupSlug.value],
   () => {
     refreshUploadedBooks();
-    refreshEmptyOrganizerItems();
+    refreshOrganizerNavigationData();
   },
   { immediate: true },
 );
@@ -883,6 +886,24 @@ async function refreshEmptyOrganizerItems() {
   if (tagResponse.status === "fulfilled" && tagResponse.value.data) {
     emptyTagIds.value = new Set(tagResponse.value.data.map(tag => tag.id));
   }
+}
+
+async function refreshOrganizerNavigationData() {
+  const tasks: Promise<unknown>[] = [refreshEmptyOrganizerItems()];
+
+  if (ownCategoryStore.value) {
+    tasks.push(ownCategoryStore.value.actions.refresh());
+  }
+
+  if (ownTagStore.value) {
+    tasks.push(ownTagStore.value.actions.refresh());
+  }
+
+  await Promise.allSettled(tasks);
+}
+
+function handleOrganizersUpdated() {
+  refreshOrganizerNavigationData();
 }
 
 function hasLinkedRecipes(item: RecipeCategory | RecipeTag, emptyIds: Set<string>) {

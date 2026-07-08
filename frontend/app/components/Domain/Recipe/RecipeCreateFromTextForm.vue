@@ -139,6 +139,7 @@
 
 <script setup lang="ts">
 import { useUserApi } from "~/composables/api";
+import { useCategoryStore } from "~/composables/store/use-category-store";
 import { useTagStore } from "~/composables/store/use-tag-store";
 import { useNewRecipeOptions } from "~/composables/use-new-recipe-options";
 import { alert } from "~/composables/use-toast";
@@ -170,6 +171,7 @@ const i18n = useI18n();
 const auth = useMealieAuth();
 const route = useRoute();
 const groupSlug = computed(() => route.params.groupSlug as string || auth.user.value?.groupSlug || "");
+const categories = useCategoryStore();
 const tags = useTagStore();
 const domCreateForm = ref<VForm | null>(null);
 const shouldTranslate = ref(true);
@@ -336,6 +338,7 @@ async function createRecipeFromText() {
   }
 
   await attachMediaToRecipe(data);
+  await refreshRecipeOrganizers();
 
   emit("created", data);
   navigateToRecipe(data, groupSlug.value, props.returnTo || route.path);
@@ -357,6 +360,7 @@ async function createRecipeFromImages() {
   }
 
   await attachMediaToRecipe(data);
+  await refreshRecipeOrganizers();
   emit("created", data);
   navigateToRecipe(data, groupSlug.value, props.returnTo || route.path);
 }
@@ -385,13 +389,21 @@ async function createRecipeFromUrl() {
     return;
   }
 
-  if (importKeywordsAsTags.value) {
-    tags.actions.refresh();
-  }
-
   await attachMediaToRecipe(response.data);
+  await refreshRecipeOrganizers();
   emit("created", response.data);
   navigateToRecipe(response.data, groupSlug.value, props.returnTo || route.path);
+}
+
+async function refreshRecipeOrganizers() {
+  await Promise.allSettled([
+    categories.actions.refresh(),
+    tags.actions.refresh(),
+  ]);
+
+  if (import.meta.client) {
+    window.dispatchEvent(new CustomEvent("mealie:organizers-updated"));
+  }
 }
 
 async function attachMediaToRecipe(recipeSlug: string) {

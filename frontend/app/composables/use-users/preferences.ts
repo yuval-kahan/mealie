@@ -212,12 +212,29 @@ export function useOrganizerSidebarPreferences(): Ref<UserOrganizerSidebarPrefer
     {
       showCookbooks: true,
       showTranslatedBooks: false,
-      showCategories: false,
-      showTags: false,
+      showCategories: true,
+      showTags: true,
       sectionOrder: ["cookbooks", "translatedBooks", "categories", "tags"],
     },
     { mergeDefaults: true },
   );
+
+  if (import.meta.client) {
+    const migrationKey = "organizer-sidebar-preferences-show-organizers-v1";
+    const shouldApplyOrganizerDefault = !localStorage.getItem(migrationKey)
+      && !fromStorage.value.showCategories
+      && !fromStorage.value.showTags;
+
+    if (shouldApplyOrganizerDefault) {
+      fromStorage.value = {
+        ...fromStorage.value,
+        showCategories: true,
+        showTags: true,
+      };
+    }
+
+    localStorage.setItem(migrationKey, "true");
+  }
 
   return fromStorage;
 }

@@ -225,8 +225,8 @@ const preferences = defineModel<UserOrganizerSidebarPreferences>("preferences", 
   default: () => ({
     showCookbooks: true,
     showTranslatedBooks: false,
-    showCategories: false,
-    showTags: false,
+    showCategories: true,
+    showTags: true,
     sectionOrder: ["cookbooks", "translatedBooks", "categories", "tags"],
   }),
 });
