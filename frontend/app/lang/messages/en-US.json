@@ -690,6 +690,7 @@
     "create-from-text": "Create with AI",
     "ai-create-mode-text": "From Text",
     "ai-create-mode-link": "From Link",
+    "ai-create-mode-image": "From Image",
     "recipe-text": "Recipe Text",
     "recipe-text-not-recognized": "The pasted text does not look like a recipe. Make sure it includes a recipe name, ingredients, and instructions.",
     "recipe-link-import-error": "We couldn't create a recipe from that link with AI. Check that the link is valid and the page contains a recipe.",

@@ -26,6 +26,12 @@
             </v-icon>
             {{ $t("recipe.ai-create-mode-link") }}
           </v-btn>
+          <v-btn value="image">
+            <v-icon start>
+              {{ $globals.icons.fileImage }}
+            </v-icon>
+            {{ $t("recipe.ai-create-mode-image") }}
+          </v-btn>
         </v-btn-toggle>
         <v-textarea
           v-if="createMode === 'text'"
@@ -42,7 +48,7 @@
           :rules="[validators.required]"
         />
         <v-text-field
-          v-else
+          v-else-if="createMode === 'url'"
           v-model="recipeUrl"
           :label="$t('new-recipe.recipe-url')"
           :prepend-inner-icon="$globals.icons.link"
@@ -55,8 +61,24 @@
           :hint="$t('new-recipe.url-form-hint')"
           persistent-hint
         />
+        <v-file-input
+          v-else
+          v-model="uploadedImages"
+          accept="image/*"
+          variant="solo-filled"
+          rounded
+          clearable
+          multiple
+          chips
+          show-size
+          :prepend-inner-icon="$globals.icons.fileImage"
+          prepend-icon=""
+          :label="$t('recipe.upload-images')"
+          :rules="[uploadedImagesRule]"
+          :disabled="state.loading"
+        />
         <v-checkbox
-          v-if="createMode === 'text'"
+          v-if="createMode !== 'url'"
           v-model="shouldTranslate"
           color="primary"
           hide-details
@@ -120,7 +142,7 @@ import { alert } from "~/composables/use-toast";
 import { validators } from "~/composables/use-validators";
 import type { VForm } from "~/types/auto-forms";
 
-type CreateMode = "text" | "url";
+type CreateMode = "text" | "url" | "image";
 
 const props = withDefaults(defineProps<{
   showTitle?: boolean;
@@ -173,6 +195,7 @@ const sharedText = sharedUrl ? "" : sharedQueryText;
 const createMode = ref<CreateMode>(sharedUrl ? "url" : "text");
 const recipeText = ref<string | null>(sharedText);
 const recipeUrl = ref<string | null>(sharedUrl);
+const uploadedImages = ref<File[]>([]);
 
 const {
   importKeywordsAsTags,
@@ -187,15 +210,27 @@ const {
 });
 
 const modeDescription = computed(() => {
-  return createMode.value === "url"
-    ? i18n.t("recipe.create-recipe-from-link-description")
-    : i18n.t("recipe.create-recipe-from-text-description");
+  if (createMode.value === "url") {
+    return i18n.t("recipe.create-recipe-from-link-description");
+  }
+
+  if (createMode.value === "image") {
+    return i18n.t("recipe.create-recipe-from-an-image-description");
+  }
+
+  return i18n.t("recipe.create-recipe-from-text-description");
 });
 
 const canSubmit = computed(() => {
-  return createMode.value === "url"
-    ? Boolean(recipeUrl.value?.trim())
-    : Boolean(recipeText.value?.trim());
+  if (createMode.value === "url") {
+    return Boolean(recipeUrl.value?.trim());
+  }
+
+  if (createMode.value === "image") {
+    return uploadedImages.value.length > 0;
+  }
+
+  return Boolean(recipeText.value?.trim());
 });
 
 const statusText = computed(() => {
@@ -207,10 +242,27 @@ const statusText = computed(() => {
     return createStatus.value;
   }
 
-  return createMode.value === "url"
-    ? i18n.t("recipe.please-wait-link-processing")
-    : i18n.t("recipe.please-wait-text-processing");
+  if (createMode.value === "url") {
+    return i18n.t("recipe.please-wait-link-processing");
+  }
+
+  if (createMode.value === "image") {
+    return uploadedImages.value.length > 1
+      ? i18n.t("recipe.please-wait-images-processing")
+      : i18n.t("recipe.please-wait-image-procesing");
+  }
+
+  return i18n.t("recipe.please-wait-text-processing");
 });
+
+const uploadedImagesRule = (value: File[] | File | null) => {
+  if (createMode.value !== "image") {
+    return true;
+  }
+
+  const files = Array.isArray(value) ? value : value ? [value] : [];
+  return files.length > 0 || i18n.t("recipe.upload-images");
+};
 
 function createTextErrorMessage(error: unknown) {
   const typedError = error as { response?: { data?: { detail?: { exception?: string; message?: string } } } };
@@ -239,6 +291,11 @@ async function createRecipe() {
   try {
     if (createMode.value === "url") {
       await createRecipeFromUrl();
+      return;
+    }
+
+    if (createMode.value === "image") {
+      await createRecipeFromImages();
       return;
     }
 
@@ -273,6 +330,26 @@ async function createRecipeFromText() {
     await attachVideoToRecipe(data, videoFile.value);
   }
 
+  emit("created", data);
+  navigateToRecipe(data, groupSlug.value, props.returnTo || route.path);
+}
+
+async function createRecipeFromImages() {
+  if (!uploadedImages.value.length) {
+    state.loading = false;
+    return;
+  }
+
+  const translateLanguage = shouldTranslate.value ? i18n.locale.value : null;
+  const { data, error } = await api.recipes.createOneFromImages(uploadedImages.value, translateLanguage);
+
+  if (error || !data) {
+    alert.error(i18n.t("events.something-went-wrong"));
+    state.loading = false;
+    return;
+  }
+
+  await attachVideoToRecipe(data, videoFile.value);
   emit("created", data);
   navigateToRecipe(data, groupSlug.value, props.returnTo || route.path);
 }
