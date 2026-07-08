@@ -109,10 +109,16 @@
           :disabled="state.loading"
         />
         <v-divider class="my-4" />
-        <RecipeVideoAssetUpload
-          v-model="videoFile"
-          :disabled="state.loading"
-        />
+        <div class="d-flex align-center flex-wrap ga-3">
+          <RecipeCoverImageUpload
+            v-model="recipeImageFile"
+            :disabled="state.loading"
+          />
+          <RecipeVideoAssetUpload
+            v-model="videoFile"
+            :disabled="state.loading"
+          />
+        </div>
       </v-card-text>
       <v-card-actions class="justify-center">
         <div style="width: 100%" class="text-center">
@@ -170,6 +176,7 @@ const groupSlug = computed(() => route.params.groupSlug as string || auth.user.v
 const tags = useTagStore();
 const domCreateForm = ref<VForm | null>(null);
 const shouldTranslate = ref(true);
+const recipeImageFile = ref<File | null>(null);
 const videoFile = ref<File | null>(null);
 const createStatus = ref<string | null>(null);
 const { attachVideoToRecipe } = useRecipeVideoAsset();
@@ -326,9 +333,7 @@ async function createRecipeFromText() {
     return;
   }
 
-  if (videoFile.value) {
-    await attachVideoToRecipe(data, videoFile.value);
-  }
+  await attachMediaToRecipe(data);
 
   emit("created", data);
   navigateToRecipe(data, groupSlug.value, props.returnTo || route.path);
@@ -349,7 +354,7 @@ async function createRecipeFromImages() {
     return;
   }
 
-  await attachVideoToRecipe(data, videoFile.value);
+  await attachMediaToRecipe(data);
   emit("created", data);
   navigateToRecipe(data, groupSlug.value, props.returnTo || route.path);
 }
@@ -382,8 +387,26 @@ async function createRecipeFromUrl() {
     tags.actions.refresh();
   }
 
-  await attachVideoToRecipe(response.data, videoFile.value);
+  await attachMediaToRecipe(response.data);
   emit("created", response.data);
   navigateToRecipe(response.data, groupSlug.value, props.returnTo || route.path);
+}
+
+async function attachMediaToRecipe(recipeSlug: string) {
+  if (recipeImageFile.value) {
+    try {
+      const { error } = await api.recipes.updateImage(recipeSlug, recipeImageFile.value);
+
+      if (error) {
+        alert.error(i18n.t("events.something-went-wrong"));
+      }
+    }
+    catch (e) {
+      alert.error(i18n.t("events.something-went-wrong"));
+      console.error("Failed to upload recipe image", e);
+    }
+  }
+
+  await attachVideoToRecipe(recipeSlug, videoFile.value);
 }
 </script>
