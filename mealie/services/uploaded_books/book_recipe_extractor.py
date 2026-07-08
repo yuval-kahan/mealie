@@ -29,7 +29,6 @@ from mealie.schema.user import PrivateUser
 from mealie.services._base_service import BaseService
 from mealie.services.openai import OpenAIService
 from mealie.services.recipe.recipe_service import OpenAIRecipeService, RecipeService
-from mealie.services.scraper import cleaner
 
 EXTRACTION_NOT_STARTED = "not_started"
 EXTRACTION_PROCESSING = "processing"
@@ -735,7 +734,6 @@ class UploadedBookRecipeExtractor(BaseService):
             return None
 
         recipe = self.openai_recipe_service._convert_recipe(self._recipe_with_book_source(openai_recipe, book, chunk))
-        recipe = cleaner.clean(recipe, self.translator)
 
         if self._existing_recipe_for_book_chunk(recipe):
             return None

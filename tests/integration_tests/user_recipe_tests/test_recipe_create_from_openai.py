@@ -6,6 +6,12 @@ from fastapi.testclient import TestClient
 import mealie.services.scraper.recipe_scraper as recipe_scraper_module
 from mealie.schema.group.ai_providers import AIProviderCreate, AIProviderSettingsUpdate
 from mealie.schema.openai.general import OpenAIText
+from mealie.schema.openai.recipe import (
+    OpenAIRecipe,
+    OpenAIRecipeIngredient,
+    OpenAIRecipeInstruction,
+    OpenAIRecipeTextParse,
+)
 from mealie.services.openai import OpenAIService
 from mealie.services.recipe.recipe_data_service import RecipeDataService
 from mealie.services.scraper.scraper_strategies import RecipeScraperOpenAI
@@ -147,6 +153,44 @@ def test_create_stream_via_openai_emits_progress(
 
     assert "done" in event_types
     assert any(e["event"] == "progress" for e in events)
+
+
+def test_create_from_text_via_openai_with_categories_and_tags(
+    api_client: TestClient,
+    unique_user: TestUser,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    recipe_name = random_string()
+
+    async def mock_get_response(self, prompt, message, *args, **kwargs) -> OpenAIRecipeTextParse | None:
+        return OpenAIRecipeTextParse(
+            is_recipe=True,
+            recipe=OpenAIRecipe(
+                name=recipe_name,
+                ingredients=[OpenAIRecipeIngredient(text="1 cup flour")],
+                instructions=[OpenAIRecipeInstruction(text="Mix everything together.")],
+                categories=["Pasta"],
+                tags=["Italian"],
+            ),
+        )
+
+    monkeypatch.setattr(OpenAIService, "get_response", mock_get_response)
+
+    response = api_client.post(
+        api_routes.recipes_create_text,
+        json={"text": "A real recipe with ingredients and instructions."},
+        headers=unique_user.token,
+    )
+
+    assert response.status_code == 201
+    slug = json.loads(response.text)
+
+    recipe = api_client.get(api_routes.recipes_slug(slug), headers=unique_user.token).json()
+    assert recipe["name"] == recipe_name
+    assert recipe["recipeCategory"][0]["name"] == "Pasta"
+    assert recipe["recipeCategory"][0]["groupId"] == unique_user.group_id
+    assert recipe["tags"][0]["name"] == "Italian"
+    assert recipe["tags"][0]["groupId"] == unique_user.group_id
 
 
 def test_create_by_url_openai_returns_none(

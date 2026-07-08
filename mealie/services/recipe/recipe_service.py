@@ -45,7 +45,6 @@ from mealie.services._base_service import BaseService
 from mealie.services.household_services.household_service import HouseholdService
 from mealie.services.openai import OpenAILocalImage, OpenAIService
 from mealie.services.recipe.recipe_data_service import RecipeDataService
-from mealie.services.scraper import cleaner
 
 from .template_service import TemplateService
 
@@ -184,9 +183,10 @@ class RecipeService(RecipeServiceBase):
         additional_attrs["household_id"] = self.household.id
         additional_attrs["group_id"] = self.household.group_id
 
-        if additional_attrs.get("tags"):
-            for i in range(len(additional_attrs.get("tags", []))):
-                additional_attrs["tags"][i]["group_id"] = self.user.group_id
+        for organizer_key in ("recipe_category", "tags", "tools"):
+            for item in additional_attrs.get(organizer_key, []) or []:
+                if isinstance(item, dict):
+                    item["group_id"] = self.user.group_id
 
         if not additional_attrs.get("recipe_ingredient"):
             additional_attrs["recipe_ingredient"] = [
@@ -358,7 +358,6 @@ class RecipeService(RecipeServiceBase):
             recipe_data = await openai_recipe_service.build_recipe_from_images(
                 local_images, translate_language=translate_language
             )
-            recipe_data = cleaner.clean(recipe_data, self.translator)
 
             recipe = self.create_one(recipe_data)
             data_service = RecipeDataService(recipe.id)
@@ -370,7 +369,6 @@ class RecipeService(RecipeServiceBase):
     async def create_from_text(self, text: str, translate_language: str | None = None) -> Recipe:
         openai_recipe_service = OpenAIRecipeService(self.repos, self.user, self.household, self.translator)
         recipe_data = await openai_recipe_service.build_recipe_from_text(text, translate_language)
-        recipe_data = cleaner.clean(recipe_data, self.translator)
         return self.create_one(recipe_data)
 
     async def search_with_ai(self, query: str, limit: int) -> RecipeAISearchResponse:
