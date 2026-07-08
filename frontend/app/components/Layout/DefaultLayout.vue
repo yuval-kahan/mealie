@@ -361,6 +361,24 @@
         </v-icon>
         {{ $t("recipe.create-from-text") }}
       </v-btn>
+      <v-btn
+        v-if="isOwnGroup"
+        rounded
+        size="default"
+        class="ml-2 mt-0 mb-2 quick-manual-create-btn"
+        variant="tonal"
+        :color="$vuetify.theme.current.dark ? 'background-lighten-1' : 'background-darken-1'"
+        :loading="manualDraftCreateLoading"
+        @click="createManualDraftRecipe"
+      >
+        <v-icon
+          start
+          color="primary"
+        >
+          {{ $globals.icons.edit }}
+        </v-icon>
+        {{ $t("new-recipe.create-manually") }}
+      </v-btn>
     </AppSidebar>
     <v-main class="pt-12">
       <v-scroll-x-transition>
@@ -489,6 +507,7 @@ const showImageImport = computed(() => group.value?.aiProviderSettings?.imagePro
 
 const sidebar = ref<boolean>(false);
 const quickTextRecipeDialog = ref(false);
+const manualDraftCreateLoading = ref(false);
 const uploadedBookDialog = ref(false);
 const uploadedBookFile = ref<File | null>(null);
 const uploadedBookFiles = ref<File[]>([]);
@@ -508,6 +527,8 @@ const uploadedBookTargetLanguage = ref(defaultUploadedBookTargetLanguage());
 const selectedUploadedBook = ref<UploadedBook | null>(null);
 let uploadedBookRefreshTimer: ReturnType<typeof setInterval> | null = null;
 let uploadedBookRefreshInFlight = false;
+const router = useRouter();
+const MANUAL_DRAFT_RECIPE_PREFIX = "__mealie_manual_draft__";
 const uploadedBookTranslationLanguageOptions = computed(() => [
   i18n.t("cookbook.language-hebrew"),
   i18n.t("cookbook.language-english"),
@@ -550,6 +571,33 @@ const uploadedBookSupportedExtensions = [
   ".rar",
   ".7z",
 ];
+
+function createManualDraftRecipeName() {
+  const randomSuffix = typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `${MANUAL_DRAFT_RECIPE_PREFIX}${randomSuffix}`;
+}
+
+async function createManualDraftRecipe() {
+  if (manualDraftCreateLoading.value) {
+    return;
+  }
+
+  manualDraftCreateLoading.value = true;
+  try {
+    const { response } = await api.recipes.createOne({ name: createManualDraftRecipeName() });
+    if (response?.status !== 201 || !response.data) {
+      alert.error(i18n.t("recipe.recipe-creation-failed"));
+      return;
+    }
+
+    await router.push(`/g/${groupSlug.value}/r/${response.data}?edit=true&manualDraft=true`);
+  }
+  finally {
+    manualDraftCreateLoading.value = false;
+  }
+}
 const uploadedBookAccept = [
   ...uploadedBookSupportedExtensions,
   "application/pdf",

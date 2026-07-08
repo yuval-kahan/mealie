@@ -586,6 +586,7 @@
     "delete-image-confirmation": "האם אתה בטוח שאתה רוצה למחוק את תמונת המתכון?",
     "recipe-image-deleted": "תמונת מתכון נמחקה",
     "recipe-name": "שם המתכון",
+    "recipe-name-required": "לא ניתן לשמור מתכון בלי שם.",
     "recipe-settings": "הגדרות המתכון",
     "recipe-update-failed": "עדכון מתכון נכשל",
     "recipe-updated": "מתכון עודכן",

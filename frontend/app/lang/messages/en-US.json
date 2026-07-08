@@ -586,6 +586,7 @@
     "delete-image-confirmation": "Are you sure you want to delete this recipe image?",
     "recipe-image-deleted": "Recipe image deleted",
     "recipe-name": "Recipe Name",
+    "recipe-name-required": "A recipe name is required before saving.",
     "recipe-settings": "Recipe Settings",
     "recipe-update-failed": "Recipe update failed",
     "recipe-updated": "Recipe updated",

@@ -227,11 +227,13 @@ import RecipeDialogBulkAdd from "~/components/Domain/Recipe/RecipeDialogBulkAdd.
 import RecipeNotes from "~/components/Domain/Recipe/RecipeNotes.vue";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import { useNavigationWarning } from "~/composables/use-navigation-warning";
+import { alert } from "~/composables/use-toast";
 
 const recipe = defineModel<NoUndefinedField<Recipe>>({ required: true });
 
 const display = useDisplay();
 const auth = useMealieAuth();
+const i18n = useI18n();
 const route = useRoute();
 const { isOwnGroup } = useLoggedInState();
 
@@ -332,8 +334,17 @@ type BooleanString = "true" | "false" | "";
 
 const paramsEdit = useRouteQuery<BooleanString>("edit", "");
 const paramsParse = useRouteQuery<BooleanString>("parse", "");
+const paramsManualDraft = useRouteQuery<BooleanString>("manualDraft", "");
+const MANUAL_DRAFT_RECIPE_PREFIX = "__mealie_manual_draft__";
 
 onMounted(() => {
+  if (paramsManualDraft.value === "true" && recipe.value.name?.startsWith(MANUAL_DRAFT_RECIPE_PREFIX)) {
+    recipe.value.name = "";
+    if (originalRecipe.value) {
+      originalRecipe.value.name = "";
+    }
+  }
+
   if (paramsEdit.value === "true" && isOwnGroup.value) {
     setMode(PageMode.EDIT);
   }
@@ -368,6 +379,14 @@ watch(isParsing, () => {
  */
 
 async function saveRecipe() {
+  const recipeName = recipe.value.name?.trim() || "";
+  if (!recipeName) {
+    alert.error(i18n.t("recipe.recipe-name-required"));
+    setMode(PageMode.EDIT);
+    return;
+  }
+
+  recipe.value.name = recipeName;
   const { data, error } = await api.recipes.updateOne(recipe.value.slug, recipe.value);
   if (!error) {
     if (data?.slug && data.slug !== route.params.slug) {
