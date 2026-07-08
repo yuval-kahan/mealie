@@ -278,6 +278,133 @@
           </v-alert>
         </v-card-text>
       </BaseDialog>
+      <BaseDialog
+        v-model="backgroundJobsDialog"
+        :title="$t('cookbook.background-jobs')"
+        :icon="$globals.icons.timelineText"
+        width="760"
+        max-width="96vw"
+      >
+        <v-card-text class="pt-4">
+          <div class="d-flex align-center justify-space-between ga-3 mb-3">
+            <div class="text-body-2 text-medium-emphasis">
+              {{ $t("cookbook.background-jobs-description") }}
+            </div>
+            <v-btn
+              variant="text"
+              color="primary"
+              :prepend-icon="$globals.icons.refresh"
+              :loading="uploadedBookRefreshInFlight"
+              @click="refreshUploadedBooks"
+            >
+              {{ $t("general.refresh") }}
+            </v-btn>
+          </div>
+          <v-alert
+            v-if="!backgroundJobs.length"
+            density="comfortable"
+            variant="tonal"
+            type="info"
+          >
+            {{ $t("cookbook.background-jobs-empty") }}
+          </v-alert>
+          <v-list
+            v-else
+            density="comfortable"
+            class="background-jobs-list"
+          >
+            <template
+              v-for="job in backgroundJobs"
+              :key="job.key"
+            >
+              <v-list-item class="px-0 py-3">
+                <template #prepend>
+                  <v-avatar
+                    rounded="lg"
+                    :color="job.color"
+                    variant="tonal"
+                  >
+                    <v-icon>{{ job.icon }}</v-icon>
+                  </v-avatar>
+                </template>
+                <v-list-item-title class="font-weight-bold">
+                  {{ job.title }}
+                </v-list-item-title>
+                <v-list-item-subtitle class="mt-1">
+                  {{ job.subtitle }}
+                </v-list-item-subtitle>
+                <div class="mt-3">
+                  <div class="d-flex align-center justify-space-between ga-3 mb-1">
+                    <v-chip
+                      size="small"
+                      :color="job.color"
+                      variant="tonal"
+                    >
+                      {{ job.statusText }}
+                    </v-chip>
+                    <span class="text-caption text-medium-emphasis">
+                      {{ job.progressText }}
+                    </span>
+                  </div>
+                  <v-progress-linear
+                    :model-value="job.progress"
+                    :indeterminate="job.active && !job.total"
+                    :color="job.color"
+                    height="8"
+                    rounded
+                  />
+                  <div class="text-caption text-medium-emphasis mt-2">
+                    {{ job.detailText }}
+                  </div>
+                  <v-alert
+                    v-if="job.error"
+                    density="compact"
+                    variant="tonal"
+                    type="warning"
+                    class="mt-2"
+                  >
+                    {{ job.error }}
+                  </v-alert>
+                </div>
+                <template #append>
+                  <div class="d-flex align-center ga-1">
+                    <v-btn
+                      icon
+                      variant="text"
+                      :title="$t('cookbook.background-job-open-book')"
+                      @click="openUploadedBookFile(job.book)"
+                    >
+                      <v-icon>{{ $globals.icons.openInNew }}</v-icon>
+                    </v-btn>
+                    <v-btn
+                      v-if="job.canRetry"
+                      icon
+                      variant="text"
+                      color="primary"
+                      :title="$t('cookbook.background-job-retry')"
+                      @click="retryBackgroundJob(job)"
+                    >
+                      <v-icon>{{ $globals.icons.refresh }}</v-icon>
+                    </v-btn>
+                    <v-btn
+                      v-if="job.canCancel"
+                      icon
+                      variant="text"
+                      color="error"
+                      :loading="backgroundJobCancelling.has(job.key)"
+                      :title="$t('cookbook.background-job-cancel')"
+                      @click="cancelBackgroundJob(job)"
+                    >
+                      <v-icon>{{ $globals.icons.close }}</v-icon>
+                    </v-btn>
+                  </div>
+                </template>
+              </v-list-item>
+              <v-divider />
+            </template>
+          </v-list>
+        </v-card-text>
+      </BaseDialog>
       <v-menu
         offset-y
         nudge-bottom="5"
@@ -379,6 +506,32 @@
         </v-icon>
         {{ $t("new-recipe.create-manually") }}
       </v-btn>
+      <v-badge
+        v-if="isOwnGroup"
+        :model-value="activeBackgroundJobCount > 0"
+        :content="activeBackgroundJobCount"
+        color="primary"
+        location="top end"
+        offset-x="10"
+        offset-y="6"
+      >
+        <v-btn
+          rounded
+          size="default"
+          class="ml-2 mt-0 mb-2 quick-create-shortcut-btn"
+          variant="tonal"
+          :color="$vuetify.theme.current.dark ? 'background-lighten-1' : 'background-darken-1'"
+          @click="backgroundJobsDialog = true"
+        >
+          <v-icon
+            start
+            color="primary"
+          >
+            {{ $globals.icons.timelineText }}
+          </v-icon>
+          {{ $t("cookbook.background-jobs") }}
+        </v-btn>
+      </v-badge>
     </AppSidebar>
     <v-main class="pt-12">
       <v-scroll-x-transition>
@@ -525,10 +678,12 @@ const uploadedBookDeleteDialog = ref(false);
 const uploadedBookDeleting = ref(false);
 const uploadedBookTargetLanguage = ref(defaultUploadedBookTargetLanguage());
 const selectedUploadedBook = ref<UploadedBook | null>(null);
+const backgroundJobsDialog = ref(false);
+const backgroundJobCancelling = ref<Set<string>>(new Set());
 const emptyCategoryIds = ref<Set<string>>(new Set());
 const emptyTagIds = ref<Set<string>>(new Set());
 let uploadedBookRefreshTimer: ReturnType<typeof setInterval> | null = null;
-let uploadedBookRefreshInFlight = false;
+const uploadedBookRefreshInFlight = ref(false);
 const router = useRouter();
 const MANUAL_DRAFT_RECIPE_PREFIX = "__mealie_manual_draft__";
 const uploadedBookTranslationLanguageOptions = computed(() => [
@@ -874,7 +1029,7 @@ function resetUploadBookForm() {
 }
 
 async function refreshUploadedBooks() {
-  if (uploadedBookRefreshInFlight) {
+  if (uploadedBookRefreshInFlight.value) {
     return;
   }
 
@@ -883,7 +1038,7 @@ async function refreshUploadedBooks() {
     return;
   }
 
-  uploadedBookRefreshInFlight = true;
+  uploadedBookRefreshInFlight.value = true;
   try {
     const { data } = await api.uploadedBooks.getAll();
     uploadedBooks.value = data || [];
@@ -892,7 +1047,7 @@ async function refreshUploadedBooks() {
     }
   }
   finally {
-    uploadedBookRefreshInFlight = false;
+    uploadedBookRefreshInFlight.value = false;
     syncUploadedBookRefreshTimer();
   }
 }
@@ -983,6 +1138,183 @@ function isUploadedBookTranslating(book: UploadedBook) {
   return ["processing", "retrying"].includes(book.translationStatus);
 }
 
+type BackgroundJobType = "extraction" | "translation";
+
+interface BackgroundJob {
+  key: string;
+  type: BackgroundJobType;
+  book: UploadedBook;
+  title: string;
+  subtitle: string;
+  status: string;
+  statusText: string;
+  detailText: string;
+  progressText: string;
+  progress: number;
+  total: number;
+  active: boolean;
+  canCancel: boolean;
+  canRetry: boolean;
+  error: string | null;
+  icon: string;
+  color: string;
+}
+
+const visibleBackgroundJobStatuses = new Set(["processing", "retrying", "partial_failed", "failed", "cancelled"]);
+const retryableBackgroundJobStatuses = new Set(["partial_failed", "failed", "cancelled"]);
+const BACKGROUND_JOB_STALE_MS = 30 * 60 * 1000;
+
+const backgroundJobs = computed<BackgroundJob[]>(() => {
+  const jobs = uploadedBooks.value
+    .flatMap((book) => {
+      const bookJobs = [
+        uploadedBookBackgroundJob(book, "extraction"),
+        uploadedBookBackgroundJob(book, "translation"),
+      ];
+      return bookJobs.filter((job): job is BackgroundJob => !!job);
+    })
+    .sort((a, b) => Number(b.active) - Number(a.active) || a.title.localeCompare(b.title));
+
+  return jobs;
+});
+
+const activeBackgroundJobCount = computed(() => backgroundJobs.value.filter(job => job.active).length);
+
+function uploadedBookBackgroundJob(book: UploadedBook, type: BackgroundJobType): BackgroundJob | null {
+  const isExtraction = type === "extraction";
+  const status = isExtraction ? book.extractionStatus : book.translationStatus;
+
+  if (!visibleBackgroundJobStatuses.has(status)) {
+    return null;
+  }
+
+  const total = isExtraction ? book.extractionTotalChunks : book.translationTotalChunks;
+  const completed = isExtraction ? book.extractionCompletedChunks : book.translationCompletedChunks;
+  const failed = isExtraction ? book.extractionFailedChunks : book.translationFailedChunks;
+  const retries = isExtraction ? book.extractionRetryCount : book.translationRetryCount;
+  const processed = Math.min(total || 0, completed + failed);
+  const active = ["processing", "retrying"].includes(status);
+  const error = isExtraction ? book.extractionError : book.translationError;
+  const stale = active && isBackgroundJobStale(book);
+  const detailText = isExtraction
+    ? i18n.t("cookbook.background-job-extraction-detail", {
+        found: book.extractionRecipesFound,
+        created: book.extractionRecipesCreated,
+        failed,
+        retries,
+      })
+    : i18n.t("cookbook.background-job-translation-detail", {
+        language: book.translationLanguage || defaultUploadedBookTargetLanguage(),
+        failed,
+        retries,
+      });
+
+  return {
+    key: `${type}-${book.id}`,
+    type,
+    book,
+    title: book.name,
+    subtitle: isExtraction ? i18n.t("cookbook.background-job-extraction") : i18n.t("cookbook.background-job-translation"),
+    status,
+    statusText: stale ? i18n.t("cookbook.background-job-status-stale") : backgroundJobStatusText(status),
+    detailText: stale ? `${detailText} · ${i18n.t("cookbook.background-job-stale-hint")}` : detailText,
+    progressText: i18n.t("cookbook.background-job-progress", {
+      completed,
+      total: total || "?",
+    }),
+    progress: total ? Math.round((processed / total) * 100) : active ? 0 : 100,
+    total,
+    active,
+    canCancel: active,
+    canRetry: retryableBackgroundJobStatuses.has(status),
+    error: error && error !== "Cancelled by user" ? error : null,
+    icon: isExtraction ? $globals.icons.robot : $globals.icons.translate,
+    color: stale ? "warning" : backgroundJobStatusColor(status),
+  };
+}
+
+function isBackgroundJobStale(book: UploadedBook) {
+  const updatedAt = Date.parse(book.updatedAt || "");
+  return Number.isFinite(updatedAt) && Date.now() - updatedAt > BACKGROUND_JOB_STALE_MS;
+}
+
+function backgroundJobStatusText(status: string) {
+  return i18n.t(`cookbook.background-job-status-${status.replace("_", "-")}`);
+}
+
+function backgroundJobStatusColor(status: string) {
+  if (status === "processing") {
+    return "primary";
+  }
+  if (status === "retrying") {
+    return "warning";
+  }
+  if (status === "partial_failed" || status === "failed") {
+    return "error";
+  }
+  if (status === "cancelled") {
+    return "grey";
+  }
+  return "success";
+}
+
+function setBackgroundJobCancelling(key: string, cancelling: boolean) {
+  const next = new Set(backgroundJobCancelling.value);
+  if (cancelling) {
+    next.add(key);
+  }
+  else {
+    next.delete(key);
+  }
+  backgroundJobCancelling.value = next;
+}
+
+function openUploadedBookFile(book: UploadedBook) {
+  if (!import.meta.client) {
+    return;
+  }
+  window.open(api.uploadedBooks.fileUrl(book.id), "_blank", "noopener");
+}
+
+async function cancelBackgroundJob(job: BackgroundJob) {
+  if (!job.canCancel || backgroundJobCancelling.value.has(job.key)) {
+    return;
+  }
+
+  setBackgroundJobCancelling(job.key, true);
+  const { data, error } = await (job.type === "extraction"
+    ? api.uploadedBooks.cancelExtraction(job.book.id)
+    : api.uploadedBooks.cancelTranslation(job.book.id)
+  ).finally(() => {
+    setBackgroundJobCancelling(job.key, false);
+  });
+
+  if (!data) {
+    const detail = error?.response?.data?.detail;
+    alert.error(typeof detail === "string" ? detail : i18n.t("cookbook.background-job-cancel-failed"));
+    return;
+  }
+
+  selectedUploadedBook.value = data;
+  alert.success(i18n.t("cookbook.background-job-cancelled"));
+  await refreshUploadedBooks();
+}
+
+async function retryBackgroundJob(job: BackgroundJob) {
+  uploadedBookPagesPerChunk.value = job.type === "extraction"
+    ? job.book.extractionPagesPerChunk || 10
+    : job.book.translationPagesPerChunk || 10;
+
+  if (job.type === "extraction") {
+    uploadedBookTargetLanguage.value = job.book.extractionTranslateLanguage || defaultUploadedBookTargetLanguage();
+    await startUploadedBookExtraction(job.book, false);
+  }
+  else {
+    uploadedBookTargetLanguage.value = job.book.translationLanguage || defaultUploadedBookTargetLanguage();
+    await startUploadedBookTranslation(job.book, false);
+  }
+}
+
 function uploadedBookNavigationTitle(book: UploadedBook) {
   if (isUploadedBookExtracting(book)) {
     const total = book.extractionTotalChunks || "?";
@@ -1052,6 +1384,9 @@ function uploadedBookExtractionStatusText(book: UploadedBook) {
   if (book.extractionStatus === "failed") {
     return book.extractionError || i18n.t("cookbook.extraction-failed");
   }
+  if (book.extractionStatus === "cancelled") {
+    return i18n.t("cookbook.extraction-cancelled");
+  }
   return i18n.t("cookbook.extraction-not-started");
 }
 
@@ -1078,6 +1413,9 @@ function uploadedBookTranslationStatusText(book: UploadedBook) {
   }
   if (book.translationStatus === "failed") {
     return book.translationError || i18n.t("cookbook.translation-failed");
+  }
+  if (book.translationStatus === "cancelled") {
+    return i18n.t("cookbook.translation-cancelled");
   }
   return i18n.t("cookbook.translation-not-started");
 }

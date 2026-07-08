@@ -8,6 +8,7 @@ from sqlalchemy import select
 from starlette.responses import FileResponse
 
 from mealie.core.dependencies.dependencies import get_current_user
+from mealie.db.models._model_utils.datetime import get_utc_now
 from mealie.db.models.household.uploaded_book import UploadedBook
 from mealie.routes._base import controller
 from mealie.routes._base.base_controllers import BasePublicController
@@ -19,6 +20,7 @@ from mealie.schema.cookbook.uploaded_book import (
 from mealie.schema.household.household import HouseholdInDB
 from mealie.schema.user import PrivateUser
 from mealie.services.uploaded_books import UploadedBookRecipeExtractor, UploadedBookTranslator
+from mealie.services.uploaded_books.book_recipe_extractor import EXTRACTION_CANCELLED, TRANSLATION_CANCELLED
 
 router = APIRouter(prefix="/households/uploaded-books", tags=["Households: Uploaded Books"])
 
@@ -118,6 +120,30 @@ class UploadedBooksController(BasePublicController):
             raise HTTPException(status.HTTP_409_CONFLICT, detail="Book extraction is already running")
         if book.translation_status in {"processing", "retrying"}:
             raise HTTPException(status.HTTP_409_CONFLICT, detail="Book translation is already running")
+
+    def _cancel_active_extraction(self, book: UploadedBook) -> UploadedBook:
+        if book.extraction_status not in {"processing", "retrying"}:
+            return book
+
+        book.extraction_status = EXTRACTION_CANCELLED
+        book.extraction_error = "Cancelled by user"
+        book.extraction_completed_at = get_utc_now()
+        self.session.add(book)
+        self.session.commit()
+        self.session.refresh(book)
+        return book
+
+    def _cancel_active_translation(self, book: UploadedBook) -> UploadedBook:
+        if book.translation_status not in {"processing", "retrying"}:
+            return book
+
+        book.translation_status = TRANSLATION_CANCELLED
+        book.translation_error = "Cancelled by user"
+        book.translation_completed_at = get_utc_now()
+        self.session.add(book)
+        self.session.commit()
+        self.session.refresh(book)
+        return book
 
     def _get_book_or_404(self, book_id: UUID4) -> UploadedBook:
         book = (
@@ -250,6 +276,16 @@ class UploadedBooksController(BasePublicController):
         )
 
         return UploadedBookOut.model_validate(book)
+
+    @router.post("/{book_id}/extract-recipes/cancel", response_model=UploadedBookOut)
+    def cancel_extract_recipes(self, book_id: UUID4) -> UploadedBookOut:
+        book = self._get_book_or_404(book_id)
+        return UploadedBookOut.model_validate(self._cancel_active_extraction(book))
+
+    @router.post("/{book_id}/translate/cancel", response_model=UploadedBookOut)
+    def cancel_translate_book(self, book_id: UUID4) -> UploadedBookOut:
+        book = self._get_book_or_404(book_id)
+        return UploadedBookOut.model_validate(self._cancel_active_translation(book))
 
     @router.post("/{book_id}/translate", response_model=UploadedBookOut, status_code=status.HTTP_202_ACCEPTED)
     def translate_book(

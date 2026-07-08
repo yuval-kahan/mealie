@@ -366,6 +366,38 @@
 - `frontend/app/lib/api/user/uploaded-books.ts`
 - `frontend/app/lib/api/types/uploaded-book.ts`
 
+## משימות ברקע וניטור תהליכים
+
+- נוסף כפתור "משימות ברקע" בתפריט הצדדי, עם badge שמציג כמה משימות פעילות כרגע.
+- החלון מציג תהליכים ארוכים של ספרים:
+  - חילוץ מתכונים מספרים עם AI
+  - תרגום ספרים עם AI
+- לכל משימה מוצגים:
+  - שם הספר
+  - סוג הפעולה
+  - סטטוס: בעיבוד, ממתין לניסיון חוזר, נכשל חלקית, נכשל או בוטל
+  - התקדמות לפי chunks
+  - כמות כשלים וניסיונות חוזרים
+  - הודעת שגיאה אם קיימת
+- משימה פעילה שלא עדכנה את רשומת הספר יותר מ-30 דקות מוצגת כ"ייתכן שתקוע", כדי שיהיה קל לזהות תהליכים שלא מתקדמים.
+- מתוך החלון ניתן:
+  - לפתוח את הספר
+  - לעצור משימה פעילה
+  - להפעיל ניסיון חוזר למשימה שנכשלה חלקית, נכשלה או בוטלה
+  - לרענן ידנית את מצב המשימות
+- נוסף סטטוס `cancelled` לחילוץ ולתרגום ספרים.
+- עצירת משימה פעילה מתבצעת דרך השרת: הסטטוס מסומן כ-`cancelled`, וה-worker שרץ ברקע בודק את הסטטוס לפני כל chunk חדש ואחרי חזרה מקריאת AI.
+- אם חלק כבר נשלח ל-AI בזמן שהמשתמש לוחץ עצור, הוא עשוי לסיים את הקריאה הנוכחית, אבל המערכת לא תמשיך ל-chunk הבא ולא תבנה ספר מתורגם אחרי ביטול.
+- מנגנון החידוש האוטומטי של ה-scheduler לא מחזיר משימות שבוטלו, כי `cancelled` אינו חלק מסטטוסי `processing`/`retrying`.
+
+קבצים מרכזיים:
+
+- `frontend/app/components/Layout/DefaultLayout.vue`
+- `frontend/app/lib/api/user/uploaded-books.ts`
+- `frontend/app/lib/api/types/uploaded-book.ts`
+- `mealie/routes/households/controller_uploaded_books.py`
+- `mealie/services/uploaded_books/book_recipe_extractor.py`
+
 ## שיפורי ממשק ותרגום
 
 - נוספו מחרוזות תרגום בעברית ובאנגלית עבור:
@@ -419,7 +451,9 @@
   - `GET /api/households/uploaded-books/{book_id}/file`
   - `DELETE /api/households/uploaded-books/{book_id}`
   - `POST /api/households/uploaded-books/{book_id}/extract-recipes`
+  - `POST /api/households/uploaded-books/{book_id}/extract-recipes/cancel`
   - `POST /api/households/uploaded-books/{book_id}/translate`
+  - `POST /api/households/uploaded-books/{book_id}/translate/cancel`
 - נוסף endpoint לייבוא URL מרובה עם קבצי וידאו:
   - `POST /api/recipes/create/url/bulk/assets`
 - הורחב endpoint נכסי מתכון כך שיקבל גם קבצי וידאו:
@@ -464,6 +498,8 @@
 - לכל chunk שמחכה ל-rate limit נשמר `nextRetryAt` אמיתי, כך שהמערכת יודעת מתי לנסות שוב גם אם הדוקר או המחשב הופעלו מחדש.
 - אם ספר הסתיים ב-`partial_failed` ולוחצים שוב על אותה פעולה עם אותם פרמטרים, המערכת ממשיכה את החלקים שנכשלו במקום למחוק עבודה שכבר הצליחה.
 - שפת חילוץ מתכונים מספרים נשמרת במסד הנתונים, כדי שחידוש אוטומטי אחרי restart ימשיך באותה שפה שנבחרה.
+- חלון "משימות ברקע" משתמש באותו polling קיים של ספרים, שמופעל רק כשיש תהליכי ספרים פעילים, ולכן לא נוסף timer קבוע חדש.
+- ביטול משימות ספרים לא הורג thread בכוח אלא מסמן סטטוס במסד וגורם ל-worker לצאת בין chunks; זה מונע מצב של כתיבה חלקית לא עקבית או connection שנחתך באמצע קריאת AI.
 
 ## בדיקות שבוצעו
 

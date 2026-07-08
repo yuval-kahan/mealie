@@ -36,6 +36,7 @@ EXTRACTION_RETRYING = "retrying"
 EXTRACTION_COMPLETED = "completed"
 EXTRACTION_PARTIAL_FAILED = "partial_failed"
 EXTRACTION_FAILED = "failed"
+EXTRACTION_CANCELLED = "cancelled"
 
 TRANSLATION_NOT_STARTED = "not_started"
 TRANSLATION_PROCESSING = "processing"
@@ -43,6 +44,7 @@ TRANSLATION_RETRYING = "retrying"
 TRANSLATION_COMPLETED = "completed"
 TRANSLATION_PARTIAL_FAILED = "partial_failed"
 TRANSLATION_FAILED = "failed"
+TRANSLATION_CANCELLED = "cancelled"
 
 CHUNK_PENDING = "pending"
 CHUNK_PROCESSING = "processing"
@@ -182,6 +184,30 @@ class UploadedBookRecipeExtractor(BaseService):
     def _save_book(self, book: UploadedBook) -> None:
         self.repos.session.add(book)
         self.repos.session.commit()
+
+    def _current_status(self, book: UploadedBook, column) -> str | None:
+        with self.repos.session.no_autoflush:
+            return self.repos.session.execute(
+                sa.select(column).where(UploadedBook.id == book.id, UploadedBook.group_id == self.user.group_id)
+            ).scalar_one_or_none()
+
+    def _is_extraction_cancelled(self, book: UploadedBook) -> bool:
+        return self._current_status(book, UploadedBook.extraction_status) == EXTRACTION_CANCELLED
+
+    def _is_translation_cancelled(self, book: UploadedBook) -> bool:
+        return self._current_status(book, UploadedBook.translation_status) == TRANSLATION_CANCELLED
+
+    def _set_extraction_cancelled(self, book: UploadedBook) -> None:
+        book.extraction_status = EXTRACTION_CANCELLED
+        book.extraction_error = "Cancelled by user"
+        book.extraction_completed_at = get_utc_now()
+        self._save_book(book)
+
+    def _set_translation_cancelled(self, book: UploadedBook) -> None:
+        book.translation_status = TRANSLATION_CANCELLED
+        book.translation_error = "Cancelled by user"
+        book.translation_completed_at = get_utc_now()
+        self._save_book(book)
 
     def _set_failed(self, book: UploadedBook, error: str) -> None:
         book.extraction_status = EXTRACTION_FAILED
@@ -526,6 +552,10 @@ class UploadedBookRecipeExtractor(BaseService):
         states: dict[int, dict],
         status: str | None = None,
     ) -> None:
+        if status != EXTRACTION_CANCELLED and self._is_extraction_cancelled(book):
+            self._set_extraction_cancelled(book)
+            return
+
         state_values = list(states.values())
         book.extraction_total_chunks = len(state_values)
         book.extraction_completed_chunks = sum(1 for state in state_values if state.get("status") == CHUNK_COMPLETED)
@@ -798,6 +828,9 @@ class UploadedBookRecipeExtractor(BaseService):
 
             chunk_states = self._initial_chunk_states(book, chunks, preserve_incomplete_attempts=resume)
             self._save_progress(book, chunk_states, EXTRACTION_PROCESSING)
+            if self._is_extraction_cancelled(book):
+                self._set_extraction_cancelled(book)
+                return
 
             openai_service = OpenAIService(self.repos)
             if not (openai_service.provider_settings and openai_service.provider_settings.ai_enabled):
@@ -817,12 +850,19 @@ class UploadedBookRecipeExtractor(BaseService):
 
             async def worker() -> None:
                 while True:
+                    if self._is_extraction_cancelled(book):
+                        return
+
                     try:
                         chunk = queue.get_nowait()
                     except asyncio.QueueEmpty:
                         return
 
                     try:
+                        if self._is_extraction_cancelled(book):
+                            queue.task_done()
+                            return
+
                         slot = await self._acquire_provider_slot(provider_slots, provider_lock)
                     except RuntimeError as e:
                         async with state_lock:
@@ -865,6 +905,9 @@ class UploadedBookRecipeExtractor(BaseService):
                             chunk,
                             translate_language,
                         )
+
+                        if self._is_extraction_cancelled(book):
+                            return
 
                         has_usable_provider = True
                         if result.error and result.provider_disabled:
@@ -949,6 +992,10 @@ class UploadedBookRecipeExtractor(BaseService):
             if worker_count:
                 await asyncio.gather(*(worker() for _ in range(worker_count)))
 
+            if self._is_extraction_cancelled(book):
+                self._set_extraction_cancelled(book)
+                return
+
             failed_chunks = sum(1 for state in chunk_states.values() if state.get("status") == CHUNK_FAILED)
             book.extraction_status = EXTRACTION_PARTIAL_FAILED if failed_chunks else EXTRACTION_COMPLETED
             book.extraction_completed_at = get_utc_now()
@@ -959,7 +1006,10 @@ class UploadedBookRecipeExtractor(BaseService):
             self.logger.error(f"Failed to extract recipes from uploaded book {book_id}")
             self.logger.exception(e)
             if book is not None:
-                self._set_failed(book, str(e))
+                if self._is_extraction_cancelled(book):
+                    self._set_extraction_cancelled(book)
+                else:
+                    self._set_failed(book, str(e))
         finally:
             await self._release_job("extraction", book_id)
 
@@ -1052,6 +1102,10 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
         states: dict[int, dict],
         status: str | None = None,
     ) -> None:
+        if status != TRANSLATION_CANCELLED and self._is_translation_cancelled(book):
+            self._set_translation_cancelled(book)
+            return
+
         state_values = list(states.values())
         book.translation_total_chunks = len(state_values)
         book.translation_completed_chunks = sum(1 for state in state_values if state.get("status") == CHUNK_COMPLETED)
@@ -1392,6 +1446,9 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                 book, chunks, preserve_incomplete_attempts=resume
             )
             self._save_translation_progress(book, chunk_states, TRANSLATION_PROCESSING)
+            if self._is_translation_cancelled(book):
+                self._set_translation_cancelled(book)
+                return
 
             openai_service = OpenAIService(self.repos)
             if not (openai_service.provider_settings and openai_service.provider_settings.ai_enabled):
@@ -1411,12 +1468,19 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
 
             async def worker() -> None:
                 while True:
+                    if self._is_translation_cancelled(book):
+                        return
+
                     try:
                         chunk = queue.get_nowait()
                     except asyncio.QueueEmpty:
                         return
 
                     try:
+                        if self._is_translation_cancelled(book):
+                            queue.task_done()
+                            return
+
                         slot = await self._acquire_provider_slot(provider_slots, provider_lock)
                     except RuntimeError as e:
                         async with state_lock:
@@ -1459,6 +1523,9 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                             chunk,
                             target_language,
                         )
+
+                        if self._is_translation_cancelled(book):
+                            return
 
                         has_usable_provider = True
                         if result.error and result.provider_disabled:
@@ -1539,6 +1606,10 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
             if worker_count:
                 await asyncio.gather(*(worker() for _ in range(worker_count)))
 
+            if self._is_translation_cancelled(book):
+                self._set_translation_cancelled(book)
+                return
+
             failed_chunks = sum(1 for state in chunk_states.values() if state.get("status") == CHUNK_FAILED)
             if failed_chunks:
                 book.translation_status = TRANSLATION_PARTIAL_FAILED
@@ -1566,6 +1637,9 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
             self.logger.error(f"Failed to translate uploaded book {book_id}")
             self.logger.exception(e)
             if book is not None:
-                self._set_translation_failed(book, str(e))
+                if self._is_translation_cancelled(book):
+                    self._set_translation_cancelled(book)
+                else:
+                    self._set_translation_failed(book, str(e))
         finally:
             await self._release_job("translation", book_id)

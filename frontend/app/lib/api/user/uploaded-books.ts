@@ -7,7 +7,9 @@ const routes = {
   uploadedBooks: `${prefix}/households/uploaded-books`,
   uploadedBook: (id: string) => `${prefix}/households/uploaded-books/${id}`,
   extractRecipes: (id: string) => `${prefix}/households/uploaded-books/${id}/extract-recipes`,
+  cancelExtraction: (id: string) => `${prefix}/households/uploaded-books/${id}/extract-recipes/cancel`,
   translate: (id: string) => `${prefix}/households/uploaded-books/${id}/translate`,
+  cancelTranslation: (id: string) => `${prefix}/households/uploaded-books/${id}/translate/cancel`,
   uploadedBookFile: (id: string) => `${prefix}/households/uploaded-books/${id}/file`,
 };
 
@@ -31,8 +33,16 @@ export class UploadedBooksAPI extends BaseAPI {
     return await this.requests.post<UploadedBook, UploadedBookExtractRequest>(routes.extractRecipes(id), payload);
   }
 
+  async cancelExtraction(id: string) {
+    return await this.requests.post<UploadedBook>(routes.cancelExtraction(id));
+  }
+
   async translate(id: string, payload: UploadedBookTranslateRequest) {
     return await this.requests.post<UploadedBook, UploadedBookTranslateRequest>(routes.translate(id), payload);
+  }
+
+  async cancelTranslation(id: string) {
+    return await this.requests.post<UploadedBook>(routes.cancelTranslation(id));
   }
 
   async delete(id: string) {
