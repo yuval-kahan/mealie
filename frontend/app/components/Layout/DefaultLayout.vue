@@ -348,7 +348,7 @@
         v-if="isOwnGroup"
         rounded
         size="default"
-        class="ml-2 mt-2 mb-2 quick-text-create-btn"
+        class="ml-2 mt-2 mb-2 quick-create-shortcut-btn"
         variant="tonal"
         :color="$vuetify.theme.current.dark ? 'background-lighten-1' : 'background-darken-1'"
         @click="quickTextRecipeDialog = true"
@@ -365,7 +365,7 @@
         v-if="isOwnGroup"
         rounded
         size="default"
-        class="ml-2 mt-0 mb-2 quick-manual-create-btn"
+        class="ml-2 mt-0 mb-2 quick-create-shortcut-btn"
         variant="tonal"
         :color="$vuetify.theme.current.dark ? 'background-lighten-1' : 'background-darken-1'"
         :loading="manualDraftCreateLoading"
@@ -1296,11 +1296,27 @@ const topLinks = computed<SideBarLink[]>(() => [
 </script>
 
 <style scoped>
-.quick-text-create-btn {
+.quick-create-shortcut-btn {
   min-width: 170px;
+  justify-content: flex-start;
+  transition:
+    background-color 0.2s ease,
+    box-shadow 0.2s ease,
+    opacity 0.2s ease;
 }
 
-.quick-text-create-btn :deep(.v-btn__content) {
+.quick-create-shortcut-btn:hover {
+  background-color: rgba(var(--v-theme-primary), 0.08);
+  box-shadow: none;
+}
+
+.quick-create-shortcut-btn :deep(.v-btn__content) {
   color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
+  justify-content: flex-start;
+  width: 100%;
+}
+
+.quick-create-shortcut-btn :deep(.v-btn__prepend) {
+  margin-inline-start: 0;
 }
 </style>
