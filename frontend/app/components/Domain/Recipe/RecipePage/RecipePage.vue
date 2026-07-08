@@ -29,6 +29,7 @@
           @save="saveRecipe"
           @delete="deleteRecipe"
           @close="closeEditor"
+          @renamed="handleRecipeRenamed"
         />
         <RecipeMediaAssets
           v-if="!isEditJSON"
@@ -408,6 +409,19 @@ async function saveRecipe() {
     if (data.slug !== route.params.slug) {
       router.replace(`/g/${groupSlug.value}/r/` + data.slug);
     }
+  }
+}
+
+function handleRecipeRenamed(payload: { slug: string; name: string; recipe?: Recipe }) {
+  recipe.value = {
+    ...recipe.value,
+    ...payload.recipe,
+    name: payload.name,
+  } as NoUndefinedField<Recipe>;
+  originalRecipe.value = deepCopy(recipe.value);
+
+  if (payload.recipe?.slug && payload.recipe.slug !== route.params.slug) {
+    router.replace(`/g/${groupSlug.value}/r/` + payload.recipe.slug);
   }
 }
 

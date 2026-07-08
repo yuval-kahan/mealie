@@ -43,7 +43,7 @@
           </template>
           <div class="pl-4 d-flex flex-column justify-space-between align-stretch pr-2">
             <v-list-item-title class="recipe-mobile-card-title mt-3 mb-1 text-top w-100">
-              {{ name }}
+              {{ displayName }}
             </v-list-item-title>
             <v-list-item-subtitle class="ma-0 text-top">
               <SafeMarkdown v-if="description" :source="description" />
@@ -91,13 +91,14 @@
                 v-if="isOwnGroup && showRecipeContent"
                 :slug="slug"
                 :menu-icon="$globals.icons.dotsHorizontal"
-                :name="name"
+                :name="displayName"
                 :recipe-id="recipeId"
                 :rating="rating"
                 :redirect-on-delete="false"
                 class="ml-auto"
                 :use-items="{
                   edit: false,
+                  rename: true,
                   rating: true,
                   download: true,
                   mealplanner: true,
@@ -108,6 +109,7 @@
                   delete: true,
                 }"
                 @deleted="$emit('delete', slug)"
+                @renamed="handleRenamed"
               />
             </v-card-actions>
           </slot>
@@ -149,13 +151,22 @@ const props = withDefaults(defineProps<Props>(), {
   disableHighlight: false,
 });
 
-defineEmits<{
+const emit = defineEmits<{
   selected: [];
   delete: [slug: string];
+  renamed: [{ slug: string; name: string; recipe?: any }];
 }>();
 
 const auth = useMealieAuth();
 const { isOwnGroup } = useLoggedInState();
+const displayName = ref(props.name);
+
+watch(
+  () => props.name,
+  (name) => {
+    displayName.value = name;
+  },
+);
 
 const route = useRoute();
 const groupSlug = computed(() => route.params.groupSlug || auth.user.value?.groupSlug || "");
@@ -164,6 +175,11 @@ const recipeRoute = computed<string>(() => {
   return showRecipeContent.value ? `/g/${groupSlug.value}/r/${props.slug}` : "";
 });
 const cursor = computed(() => (showRecipeContent.value ? "pointer" : "auto"));
+
+function handleRenamed(payload: { slug: string; name: string; recipe?: any }) {
+  displayName.value = payload.name;
+  emit("renamed", payload);
+}
 </script>
 
 <style scoped>

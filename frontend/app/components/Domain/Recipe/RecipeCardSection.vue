@@ -125,6 +125,7 @@
               :tags="recipe.tags!"
               :recipe-id="recipe.id!"
               @delete="$emit('delete', $event)"
+              @renamed="$emit('renamed', $event)"
             />
           </v-col>
         </v-row>
@@ -150,6 +151,7 @@
               :tags="recipe.tags!"
               :recipe-id="recipe.id!"
               @delete="$emit('delete', $event)"
+              @renamed="$emit('renamed', $event)"
             />
           </v-col>
         </v-row>
@@ -202,6 +204,7 @@ const emit = defineEmits<{
   replaceRecipes: [recipes: Recipe[]];
   appendRecipes: [recipes: Recipe[]];
   delete: [slug: string];
+  renamed: [{ slug: string; name: string; recipe?: Recipe }];
 }>();
 
 const display = useDisplay();

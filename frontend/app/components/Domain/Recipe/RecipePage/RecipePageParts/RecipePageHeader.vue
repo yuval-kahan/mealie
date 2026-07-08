@@ -22,6 +22,7 @@
       @save="$emit('save')"
       @delete="$emit('delete')"
       @print="printRecipe"
+      @renamed="$emit('renamed', $event)"
     />
   </div>
 </template>
@@ -47,7 +48,7 @@ const props = withDefaults(defineProps<Props>(), {
   landscape: false,
 });
 
-defineEmits(["save", "delete", "print", "close"]);
+defineEmits(["save", "delete", "print", "close", "renamed"]);
 
 const { recipeImage } = useStaticRoutes();
 const { imageKey, setMode, toggleEditMode, isEditMode } = usePageState(props.recipe.slug);

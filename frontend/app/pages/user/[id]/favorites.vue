@@ -10,6 +10,7 @@
       @replace-recipes="replaceRecipes"
       @append-recipes="appendRecipes"
       @delete="removeRecipe"
+      @renamed="renameRecipe"
     />
   </v-container>
 </template>
@@ -29,7 +30,7 @@ useSeoMeta({
 
 const userId = route.params.id;
 const query = { queryFilter: `favoritedBy.id = "${userId}"` };
-const { recipes, appendRecipes, assignSorted, removeRecipe, replaceRecipes } = useLazyRecipes();
+const { recipes, appendRecipes, assignSorted, removeRecipe, renameRecipe, replaceRecipes } = useLazyRecipes();
 </script>
 
 <style scoped></style>

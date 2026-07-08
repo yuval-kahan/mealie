@@ -31,6 +31,20 @@
     </v-card-text>
   </BaseDialog>
   <BaseDialog
+    v-model="recipeRenameDialog"
+    :title="$t('recipe.rename-recipe')"
+    color="primary"
+    :icon="$globals.icons.edit"
+    :submit-disabled="!recipeRenameName.trim()"
+    :submit-text="$t('general.save')"
+    can-submit
+    @submit="renameRecipe()"
+  >
+    <v-card-text>
+      <v-text-field v-model="recipeRenameName" density="compact" :label="$t('recipe.recipe-name')" autofocus />
+    </v-card-text>
+  </BaseDialog>
+  <BaseDialog
     v-model="mealplannerDialog"
     :title="$t('recipe.add-recipe-to-mealplan')"
     color="primary"
@@ -128,6 +142,7 @@ import { useDownloader } from "~/composables/api/use-downloader";
 export interface ContextMenuIncludes {
   delete: boolean;
   edit: boolean;
+  rename: boolean;
   rating: boolean;
   download: boolean;
   duplicate: boolean;
@@ -167,6 +182,7 @@ const props = withDefaults(defineProps<Props>(), {
   useItems: () => ({
     delete: true,
     edit: true,
+    rename: true,
     rating: true,
     download: true,
     duplicate: false,
@@ -192,6 +208,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   [key: string]: any;
   deleted: [slug: string];
+  renamed: [{ slug: string; name: string; recipe?: Recipe }];
   print: [];
 }>();
 
@@ -203,7 +220,9 @@ const recipeDeleteDialog = ref(false);
 const mealplannerDialog = ref(false);
 const shoppingListDialog = ref(false);
 const recipeDuplicateDialog = ref(false);
+const recipeRenameDialog = ref(false);
 const recipeName = ref(props.name);
+const recipeRenameName = ref(props.name);
 const ratingModel = ref(props.rating ?? 0);
 const loading = ref(false);
 const menuItems = ref<ContextMenuItem[]>([]);
@@ -234,6 +253,14 @@ watch(
   },
 );
 
+watch(
+  () => props.name,
+  (name) => {
+    recipeName.value = name;
+    recipeRenameName.value = name;
+  },
+);
+
 const firstDayOfWeek = computed(() => {
   return household.value?.preferences?.firstDayOfWeek || 0;
 });
@@ -247,6 +274,13 @@ const defaultItems: { [key: string]: ContextMenuItem } = {
     icon: $globals.icons.edit,
     color: undefined,
     event: "edit",
+    isPublic: false,
+  },
+  rename: {
+    title: i18n.t("recipe.rename-recipe"),
+    icon: $globals.icons.edit,
+    color: undefined,
+    event: "rename",
     isPublic: false,
   },
   delete: {
@@ -432,6 +466,34 @@ async function duplicateRecipe() {
   }
 }
 
+async function renameRecipe() {
+  const name = recipeRenameName.value.trim();
+  if (!name) {
+    return;
+  }
+
+  if (!recipeRef.value) {
+    await refreshRecipe();
+  }
+
+  if (!recipeRef.value) {
+    alert.error(i18n.t("events.something-went-wrong"));
+    return;
+  }
+
+  const { data, error } = await api.recipes.updateOne(props.slug, { ...recipeRef.value, name });
+  if (error || !data) {
+    alert.error(i18n.t("events.something-went-wrong"));
+    return;
+  }
+
+  recipeRef.value = data;
+  recipeName.value = data.name || name;
+  recipeRenameName.value = data.name || name;
+  alert.success(i18n.t("events.updated"));
+  emit("renamed", { slug: props.slug, name: data.name || name, recipe: data });
+}
+
 // Note: Print is handled as an event in the parent component
 // eslint-disable-next-line @typescript-eslint/no-invalid-void-type
 const eventHandlers: { [key: string]: () => void | Promise<any> } = {
@@ -439,6 +501,10 @@ const eventHandlers: { [key: string]: () => void | Promise<any> } = {
     recipeDeleteDialog.value = true;
   },
   edit: () => router.push(`/g/${groupSlug.value}/r/${props.slug}` + "?edit=true"),
+  rename: () => {
+    recipeRenameName.value = recipeRef.value?.name || props.name;
+    recipeRenameDialog.value = true;
+  },
   download: handleDownloadEvent,
   duplicate: () => {
     recipeDuplicateDialog.value = true;

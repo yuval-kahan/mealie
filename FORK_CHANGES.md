@@ -236,6 +236,11 @@
 - שם הפעולה "הוסף לרשימה" עודכן ל"הוסף לרשימת קניות", כדי שיהיה ברור שהיא מוסיפה את רכיבי המתכון לרשימת קניות.
 - בתפריט שלוש הנקודות, הוספה לרשימת קניות פותחת כברירת מחדל יצירת רשימת קניות חדשה בשם המתכון.
 - מאותו חלון עדיין אפשר לבחור רשימת קניות קיימת, או ליצור רשימה חדשה בשם אחר. אם משאירים את שם הרשימה החדשה ריק, שם המתכון משמש כשם הרשימה.
+- חלון ההוספה לרשימת קניות עובד עכשיו כזרימה אחת: בחירת רשימה/שם, סקירת רכיבים, הוספת פריטים ידניים נוספים ושמירה, בלי לפתוח חלון פנימי נפרד.
+- אם מנסים ליצור רשימת קניות בשם שכבר קיים מתוך חלון המתכון, המשתמש חייב לבחור אם להוסיף לרשימה הקיימת או להחליף את התוכן הקיים שלה.
+- במצב החלפה, הפריטים הקיימים ברשימת הקניות נמחקים ואז מתווספים הפריטים שנבחרו מהמתכון והפריטים הידניים.
+- במסך רשימות הקניות הראשי נוספה חסימה ליצירת רשימת קניות חדשה בשם שכבר קיים, וגם צד השרת מחזיר שגיאת כפילות אם מנסים ליצור שם זהה דרך ה-API.
+- בתפריט שלוש הנקודות נוסף "שנה שם מתכון", שמאפשר לערוך את שם המתכון במהירות בלי להיכנס למסך העריכה המלא.
 - דירוג מהיר של מתכון בתפריט שלוש הנקודות הועבר לסוף הרשימה, כדי ששאר הפעולות הרגילות יישארו ראשונות.
 - כרטיסי מתכונים בתצוגת הרשת קיבלו גובה אחיד: אזור הכותרת שמור תמיד לעד 3 שורות, ושורת הפעולות נשארת בגובה קבוע.
 
@@ -244,10 +249,13 @@
 - `frontend/app/components/Domain/Recipe/RecipeContextMenu/RecipeContextMenu.vue`
 - `frontend/app/components/Domain/Recipe/RecipeContextMenu/RecipeContextMenuContent.vue`
 - `frontend/app/components/Domain/Recipe/RecipeDialogAddToShoppingList.vue`
+- `frontend/app/components/Domain/Recipe/RecipeActionMenu.vue`
 - `frontend/app/components/Domain/Recipe/RecipeCard.vue`
 - `frontend/app/components/Domain/Recipe/RecipeCardMobile.vue`
 - `frontend/app/components/Domain/Recipe/RecipeCardSection.vue`
 - `frontend/app/components/Domain/Recipe/RecipeExplorerPage/RecipeExplorerPage.vue`
+- `frontend/app/pages/shopping-lists/index.vue`
+- `mealie/services/household_services/shopping_lists.py`
 
 ## ניווט מהיר לספרים, קטגוריות ותגיות
 

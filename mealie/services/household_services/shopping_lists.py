@@ -1,5 +1,6 @@
 from typing import cast
 
+from fastapi import HTTPException, status
 from pydantic import UUID4
 
 from mealie.core.exceptions import UnexpectedNone
@@ -539,6 +540,15 @@ class ShoppingListService:
         return self.shopping_lists.get_one(shopping_list.id), items  # type: ignore
 
     def create_one_list(self, data: ShoppingListCreate, owner_id: UUID4):
+        normalized_name = (data.name or "").strip()
+        existing_lists = self.shopping_lists.page_all(PaginationQuery(page=1, per_page=-1))
+        if normalized_name and any(
+            (shopping_list.name or "").strip().casefold() == normalized_name.casefold()
+            for shopping_list in existing_lists.items
+        ):
+            raise HTTPException(status.HTTP_409_CONFLICT, detail="Shopping list name already exists")
+
+        data = data.model_copy(update={"name": normalized_name or data.name})
         create_data = data.cast(ShoppingListSave, group_id=self.repos.group_id, user_id=owner_id)
         new_list = self.shopping_lists.create(create_data)  # type: ignore
 

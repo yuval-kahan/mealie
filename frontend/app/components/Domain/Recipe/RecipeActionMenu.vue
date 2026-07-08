@@ -66,6 +66,7 @@
         :recipe-scale="recipeScale"
         :use-items="{
           edit: false,
+          rename: loggedIn,
           rating: loggedIn,
           download: loggedIn,
           duplicate: loggedIn,
@@ -79,6 +80,7 @@
         }"
         class="ml-1"
         @print="$emit('print')"
+        @renamed="$emit('renamed', $event)"
       />
     </div>
     <div v-if="open" class="custom-btn-group gapped ma-1">
@@ -128,7 +130,7 @@ withDefaults(defineProps<Props>(), {
   canEdit: false,
 });
 
-const emit = defineEmits(["print", "input", "save", "delete", "close", "json", "edit"]);
+const emit = defineEmits(["print", "input", "save", "delete", "close", "json", "edit", "renamed"]);
 
 const deleteDialog = ref(false);
 

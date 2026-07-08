@@ -1,17 +1,19 @@
 <template>
   <div v-if="dialog">
     <BaseDialog
-      v-if="shoppingListDialog && ready"
+      v-if="ready"
       v-model="dialog"
-      :title="$t('recipe.add-to-list')"
+      :title="shoppingListDialogTitle"
       :icon="$globals.icons.cartCheck"
+      :width="shoppingListIngredientDialog ? '70%' : 500"
       :loading="shoppingListSelectionLoading"
-      :submit-text="$t('general.next')"
+      :submit-text="shoppingListIngredientDialog ? $t('recipe.add-to-list') : $t('general.next')"
+      :submit-disabled="!canSubmitShoppingListDialog"
       can-submit
       keep-open
-      @submit="prepareShoppingListSelection"
+      @submit="handleShoppingListDialogSubmit"
     >
-      <v-card-text>
+      <v-card-text v-if="shoppingListDialog">
         <v-radio-group
           v-model="shoppingListTarget"
           hide-details
@@ -53,9 +55,238 @@
         >
           {{ $t('shopping-list.no-shopping-lists-found') }}
         </v-alert>
+
+        <v-alert
+          v-if="duplicateShoppingList"
+          type="warning"
+          variant="tonal"
+          class="mt-4"
+        >
+          <div class="font-weight-bold mb-2">
+            {{ $t("shopping-list.list-name-already-exists") }}
+          </div>
+          <div class="mb-3">
+            {{ $t("shopping-list.choose-existing-list-behavior", { name: duplicateShoppingList.name }) }}
+          </div>
+          <v-radio-group
+            v-model="duplicateConflictAction"
+            hide-details
+          >
+            <v-radio
+              color="primary"
+              value="append"
+              :label="$t('shopping-list.add-to-existing-list')"
+            />
+            <v-radio
+              color="primary"
+              value="overwrite"
+              :label="$t('shopping-list.replace-existing-list')"
+            />
+          </v-radio-group>
+        </v-alert>
+      </v-card-text>
+      <v-card-text
+        v-else-if="shoppingListIngredientDialog"
+        class="shopping-list-preview"
+      >
+        <div class="d-flex flex-wrap align-center justify-space-between ga-2 mb-3">
+          <div>
+            <div class="text-caption text-medium-emphasis">
+              {{ $t("shopping-list.selected-shopping-list") }}
+            </div>
+            <div class="text-h6">
+              {{ selectedShoppingListName }}
+            </div>
+          </div>
+          <BaseButton
+            small
+            :icon="$globals.icons.back"
+            :text="$t('general.back')"
+            @click="backToShoppingListSelection"
+          />
+        </div>
+
+        <v-alert
+          v-if="overwriteExistingList"
+          type="warning"
+          variant="tonal"
+          class="mb-4"
+        >
+          {{ $t("shopping-list.replace-existing-list-warning") }}
+        </v-alert>
+
+        <div style="max-height: 58vh; overflow-y: auto">
+          <v-card
+            v-for="(recipeSection, recipeSectionIndex) in recipeIngredientSections"
+            :key="recipeSection.recipeId + recipeSectionIndex"
+            elevation="0"
+            height="fit-content"
+            width="100%"
+          >
+            <v-divider
+              v-if="recipeSectionIndex > 0"
+              class="mt-3"
+            />
+            <v-card-title
+              v-if="recipeIngredientSections.length > 1"
+              class="justify-center text-h5"
+              width="100%"
+            >
+              <v-container style="width: 100%;">
+                <v-row
+                  no-gutters
+                  class="ma-0 pa-0"
+                >
+                  <v-col
+                    cols="12"
+                    align-self="center"
+                    class="text-center"
+                  >
+                    {{ recipeSection.recipeName }}
+                    <v-tooltip v-if="recipeSection.parentRecipe?.name" location="top">
+                      <template #activator="{ props: tooltipProps }">
+                        <v-icon
+                          v-bind="tooltipProps"
+                          size="tiny"
+                          class="mb-2 ml-2"
+                          style="cursor: pointer"
+                        >
+                          {{ $globals.icons.potSteam }}
+                        </v-icon>
+                      </template>
+                      <span>{{ $t("shopping-list.ingredient-of-recipe", { recipe: recipeSection.parentRecipe.name }) }}</span>
+                    </v-tooltip>
+                  </v-col>
+                </v-row>
+                <v-row
+                  v-if="recipeSection.recipeScale > 1"
+                  no-gutters
+                  class="ma-0 pa-0"
+                >
+                  <!-- TODO: make this editable in the dialog and visible on single-recipe lists -->
+                  <v-col
+                    cols="12"
+                    align-self="center"
+                    class="text-center"
+                  >
+                    ({{ $t("recipe.quantity") }}: {{ recipeSection.recipeScale }})
+                  </v-col>
+                </v-row>
+              </v-container>
+            </v-card-title>
+            <div>
+              <div
+                v-for="(ingredientSection, ingredientSectionIndex) in recipeSection.ingredientSections"
+                :key="recipeSection.recipeId + recipeSectionIndex + ingredientSectionIndex"
+              >
+                <v-card-title
+                  v-if="ingredientSection.sectionName"
+                  class="ingredient-title mt-2 pb-0 text-h6"
+                >
+                  {{ ingredientSection.sectionName }}
+                </v-card-title>
+                <div
+                  :class="$vuetify.display.smAndDown ? '' : 'ingredient-grid'"
+                  :style="$vuetify.display.smAndDown ? '' : { gridTemplateRows: `repeat(${Math.ceil(ingredientSection.ingredients.length / 2)}, min-content)` }"
+                >
+                  <v-list-item
+                    v-for="(ingredientData, i) in ingredientSection.ingredients"
+                    :key="recipeSection.recipeId + recipeSectionIndex + ingredientSectionIndex + i"
+                    density="compact"
+                    @click="recipeIngredientSections[recipeSectionIndex]
+                      .ingredientSections[ingredientSectionIndex]
+                      .ingredients[i].checked = !recipeIngredientSections[recipeSectionIndex]
+                        .ingredientSections[ingredientSectionIndex]
+                        .ingredients[i]
+                        .checked"
+                  >
+                    <v-container class="pa-0 ma-0">
+                      <v-row no-gutters>
+                        <v-checkbox
+                          hide-details
+                          :model-value="ingredientData.checked"
+                          class="pt-0 my-auto py-auto mr-2"
+                          color="secondary"
+                          density="compact"
+                        />
+                        <div :key="`${ingredientData.ingredient?.quantity || 'no-qty'}-${i}`" class="pa-auto my-auto">
+                          <RecipeIngredientListItem
+                            :ingredient="ingredientData.ingredient"
+                            :scale="recipeSection.recipeScale"
+                          />
+                        </div>
+                      </v-row>
+                    </v-container>
+                  </v-list-item>
+                </div>
+              </div>
+            </div>
+          </v-card>
+
+          <div class="d-flex justify-end mb-4 mt-2">
+            <BaseButtonGroup
+              :buttons="[
+                {
+                  icon: $globals.icons.checkboxBlankOutline,
+                  text: $t('shopping-list.uncheck-all-items'),
+                  event: 'uncheck',
+                },
+                {
+                  icon: $globals.icons.checkboxOutline,
+                  text: $t('shopping-list.check-all-items'),
+                  event: 'check',
+                },
+              ]"
+              @uncheck="bulkCheckIngredients(false)"
+              @check="bulkCheckIngredients(true)"
+            />
+          </div>
+
+          <v-divider class="my-4" />
+          <div class="text-h6 mb-2">
+            {{ $t("shopping-list.additional-items") }}
+          </div>
+          <ShoppingListItemEditor
+            v-model="manualListItem"
+            class="mb-3"
+            :labels="allLabels || []"
+            :units="allUnits || []"
+            :foods="allFoods || []"
+            :allow-delete="false"
+            @cancel="resetManualListItem"
+            @save="addManualListItem"
+          />
+          <v-list
+            v-if="manualShoppingListItems.length"
+            density="compact"
+            class="manual-shopping-list-items"
+          >
+            <v-list-item
+              v-for="item in manualShoppingListItems"
+              :key="item.id"
+              :title="formatManualListItem(item)"
+            >
+              <template #prepend>
+                <v-icon>{{ $globals.icons.createAlt }}</v-icon>
+              </template>
+              <template #append>
+                <v-btn
+                  icon
+                  size="small"
+                  variant="text"
+                  color="error"
+                  @click="removeManualListItem(item.id || '')"
+                >
+                  <v-icon>{{ $globals.icons.delete }}</v-icon>
+                </v-btn>
+              </template>
+            </v-list-item>
+          </v-list>
+        </div>
       </v-card-text>
       <template #custom-card-action>
         <v-checkbox
+          v-if="shoppingListDialog"
           v-model="preferences.viewAllLists"
           hide-details
           :label="$t('general.show-all')"
@@ -64,153 +295,19 @@
         />
       </template>
     </BaseDialog>
-    <BaseDialog
-      v-if="shoppingListIngredientDialog"
-      v-model="dialog"
-      :title="selectedShoppingList?.name || $t('recipe.add-to-list')"
-      :icon="$globals.icons.cartCheck"
-      width="70%"
-      :submit-text="$t('recipe.add-to-list')"
-      can-submit
-      @submit="addRecipesToList()"
-    >
-      <div style="max-height: 70vh;  overflow-y: auto">
-        <v-card
-          v-for="(recipeSection, recipeSectionIndex) in recipeIngredientSections"
-          :key="recipeSection.recipeId + recipeSectionIndex"
-          elevation="0"
-          height="fit-content"
-          width="100%"
-        >
-          <v-divider
-            v-if="recipeSectionIndex > 0"
-            class="mt-3"
-          />
-          <v-card-title
-            v-if="recipeIngredientSections.length > 1"
-            class="justify-center text-h5"
-            width="100%"
-          >
-            <v-container style="width: 100%;">
-              <v-row
-                no-gutters
-                class="ma-0 pa-0"
-              >
-                <v-col
-                  cols="12"
-                  align-self="center"
-                  class="text-center"
-                >
-                  {{ recipeSection.recipeName }}
-                  <v-tooltip v-if="recipeSection.parentRecipe?.name" location="top">
-                    <template #activator="{ props: tooltipProps }">
-                      <v-icon
-                        v-bind="tooltipProps"
-                        size="tiny"
-                        class="mb-2 ml-2"
-                        style="cursor: pointer"
-                      >
-                        {{ $globals.icons.potSteam }}
-                      </v-icon>
-                    </template>
-                    <span>{{ $t("shopping-list.ingredient-of-recipe", { recipe: recipeSection.parentRecipe.name }) }}</span>
-                  </v-tooltip>
-                </v-col>
-              </v-row>
-              <v-row
-                v-if="recipeSection.recipeScale > 1"
-                no-gutters
-                class="ma-0 pa-0"
-              >
-                <!-- TODO: make this editable in the dialog and visible on single-recipe lists -->
-                <v-col
-                  cols="12"
-                  align-self="center"
-                  class="text-center"
-                >
-                  ({{ $t("recipe.quantity") }}: {{ recipeSection.recipeScale }})
-                </v-col>
-              </v-row>
-            </v-container>
-          </v-card-title>
-          <div>
-            <div
-              v-for="(ingredientSection, ingredientSectionIndex) in recipeSection.ingredientSections"
-              :key="recipeSection.recipeId + recipeSectionIndex + ingredientSectionIndex"
-            >
-              <v-card-title
-                v-if="ingredientSection.sectionName"
-                class="ingredient-title mt-2 pb-0 text-h6"
-              >
-                {{ ingredientSection.sectionName }}
-              </v-card-title>
-              <div
-                :class="$vuetify.display.smAndDown ? '' : 'ingredient-grid'"
-                :style="$vuetify.display.smAndDown ? '' : { gridTemplateRows: `repeat(${Math.ceil(ingredientSection.ingredients.length / 2)}, min-content)` }"
-              >
-                <v-list-item
-                  v-for="(ingredientData, i) in ingredientSection.ingredients"
-                  :key="recipeSection.recipeId + recipeSectionIndex + ingredientSectionIndex + i"
-                  density="compact"
-                  @click="recipeIngredientSections[recipeSectionIndex]
-                    .ingredientSections[ingredientSectionIndex]
-                    .ingredients[i].checked = !recipeIngredientSections[recipeSectionIndex]
-                      .ingredientSections[ingredientSectionIndex]
-                      .ingredients[i]
-                      .checked"
-                >
-                  <v-container class="pa-0 ma-0">
-                    <v-row no-gutters>
-                      <v-checkbox
-                        hide-details
-                        :model-value="ingredientData.checked"
-                        class="pt-0 my-auto py-auto mr-2"
-                        color="secondary"
-                        density="compact"
-                      />
-                      <div :key="`${ingredientData.ingredient?.quantity || 'no-qty'}-${i}`" class="pa-auto my-auto">
-                        <RecipeIngredientListItem
-                          :ingredient="ingredientData.ingredient"
-                          :scale="recipeSection.recipeScale"
-                        />
-                      </div>
-                    </v-row>
-                  </v-container>
-                </v-list-item>
-              </div>
-            </div>
-          </div>
-        </v-card>
-      </div>
-      <div class="d-flex justify-end mb-4 mt-2">
-        <BaseButtonGroup
-          :buttons="[
-            {
-              icon: $globals.icons.checkboxBlankOutline,
-              text: $t('shopping-list.uncheck-all-items'),
-              event: 'uncheck',
-            },
-            {
-              icon: $globals.icons.checkboxOutline,
-              text: $t('shopping-list.check-all-items'),
-              event: 'check',
-            },
-          ]"
-          @uncheck="bulkCheckIngredients(false)"
-          @check="bulkCheckIngredients(true)"
-        />
-      </div>
-    </BaseDialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { toRefs } from "@vueuse/core";
 import RecipeIngredientListItem from "./RecipeIngredientListItem.vue";
+import ShoppingListItemEditor from "~/components/Domain/ShoppingList/ShoppingListItemEditor.vue";
 import { useUserApi } from "~/composables/api";
+import { useFoodStore, useLabelStore, useUnitStore } from "~/composables/store";
 import { alert } from "~/composables/use-toast";
 import { useShoppingListPreferences } from "~/composables/use-users/preferences";
-import type { RecipeIngredient, ShoppingListAddRecipeParamsBulk, ShoppingListOut, ShoppingListSummary } from "~/lib/api/types/household";
+import { uuid4 } from "~/composables/use-utils";
+import type { RecipeIngredient, ShoppingListAddRecipeParamsBulk, ShoppingListItemCreate, ShoppingListOut, ShoppingListSummary } from "~/lib/api/types/household";
 import type { Recipe } from "~/lib/api/types/recipe";
 
 export interface RecipeWithScale extends Recipe {
@@ -254,6 +351,9 @@ const i18n = useI18n();
 const auth = useMealieAuth();
 const api = useUserApi();
 const preferences = useShoppingListPreferences();
+const { store: allLabels } = useLabelStore();
+const { store: allUnits } = useUnitStore();
+const { store: allFoods } = useFoodStore();
 const ready = ref(false);
 const shoppingListSelectionLoading = ref(false);
 
@@ -262,6 +362,10 @@ const currentHouseholdSlug = ref("");
 const filteredShoppingLists = ref<ShoppingListSummary[]>([]);
 const shoppingListTarget = ref("new");
 const newShoppingListName = ref("");
+const pendingNewShoppingListName = ref("");
+const duplicateConflictAction = ref<"append" | "overwrite" | null>(null);
+const overwriteExistingList = ref(false);
+const manualShoppingListItems = ref<ShoppingListItemCreate[]>([]);
 
 const state = reactive({
   shoppingListDialog: false,
@@ -273,11 +377,60 @@ const { shoppingListDialog, shoppingListIngredientDialog, shoppingListShowAllTog
 
 const recipeIngredientSections = ref<ShoppingListRecipeIngredientSection[]>([]);
 const selectedShoppingList = ref<ShoppingListSummary | ShoppingListOut | null>(null);
+const manualListItem = ref<ShoppingListItemCreate>(manualListItemFactory());
 
 const defaultShoppingListName = computed(() => {
   return props.defaultListName?.trim()
     || props.recipes?.[0]?.name?.trim()
     || i18n.t("shopping-list.shopping-list");
+});
+
+const normalizedNewShoppingListName = computed(() => newShoppingListName.value.trim() || defaultShoppingListName.value);
+
+const duplicateShoppingList = computed(() => {
+  if (shoppingListTarget.value !== "new") {
+    return null;
+  }
+
+  return findShoppingListByName(normalizedNewShoppingListName.value);
+});
+
+const selectedShoppingListName = computed(() => {
+  return selectedShoppingList.value?.name || pendingNewShoppingListName.value || normalizedNewShoppingListName.value;
+});
+
+const shoppingListDialogTitle = computed(() => {
+  return state.shoppingListIngredientDialog
+    ? selectedShoppingListName.value || i18n.t("recipe.add-to-list")
+    : i18n.t("recipe.add-to-list");
+});
+
+const hasSelectedRecipeIngredients = computed(() => {
+  return recipeIngredientSections.value.some(recipeSection =>
+    recipeSection.ingredientSections.some(ingredientSection =>
+      ingredientSection.ingredients.some(ingredient => ingredient.checked),
+    ),
+  );
+});
+
+const manualListItemHasData = computed(() => {
+  return Boolean(manualListItem.value.foodId || manualListItem.value.food?.name || manualListItem.value.note?.trim());
+});
+
+const canSubmitShoppingListDialog = computed(() => {
+  if (state.shoppingListDialog) {
+    if (shoppingListTarget.value === "new") {
+      if (!normalizedNewShoppingListName.value.trim()) {
+        return false;
+      }
+
+      return duplicateShoppingList.value ? Boolean(duplicateConflictAction.value) : true;
+    }
+
+    return Boolean(shoppingListTarget.value);
+  }
+
+  return hasSelectedRecipeIngredients.value || manualShoppingListItems.value.length > 0 || manualListItemHasData.value;
 });
 
 watch([dialog, () => preferences.value.viewAllLists], () => {
@@ -288,6 +441,7 @@ watch([dialog, () => preferences.value.viewAllLists], () => {
     );
 
     newShoppingListName.value = defaultShoppingListName.value;
+    duplicateConflictAction.value = null;
 
     if (props.defaultCreateNewList) {
       shoppingListTarget.value = "new";
@@ -296,7 +450,7 @@ watch([dialog, () => preferences.value.viewAllLists], () => {
     }
     else if (filteredShoppingLists.value.length === 1 && !state.shoppingListShowAllToggled) {
       selectedShoppingList.value = filteredShoppingLists.value[0];
-      openShoppingListIngredientDialog(selectedShoppingList.value);
+      openShoppingListIngredientDialog();
     }
     else {
       shoppingListTarget.value = filteredShoppingLists.value[0]?.id || "new";
@@ -308,6 +462,37 @@ watch([dialog, () => preferences.value.viewAllLists], () => {
     initState();
   }
 });
+
+watch(newShoppingListName, () => {
+  duplicateConflictAction.value = null;
+});
+
+function normalizeShoppingListName(name?: string | null) {
+  return (name || "").trim().toLocaleLowerCase();
+}
+
+function findShoppingListByName(name: string) {
+  const normalizedName = normalizeShoppingListName(name);
+  if (!normalizedName) {
+    return null;
+  }
+
+  return props.shoppingLists.find(list => normalizeShoppingListName(list.name) === normalizedName) || null;
+}
+
+function manualListItemFactory(): ShoppingListItemCreate {
+  return {
+    id: uuid4(),
+    shoppingListId: selectedShoppingList.value?.id || "",
+    checked: false,
+    position: manualShoppingListItems.value.length,
+    quantity: 0,
+    note: "",
+    labelId: undefined,
+    unitId: undefined,
+    foodId: undefined,
+  };
+}
 
 function buildIngredientSections(ingredients: ShoppingListIngredient[]): ShoppingListIngredientSection[] {
   let currentTitle = "";
@@ -441,24 +626,30 @@ function initState() {
   selectedShoppingList.value = null;
   shoppingListTarget.value = "new";
   newShoppingListName.value = "";
+  pendingNewShoppingListName.value = "";
+  duplicateConflictAction.value = null;
+  overwriteExistingList.value = false;
+  manualShoppingListItems.value = [];
+  manualListItem.value = manualListItemFactory();
   shoppingListSelectionLoading.value = false;
 }
 
 initState();
 
-async function openShoppingListIngredientDialog(list: ShoppingListSummary | ShoppingListOut) {
+async function openShoppingListIngredientDialog() {
   if (!props.recipes?.length) {
     return;
   }
 
-  selectedShoppingList.value = list;
   await consolidateRecipesIntoSections(props.recipes);
   state.shoppingListDialog = false;
   state.shoppingListIngredientDialog = true;
+  ready.value = true;
+  manualListItem.value = manualListItemFactory();
 }
 
-async function createShoppingListFromSelection() {
-  const name = newShoppingListName.value.trim() || defaultShoppingListName.value;
+async function createPendingShoppingList() {
+  const name = pendingNewShoppingListName.value.trim() || normalizedNewShoppingListName.value;
   const { data, error } = await api.shopping.lists.createOne({ name });
 
   if (error || !data) {
@@ -469,15 +660,37 @@ async function createShoppingListFromSelection() {
   return data;
 }
 
+async function ensureSelectedShoppingList() {
+  if (selectedShoppingList.value?.id) {
+    return selectedShoppingList.value;
+  }
+
+  const createdList = await createPendingShoppingList();
+  if (createdList) {
+    selectedShoppingList.value = createdList;
+  }
+
+  return createdList;
+}
+
 async function prepareShoppingListSelection() {
   shoppingListSelectionLoading.value = true;
 
   try {
     if (shoppingListTarget.value === "new") {
-      const list = await createShoppingListFromSelection();
-      if (list) {
-        await openShoppingListIngredientDialog(list);
+      const duplicateList = duplicateShoppingList.value;
+      if (duplicateList) {
+        selectedShoppingList.value = duplicateList;
+        pendingNewShoppingListName.value = "";
+        overwriteExistingList.value = duplicateConflictAction.value === "overwrite";
       }
+      else {
+        selectedShoppingList.value = null;
+        pendingNewShoppingListName.value = normalizedNewShoppingListName.value;
+        overwriteExistingList.value = false;
+      }
+
+      await openShoppingListIngredientDialog();
       return;
     }
 
@@ -485,12 +698,29 @@ async function prepareShoppingListSelection() {
       || props.shoppingLists.find(list => list.id === shoppingListTarget.value);
 
     if (selectedList) {
-      await openShoppingListIngredientDialog(selectedList);
+      selectedShoppingList.value = selectedList;
+      pendingNewShoppingListName.value = "";
+      overwriteExistingList.value = false;
+      await openShoppingListIngredientDialog();
     }
   }
   finally {
     shoppingListSelectionLoading.value = false;
   }
+}
+
+async function handleShoppingListDialogSubmit() {
+  if (state.shoppingListDialog) {
+    await prepareShoppingListSelection();
+    return;
+  }
+
+  await addRecipesToList();
+}
+
+function backToShoppingListSelection() {
+  state.shoppingListDialog = true;
+  state.shoppingListIngredientDialog = false;
 }
 
 function setShowAllToggled() {
@@ -507,8 +737,66 @@ function bulkCheckIngredients(value = true) {
   });
 }
 
+function resetManualListItem() {
+  manualListItem.value = manualListItemFactory();
+}
+
+function addManualListItem() {
+  if (!manualListItemHasData.value) {
+    return;
+  }
+
+  manualShoppingListItems.value.push({
+    ...manualListItem.value,
+    id: manualListItem.value.id || uuid4(),
+    checked: false,
+    position: manualShoppingListItems.value.length,
+  });
+  resetManualListItem();
+}
+
+function removeManualListItem(id: string) {
+  manualShoppingListItems.value = manualShoppingListItems.value.filter(item => item.id !== id);
+}
+
+function formatManualListItem(item: ShoppingListItemCreate) {
+  const quantity = item.quantity ? String(item.quantity) : "";
+  const unit = item.unit?.abbreviation || item.unit?.name || "";
+  const food = item.food?.name || "";
+  const note = item.note || "";
+  const mainText = [quantity, unit, food].filter(Boolean).join(" ");
+
+  if (mainText && note && note !== food) {
+    return `${mainText} - ${note}`;
+  }
+
+  return mainText || note || i18n.t("shopping-list.add-item");
+}
+
+function manualItemToCreatePayload(item: ShoppingListItemCreate, shoppingListId: string, position: number): ShoppingListItemCreate {
+  const foodId = item.foodId || item.food?.id || null;
+  const unitId = item.unitId || item.unit?.id || null;
+  const note = item.note || (!foodId ? item.food?.name : "") || "";
+
+  return {
+    shoppingListId,
+    checked: false,
+    position,
+    quantity: item.quantity || 0,
+    note,
+    foodId,
+    unitId,
+    labelId: item.labelId || item.food?.labelId || null,
+  };
+}
+
 async function addRecipesToList() {
-  if (!selectedShoppingList.value) {
+  if (manualListItemHasData.value) {
+    addManualListItem();
+  }
+
+  const targetShoppingList = await ensureSelectedShoppingList();
+  if (!targetShoppingList) {
     return;
   }
 
@@ -536,9 +824,37 @@ async function addRecipesToList() {
     );
   });
 
-  const { error } = await api.shopping.lists.addRecipes(selectedShoppingList.value.id, recipeData);
-  // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-  error ? alert.error(i18n.t("recipe.failed-to-add-recipes-to-list")) : alert.success(i18n.t("recipe.successfully-added-to-list"));
+  if (!recipeData.length && !manualShoppingListItems.value.length) {
+    return;
+  }
+
+  if (overwriteExistingList.value) {
+    const { data: existingList } = await api.shopping.lists.getOne(targetShoppingList.id);
+    if (existingList?.listItems?.length) {
+      await api.shopping.items.deleteMany(existingList.listItems);
+    }
+  }
+
+  let hasError = false;
+  if (recipeData.length) {
+    const { error } = await api.shopping.lists.addRecipes(targetShoppingList.id, recipeData);
+    hasError = Boolean(error);
+  }
+
+  if (!hasError && manualShoppingListItems.value.length) {
+    const manualItems = manualShoppingListItems.value.map((item, index) =>
+      manualItemToCreatePayload(item, targetShoppingList.id, index),
+    );
+    const { error } = await api.shopping.items.createMany(manualItems);
+    hasError = Boolean(error);
+  }
+
+  if (hasError) {
+    alert.error(i18n.t("recipe.failed-to-add-recipes-to-list"));
+  }
+  else {
+    alert.success(i18n.t("recipe.successfully-added-to-list"));
+  }
 
   state.shoppingListDialog = false;
   state.shoppingListIngredientDialog = false;

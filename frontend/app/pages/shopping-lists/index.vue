@@ -130,6 +130,7 @@ import type { ShoppingListOut } from "~/lib/api/types/household";
 import { useUserApi } from "~/composables/api";
 import { useAsyncKey } from "~/composables/use-utils";
 import { useShoppingListPreferences } from "~/composables/use-users/preferences";
+import { alert } from "~/composables/use-toast";
 import type { UserOut } from "~/lib/api/types/user";
 
 const auth = useMealieAuth();
@@ -205,7 +206,18 @@ async function refresh() {
 }
 
 async function createOne() {
-  const { data } = await userApi.shopping.lists.createOne({ name: state.createName });
+  const name = state.createName.trim();
+  if (!name) {
+    return;
+  }
+
+  const existingList = shoppingLists.value?.find(list => (list.name || "").trim().toLocaleLowerCase() === name.toLocaleLowerCase());
+  if (existingList) {
+    alert.error(i18n.t("shopping-list.list-name-already-exists"));
+    return;
+  }
+
+  const { data } = await userApi.shopping.lists.createOne({ name });
 
   if (data) {
     refresh();

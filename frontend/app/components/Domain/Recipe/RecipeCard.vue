@@ -35,7 +35,7 @@
           </v-expand-transition>
         </RecipeCardImage>
         <v-card-title class="recipe-card-title px-4">
-          {{ name }}
+          {{ displayName }}
         </v-card-title>
 
         <slot name="actions">
@@ -62,12 +62,13 @@
               color="grey-darken-2"
               :slug="slug"
               :menu-icon="$globals.icons.dotsVertical"
-              :name="name"
+              :name="displayName"
               :recipe-id="recipeId"
               :rating="rating"
               :redirect-on-delete="false"
               :use-items="{
                 edit: false,
+                rename: true,
                 rating: true,
                 download: true,
                 mealplanner: true,
@@ -78,6 +79,7 @@
                 delete: true,
               }"
               @deleted="$emit('delete', slug)"
+              @renamed="handleRenamed"
             />
           </v-card-actions>
         </slot>
@@ -115,13 +117,22 @@ const props = withDefaults(defineProps<Props>(), {
   imageHeight: 200,
 });
 
-defineEmits<{
+const emit = defineEmits<{
   click: [];
   delete: [slug: string];
+  renamed: [{ slug: string; name: string; recipe?: any }];
 }>();
 
 const auth = useMealieAuth();
 const { isOwnGroup } = useLoggedInState();
+const displayName = ref(props.name);
+
+watch(
+  () => props.name,
+  (name) => {
+    displayName.value = name;
+  },
+);
 
 const route = useRoute();
 const groupSlug = computed(() => route.params.groupSlug || auth.user.value?.groupSlug || "");
@@ -130,6 +141,11 @@ const recipeRoute = computed<string>(() => {
   return showRecipeContent.value ? `/g/${groupSlug.value}/r/${props.slug}` : "";
 });
 const cursor = computed(() => (showRecipeContent.value ? "pointer" : "auto"));
+
+function handleRenamed(payload: { slug: string; name: string; recipe?: any }) {
+  displayName.value = payload.name;
+  emit("renamed", payload);
+}
 </script>
 
 <style>

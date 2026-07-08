@@ -35,6 +35,7 @@
         v-bind="contentProps"
         @print="$emit('print')"
         @deleted="$emit('deleted', $event)"
+        @renamed="$emit('renamed', $event)"
       />
     </v-menu>
   </div>
@@ -46,6 +47,7 @@ import type { Recipe } from "~/lib/api/types/recipe";
 interface ContextMenuIncludes {
   delete?: boolean;
   edit?: boolean;
+  rename?: boolean;
   rating?: boolean;
   download?: boolean;
   duplicate?: boolean;
@@ -86,6 +88,7 @@ const props = withDefaults(defineProps<Props>(), {
   useItems: () => ({
     delete: true,
     edit: true,
+    rename: true,
     rating: true,
     download: true,
     duplicate: false,
@@ -112,6 +115,7 @@ defineEmits<{
   [key: string]: any;
   print: [];
   deleted: [slug: string];
+  renamed: [{ slug: string; name: string; recipe?: Recipe }];
 }>();
 
 const { $globals } = useNuxtApp();

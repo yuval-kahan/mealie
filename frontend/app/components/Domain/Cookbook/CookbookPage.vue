@@ -58,6 +58,7 @@
           @replace-recipes="replaceRecipes"
           @append-recipes="appendRecipes"
           @delete="removeRecipe"
+          @renamed="renameRecipe"
         />
       </v-container>
     </v-container>
@@ -79,7 +80,7 @@ const { isOwnGroup } = useLoggedInState();
 const route = useRoute();
 const groupSlug = computed(() => route.params.groupSlug as string || auth.user.value?.groupSlug || "");
 
-const { recipes, appendRecipes, assignSorted, removeRecipe, replaceRecipes } = useLazyRecipes(isOwnGroup.value ? null : groupSlug.value);
+const { recipes, appendRecipes, assignSorted, removeRecipe, renameRecipe, replaceRecipes } = useLazyRecipes(isOwnGroup.value ? null : groupSlug.value);
 const slug = route.params.slug as string;
 const { getOne } = useCookbook(isOwnGroup.value ? null : groupSlug.value);
 const { actions } = useCookbookStore();

@@ -90,6 +90,26 @@ export const useLazyRecipes = function (publicGroupSlug: string | null = null) {
     }
   }
 
+  function renameRecipe(payload: { slug: string; name: string; recipe?: Recipe }) {
+    const recipeIndex = recipes.value.findIndex((recipe) => {
+      if (payload.recipe?.id && recipe.id === payload.recipe.id) {
+        return true;
+      }
+
+      return recipe.slug === payload.slug;
+    });
+
+    if (recipeIndex === -1) {
+      return;
+    }
+
+    recipes.value[recipeIndex] = {
+      ...recipes.value[recipeIndex],
+      ...payload.recipe,
+      name: payload.name,
+    };
+  }
+
   function replaceRecipes(val: Array<Recipe>) {
     recipes.value = val;
   }
@@ -109,6 +129,7 @@ export const useLazyRecipes = function (publicGroupSlug: string | null = null) {
     appendRecipes,
     assignSorted,
     removeRecipe,
+    renameRecipe,
     replaceRecipes,
     getRandom,
   };
