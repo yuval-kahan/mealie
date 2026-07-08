@@ -1,6 +1,9 @@
 import asyncio
+import inspect
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+from starlette.concurrency import run_in_threadpool
 
 from mealie.core import root_logger
 from mealie.core.config import get_app_settings
@@ -53,29 +56,34 @@ async def schedule_daily():
     await run_daily()
 
 
-def _scheduled_task_wrapper(callable):
+async def _scheduled_task_wrapper(callable):
     try:
-        callable()
+        if inspect.iscoroutinefunction(callable):
+            await callable()
+        else:
+            result = await run_in_threadpool(callable)
+            if inspect.isawaitable(result):
+                await result
     except Exception as e:
         logger.error("Error in scheduled task func='%s': exception='%s'", callable.__name__, e)
 
 
 @repeat_every(minutes=MINUTES_DAY, wait_first=False, logger=logger)
-def run_daily():
+async def run_daily():
     logger.debug("Running daily callbacks")
     for func in SchedulerRegistry._daily:
-        _scheduled_task_wrapper(func)
+        await _scheduled_task_wrapper(func)
 
 
 @repeat_every(minutes=MINUTES_HOUR, wait_first=True, logger=logger)
-def run_hourly():
+async def run_hourly():
     logger.debug("Running hourly callbacks")
     for func in SchedulerRegistry._hourly:
-        _scheduled_task_wrapper(func)
+        await _scheduled_task_wrapper(func)
 
 
 @repeat_every(minutes=MINUTES_5, wait_first=True, logger=logger)
-def run_minutely():
+async def run_minutely():
     logger.debug("Running minutely callbacks")
     for func in SchedulerRegistry._minutely:
-        _scheduled_task_wrapper(func)
+        await _scheduled_task_wrapper(func)

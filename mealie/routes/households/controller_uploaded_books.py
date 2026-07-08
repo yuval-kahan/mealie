@@ -213,16 +213,26 @@ class UploadedBooksController(BasePublicController):
         if book.translation_status in {"processing", "retrying"}:
             raise HTTPException(status.HTTP_409_CONFLICT, detail="Book translation is already running")
 
+        resume = (
+            book.extraction_status == "partial_failed"
+            and book.extraction_pages_per_chunk == data.pages_per_chunk
+            and (book.extraction_translate_language or data.translate_language) == data.translate_language
+            and bool(book.extraction_chunk_status)
+        )
+
         book.extraction_status = "processing"
         book.extraction_pages_per_chunk = data.pages_per_chunk
-        book.extraction_total_chunks = 0
-        book.extraction_completed_chunks = 0
-        book.extraction_failed_chunks = 0
-        book.extraction_retry_count = 0
-        book.extraction_recipes_found = 0
-        book.extraction_recipes_created = 0
+        book.extraction_translate_language = data.translate_language
+        if not resume:
+            book.extraction_total_chunks = 0
+            book.extraction_completed_chunks = 0
+            book.extraction_failed_chunks = 0
+            book.extraction_retry_count = 0
+            book.extraction_recipes_found = 0
+            book.extraction_recipes_created = 0
+            book.extraction_chunk_status = None
         book.extraction_error = None
-        book.extraction_started_at = None
+        book.extraction_started_at = book.extraction_started_at if resume else None
         book.extraction_completed_at = None
 
         self.session.add(book)
@@ -236,6 +246,7 @@ class UploadedBooksController(BasePublicController):
             self.folders.DATA_DIR.joinpath("uploaded-books"),
             data.pages_per_chunk,
             data.translate_language,
+            resume,
         )
 
         return UploadedBookOut.model_validate(book)
@@ -252,16 +263,24 @@ class UploadedBooksController(BasePublicController):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Translated books cannot be translated again")
         self._assert_book_not_processing(book)
 
+        resume = (
+            book.translation_status == "partial_failed"
+            and book.translation_pages_per_chunk == data.pages_per_chunk
+            and (book.translation_language or data.target_language) == data.target_language
+            and bool(book.translation_chunk_status)
+        )
+
         book.translation_status = "processing"
         book.translation_language = data.target_language
         book.translation_pages_per_chunk = data.pages_per_chunk
-        book.translation_total_chunks = 0
-        book.translation_completed_chunks = 0
-        book.translation_failed_chunks = 0
-        book.translation_retry_count = 0
+        if not resume:
+            book.translation_total_chunks = 0
+            book.translation_completed_chunks = 0
+            book.translation_failed_chunks = 0
+            book.translation_retry_count = 0
+            book.translation_chunk_status = None
         book.translation_error = None
-        book.translation_chunk_status = None
-        book.translation_started_at = None
+        book.translation_started_at = book.translation_started_at if resume else None
         book.translation_completed_at = None
 
         self.session.add(book)
@@ -275,6 +294,7 @@ class UploadedBooksController(BasePublicController):
             self.folders.DATA_DIR.joinpath("uploaded-books"),
             data.pages_per_chunk,
             data.target_language,
+            resume,
         )
 
         return UploadedBookOut.model_validate(book)

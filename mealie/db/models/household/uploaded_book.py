@@ -54,6 +54,7 @@ class UploadedBook(SqlAlchemyBase, BaseMixins):
     translation_completed_at: FilterableColumn[datetime | None] = mapped_column(NaiveDateTime, nullable=True)
     extraction_status: FilterableColumn[str] = mapped_column(String, nullable=False, default="not_started")
     extraction_pages_per_chunk: FilterableColumn[int] = mapped_column(Integer, nullable=False, default=10)
+    extraction_translate_language: FilterableColumn[str | None] = mapped_column(String, nullable=True)
     extraction_total_chunks: FilterableColumn[int] = mapped_column(Integer, nullable=False, default=0)
     extraction_completed_chunks: FilterableColumn[int] = mapped_column(Integer, nullable=False, default=0)
     extraction_failed_chunks: FilterableColumn[int] = mapped_column(Integer, nullable=False, default=0)

@@ -1007,6 +1007,7 @@ function uploadedBookTranslationStatusText(book: UploadedBook) {
 function openUploadedBookExtractionDialog(book: UploadedBook) {
   selectedUploadedBook.value = book;
   uploadedBookPagesPerChunk.value = book.extractionPagesPerChunk || 10;
+  uploadedBookTargetLanguage.value = book.extractionTranslateLanguage || defaultUploadedBookTargetLanguage();
   uploadedBookExtractionDialog.value = true;
 }
 

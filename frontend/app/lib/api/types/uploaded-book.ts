@@ -25,6 +25,7 @@ export interface UploadedBook {
   translationCompletedAt?: string | null;
   extractionStatus: "not_started" | "processing" | "retrying" | "completed" | "partial_failed" | "failed" | string;
   extractionPagesPerChunk: number;
+  extractionTranslateLanguage?: string | null;
   extractionTotalChunks: number;
   extractionCompletedChunks: number;
   extractionFailedChunks: number;

@@ -4,7 +4,9 @@ import json
 import re
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import ClassVar
 from uuid import uuid4
 from zipfile import ZipFile
 
@@ -127,6 +129,8 @@ class UploadedBookRecipeExtractor(BaseService):
     MAX_CHUNK_ATTEMPTS = 6
     DEFAULT_RETRY_WAIT_SECONDS = 60
     MAX_RETRY_WAIT_SECONDS = 30 * 60
+    _running_jobs: ClassVar[set[tuple[str, str]]] = set()
+    _running_jobs_lock: ClassVar[asyncio.Lock] = asyncio.Lock()
 
     def __init__(
         self,
@@ -142,6 +146,26 @@ class UploadedBookRecipeExtractor(BaseService):
         self.recipe_service = RecipeService(repos, user, household, translator)
         self.openai_recipe_service = OpenAIRecipeService(repos, user, household, translator)
         super().__init__()
+
+    @classmethod
+    async def is_job_running(cls, operation: str, book_id: UUID4 | str) -> bool:
+        async with cls._running_jobs_lock:
+            return (operation, str(book_id)) in cls._running_jobs
+
+    @classmethod
+    async def _claim_job(cls, operation: str, book_id: UUID4 | str) -> bool:
+        key = (operation, str(book_id))
+        async with cls._running_jobs_lock:
+            if key in cls._running_jobs:
+                return False
+
+            cls._running_jobs.add(key)
+            return True
+
+    @classmethod
+    async def _release_job(cls, operation: str, book_id: UUID4 | str) -> None:
+        async with cls._running_jobs_lock:
+            cls._running_jobs.discard((operation, str(book_id)))
 
     def _get_book(self, book_id: UUID4) -> UploadedBook:
         book = (
@@ -369,7 +393,9 @@ class UploadedBookRecipeExtractor(BaseService):
 
         return states
 
-    def _initial_chunk_states(self, book: UploadedBook, chunks: list[BookTextChunk]) -> dict[int, dict]:
+    def _initial_chunk_states(
+        self, book: UploadedBook, chunks: list[BookTextChunk], preserve_incomplete_attempts: bool = False
+    ) -> dict[int, dict]:
         existing_states = self._load_chunk_states(book)
         states: dict[int, dict] = {}
 
@@ -387,6 +413,19 @@ class UploadedBookRecipeExtractor(BaseService):
                 }
                 continue
 
+            if previous and preserve_incomplete_attempts:
+                states[chunk.index] = {
+                    **previous,
+                    "index": chunk.index,
+                    "range": range_key,
+                    "startPage": chunk.start_page,
+                    "endPage": chunk.end_page,
+                    "status": CHUNK_PENDING,
+                    "nextRetrySeconds": None,
+                    "nextRetryAt": None,
+                }
+                continue
+
             states[chunk.index] = {
                 "index": chunk.index,
                 "range": range_key,
@@ -399,6 +438,7 @@ class UploadedBookRecipeExtractor(BaseService):
                 "error": None,
                 "provider": None,
                 "nextRetrySeconds": None,
+                "nextRetryAt": None,
             }
 
         return states
@@ -407,6 +447,60 @@ class UploadedBookRecipeExtractor(BaseService):
     def _state_int(state: dict, key: str) -> int:
         value = state.get(key)
         return value if isinstance(value, int) else 0
+
+    @staticmethod
+    def _retry_at(wait_seconds: int) -> str:
+        return (get_utc_now() + timedelta(seconds=wait_seconds)).isoformat()
+
+    @staticmethod
+    def _parse_retry_at(value: object) -> datetime | None:
+        if not isinstance(value, str) or not value:
+            return None
+
+        try:
+            parsed = datetime.fromisoformat(value)
+        except ValueError:
+            return None
+
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=UTC)
+
+        return parsed.astimezone(UTC)
+
+    @classmethod
+    def is_resume_due(cls, status: str, chunk_status: str | None, now: datetime | None = None) -> bool:
+        if status == CHUNK_PROCESSING:
+            return True
+        if status != CHUNK_RETRYING:
+            return False
+
+        now = now or get_utc_now()
+        try:
+            states = json.loads(chunk_status or "[]")
+        except (TypeError, ValueError):
+            return True
+
+        if not isinstance(states, list):
+            return True
+
+        has_retrying_state = False
+        for state in states:
+            if not isinstance(state, dict):
+                continue
+
+            state_status = state.get("status")
+            if state_status in {CHUNK_PENDING, CHUNK_PROCESSING}:
+                return True
+
+            if state_status != CHUNK_RETRYING:
+                continue
+
+            has_retrying_state = True
+            retry_at = cls._parse_retry_at(state.get("nextRetryAt"))
+            if retry_at is None or retry_at <= now:
+                return True
+
+        return not has_retrying_state
 
     def _chunk_error_summary(self, states: dict[int, dict]) -> str | None:
         errors: list[str] = []
@@ -418,7 +512,11 @@ class UploadedBookRecipeExtractor(BaseService):
 
             prefix = f"pages {state.get('startPage')}-{state.get('endPage')}"
             if status == CHUNK_RETRYING and state.get("nextRetrySeconds"):
-                prefix = f"{prefix} retrying in {state.get('nextRetrySeconds')}s"
+                retry_at = state.get("nextRetryAt")
+                if retry_at:
+                    prefix = f"{prefix} retrying at {retry_at}"
+                else:
+                    prefix = f"{prefix} retrying in {state.get('nextRetrySeconds')}s"
             errors.append(f"{prefix}: {str(error)[:220]}")
 
         return "\n".join(errors)[-1000:] if errors else None
@@ -661,7 +759,12 @@ class UploadedBookRecipeExtractor(BaseService):
         uploaded_books_root: Path,
         pages_per_chunk: int = 10,
         translate_language: str = "Hebrew",
+        resume: bool = False,
     ) -> None:
+        if not await self._claim_job("extraction", book_id):
+            self.logger.info(f"Uploaded book extraction job {book_id} is already running")
+            return
+
         book: UploadedBook | None = None
 
         try:
@@ -672,14 +775,18 @@ class UploadedBookRecipeExtractor(BaseService):
 
             book.extraction_status = EXTRACTION_PROCESSING
             book.extraction_pages_per_chunk = pages_per_chunk
-            book.extraction_total_chunks = 0
-            book.extraction_completed_chunks = 0
-            book.extraction_failed_chunks = 0
-            book.extraction_retry_count = 0
-            book.extraction_recipes_found = 0
-            book.extraction_recipes_created = 0
+            book.extraction_translate_language = translate_language
+            if not resume:
+                book.extraction_total_chunks = 0
+                book.extraction_completed_chunks = 0
+                book.extraction_failed_chunks = 0
+                book.extraction_retry_count = 0
+                book.extraction_recipes_found = 0
+                book.extraction_recipes_created = 0
+                book.extraction_chunk_status = None
             book.extraction_error = None
-            book.extraction_started_at = get_utc_now()
+            book.extraction_started_at = book.extraction_started_at if resume else get_utc_now()
+            book.extraction_started_at = book.extraction_started_at or get_utc_now()
             book.extraction_completed_at = None
             self._save_book(book)
 
@@ -691,7 +798,7 @@ class UploadedBookRecipeExtractor(BaseService):
             if not chunks:
                 raise ValueError("No chunks could be created from this book")
 
-            chunk_states = self._initial_chunk_states(book, chunks)
+            chunk_states = self._initial_chunk_states(book, chunks, preserve_incomplete_attempts=resume)
             self._save_progress(book, chunk_states, EXTRACTION_PROCESSING)
 
             openai_service = OpenAIService(self.repos)
@@ -728,6 +835,7 @@ class UploadedBookRecipeExtractor(BaseService):
                                     "error": str(e),
                                     "provider": None,
                                     "nextRetrySeconds": None,
+                                    "nextRetryAt": None,
                                 }
                             )
                             self._save_progress(book, chunk_states)
@@ -746,6 +854,7 @@ class UploadedBookRecipeExtractor(BaseService):
                                     "attempts": attempts,
                                     "provider": slot.label,
                                     "nextRetrySeconds": None,
+                                    "nextRetryAt": None,
                                 }
                             )
                             self._save_progress(book, chunk_states)
@@ -777,6 +886,7 @@ class UploadedBookRecipeExtractor(BaseService):
                                             "error": f"{result.provider_label} disabled: {result.error}",
                                             "provider": result.provider_label,
                                             "nextRetrySeconds": None,
+                                            "nextRetryAt": None,
                                         }
                                     )
                                     self._save_progress(book, chunk_states)
@@ -793,6 +903,7 @@ class UploadedBookRecipeExtractor(BaseService):
                                             "error": result.error,
                                             "provider": result.provider_label,
                                             "nextRetrySeconds": wait_seconds,
+                                            "nextRetryAt": self._retry_at(wait_seconds),
                                         }
                                     )
                                     self._save_progress(book, chunk_states)
@@ -809,6 +920,7 @@ class UploadedBookRecipeExtractor(BaseService):
                                             ),
                                             "provider": result.provider_label,
                                             "nextRetrySeconds": None,
+                                            "nextRetryAt": None,
                                         }
                                     )
                                     self._save_progress(book, chunk_states)
@@ -826,6 +938,7 @@ class UploadedBookRecipeExtractor(BaseService):
                                         "error": None,
                                         "provider": result.provider_label,
                                         "nextRetrySeconds": None,
+                                        "nextRetryAt": None,
                                         "completedAt": get_utc_now().isoformat(),
                                     }
                                 )
@@ -849,6 +962,8 @@ class UploadedBookRecipeExtractor(BaseService):
             self.logger.exception(e)
             if book is not None:
                 self._set_failed(book, str(e))
+        finally:
+            await self._release_job("extraction", book_id)
 
 
 class UploadedBookTranslator(UploadedBookRecipeExtractor):
@@ -882,7 +997,9 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
 
         return states
 
-    def _initial_translation_chunk_states(self, book: UploadedBook, chunks: list[BookTextChunk]) -> dict[int, dict]:
+    def _initial_translation_chunk_states(
+        self, book: UploadedBook, chunks: list[BookTextChunk], preserve_incomplete_attempts: bool = False
+    ) -> dict[int, dict]:
         existing_states = self._load_translation_chunk_states(book)
         states: dict[int, dict] = {}
 
@@ -900,6 +1017,20 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                 }
                 continue
 
+            if previous and preserve_incomplete_attempts:
+                states[chunk.index] = {
+                    **previous,
+                    "index": chunk.index,
+                    "range": range_key,
+                    "startPage": chunk.start_page,
+                    "endPage": chunk.end_page,
+                    "status": CHUNK_PENDING,
+                    "translatedChunkFile": None,
+                    "nextRetrySeconds": None,
+                    "nextRetryAt": None,
+                }
+                continue
+
             states[chunk.index] = {
                 "index": chunk.index,
                 "range": range_key,
@@ -912,6 +1043,7 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                 "error": None,
                 "provider": None,
                 "nextRetrySeconds": None,
+                "nextRetryAt": None,
             }
 
         return states
@@ -1215,7 +1347,12 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
         uploaded_books_root: Path,
         pages_per_chunk: int = 10,
         target_language: str = "Hebrew",
+        resume: bool = False,
     ) -> None:
+        if not await self._claim_job("translation", book_id):
+            self.logger.info(f"Uploaded book translation job {book_id} is already running")
+            return
+
         book: UploadedBook | None = None
 
         try:
@@ -1228,13 +1365,15 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
             book.translation_status = TRANSLATION_PROCESSING
             book.translation_language = target_language
             book.translation_pages_per_chunk = pages_per_chunk
-            book.translation_total_chunks = 0
-            book.translation_completed_chunks = 0
-            book.translation_failed_chunks = 0
-            book.translation_retry_count = 0
+            if not resume:
+                book.translation_total_chunks = 0
+                book.translation_completed_chunks = 0
+                book.translation_failed_chunks = 0
+                book.translation_retry_count = 0
+                book.translation_chunk_status = None
             book.translation_error = None
-            book.translation_chunk_status = None
-            book.translation_started_at = get_utc_now()
+            book.translation_started_at = book.translation_started_at if resume else get_utc_now()
+            book.translation_started_at = book.translation_started_at or get_utc_now()
             book.translation_completed_at = None
             self._save_book(book)
 
@@ -1246,8 +1385,14 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
             if not chunks:
                 raise ValueError("No chunks could be created from this book")
 
-            work_dir = self._reset_translated_chunks_dir(uploaded_books_root, book, target_language)
-            chunk_states = self._initial_translation_chunk_states(book, chunks)
+            work_dir = (
+                self._translated_chunks_dir(uploaded_books_root, book, target_language)
+                if resume
+                else self._reset_translated_chunks_dir(uploaded_books_root, book, target_language)
+            )
+            chunk_states = self._initial_translation_chunk_states(
+                book, chunks, preserve_incomplete_attempts=resume
+            )
             self._save_translation_progress(book, chunk_states, TRANSLATION_PROCESSING)
 
             openai_service = OpenAIService(self.repos)
@@ -1259,6 +1404,8 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
 
             queue: asyncio.Queue[BookTextChunk] = asyncio.Queue()
             for chunk in chunks:
+                if chunk_states[chunk.index].get("status") == CHUNK_COMPLETED:
+                    continue
                 await queue.put(chunk)
 
             provider_lock = asyncio.Lock()
@@ -1282,6 +1429,7 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                                     "error": str(e),
                                     "provider": None,
                                     "nextRetrySeconds": None,
+                                    "nextRetryAt": None,
                                 }
                             )
                             self._save_translation_progress(book, chunk_states)
@@ -1300,6 +1448,7 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                                     "attempts": attempts,
                                     "provider": slot.label,
                                     "nextRetrySeconds": None,
+                                    "nextRetryAt": None,
                                 }
                             )
                             self._save_translation_progress(book, chunk_states)
@@ -1331,6 +1480,7 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                                             "error": f"{result.provider_label} disabled: {result.error}",
                                             "provider": result.provider_label,
                                             "nextRetrySeconds": None,
+                                            "nextRetryAt": None,
                                         }
                                     )
                                     self._save_translation_progress(book, chunk_states)
@@ -1347,6 +1497,7 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                                             "error": result.error,
                                             "provider": result.provider_label,
                                             "nextRetrySeconds": wait_seconds,
+                                            "nextRetryAt": self._retry_at(wait_seconds),
                                         }
                                     )
                                     self._save_translation_progress(book, chunk_states)
@@ -1363,6 +1514,7 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                                             ),
                                             "provider": result.provider_label,
                                             "nextRetrySeconds": None,
+                                            "nextRetryAt": None,
                                         }
                                     )
                                     self._save_translation_progress(book, chunk_states)
@@ -1376,6 +1528,7 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                                         "error": None,
                                         "provider": result.provider_label,
                                         "nextRetrySeconds": None,
+                                        "nextRetryAt": None,
                                         "completedAt": get_utc_now().isoformat(),
                                     }
                                 )
@@ -1416,3 +1569,5 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
             self.logger.exception(e)
             if book is not None:
                 self._set_translation_failed(book, str(e))
+        finally:
+            await self._release_job("translation", book_id)

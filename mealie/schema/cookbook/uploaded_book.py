@@ -33,6 +33,7 @@ class UploadedBookOut(MealieModel):
     translation_completed_at: datetime | None = None
     extraction_status: str = "not_started"
     extraction_pages_per_chunk: int = 10
+    extraction_translate_language: str | None = None
     extraction_total_chunks: int = 0
     extraction_completed_chunks: int = 0
     extraction_failed_chunks: int = 0
