@@ -5,47 +5,63 @@
       v-model="dialog"
       :title="$t('recipe.add-to-list')"
       :icon="$globals.icons.cartCheck"
+      :loading="shoppingListSelectionLoading"
+      :submit-text="$t('general.next')"
+      can-submit
+      keep-open
+      @submit="prepareShoppingListSelection"
     >
-      <v-container v-if="!filteredShoppingLists.length">
-        <BasePageTitle>
-          <template #title>
-            {{ $t('shopping-list.no-shopping-lists-found') }}
-          </template>
-        </BasePageTitle>
-      </v-container>
       <v-card-text>
-        <v-card
-          v-for="list in filteredShoppingLists"
-          :key="list.id"
-          hover
-          class="my-2 left-border"
-          @click="openShoppingListIngredientDialog(list)"
+        <v-radio-group
+          v-model="shoppingListTarget"
+          hide-details
         >
-          <v-card-title class="py-2">
-            {{ list.name }}
-          </v-card-title>
-        </v-card>
-      </v-card-text>
-      <template #card-actions>
-        <v-btn
-          variant="text"
-          color="grey"
-          @click="dialog = false"
-        >
-          {{ $t("general.cancel") }}
-        </v-btn>
-        <div
-          class="d-flex justify-end"
-          style="width: 100%;"
-        >
-          <v-checkbox
-            v-model="preferences.viewAllLists"
-            hide-details
-            :label="$t('general.show-all')"
-            class="my-auto mr-4"
-            @click="setShowAllToggled()"
+          <v-radio
+            value="new"
+            color="primary"
+            :label="$t('shopping-list.new-list')"
           />
-        </div>
+          <v-text-field
+            v-if="shoppingListTarget === 'new'"
+            v-model="newShoppingListName"
+            class="mb-4 ms-8"
+            density="compact"
+            variant="outlined"
+            :label="$t('shopping-list.list-name')"
+            :placeholder="defaultShoppingListName"
+          />
+
+          <v-divider
+            v-if="filteredShoppingLists.length"
+            class="my-2"
+          />
+
+          <v-radio
+            v-for="list in filteredShoppingLists"
+            :key="list.id"
+            color="primary"
+            :value="list.id"
+            :label="list.name || $t('shopping-list.shopping-list')"
+          />
+        </v-radio-group>
+
+        <v-alert
+          v-if="!filteredShoppingLists.length"
+          type="info"
+          variant="tonal"
+          class="mt-4"
+        >
+          {{ $t('shopping-list.no-shopping-lists-found') }}
+        </v-alert>
+      </v-card-text>
+      <template #custom-card-action>
+        <v-checkbox
+          v-model="preferences.viewAllLists"
+          hide-details
+          :label="$t('general.show-all')"
+          class="my-auto mr-4"
+          @click="setShowAllToggled()"
+        />
       </template>
     </BaseDialog>
     <BaseDialog
@@ -194,7 +210,7 @@ import RecipeIngredientListItem from "./RecipeIngredientListItem.vue";
 import { useUserApi } from "~/composables/api";
 import { alert } from "~/composables/use-toast";
 import { useShoppingListPreferences } from "~/composables/use-users/preferences";
-import type { RecipeIngredient, ShoppingListAddRecipeParamsBulk, ShoppingListSummary } from "~/lib/api/types/household";
+import type { RecipeIngredient, ShoppingListAddRecipeParamsBulk, ShoppingListOut, ShoppingListSummary } from "~/lib/api/types/household";
 import type { Recipe } from "~/lib/api/types/recipe";
 
 export interface RecipeWithScale extends Recipe {
@@ -222,10 +238,14 @@ export interface ShoppingListRecipeIngredientSection {
 interface Props {
   recipes?: RecipeWithScale[];
   shoppingLists?: ShoppingListSummary[];
+  defaultCreateNewList?: boolean;
+  defaultListName?: string | null;
 }
 const props = withDefaults(defineProps<Props>(), {
   recipes: undefined,
   shoppingLists: () => [],
+  defaultCreateNewList: false,
+  defaultListName: null,
 });
 
 const dialog = defineModel<boolean>({ default: false });
@@ -235,10 +255,13 @@ const auth = useMealieAuth();
 const api = useUserApi();
 const preferences = useShoppingListPreferences();
 const ready = ref(false);
+const shoppingListSelectionLoading = ref(false);
 
 // Capture values at initialization to avoid reactive updates
 const currentHouseholdSlug = ref("");
 const filteredShoppingLists = ref<ShoppingListSummary[]>([]);
+const shoppingListTarget = ref("new");
+const newShoppingListName = ref("");
 
 const state = reactive({
   shoppingListDialog: false,
@@ -249,7 +272,13 @@ const state = reactive({
 const { shoppingListDialog, shoppingListIngredientDialog, shoppingListShowAllToggled: _shoppingListShowAllToggled } = toRefs(state);
 
 const recipeIngredientSections = ref<ShoppingListRecipeIngredientSection[]>([]);
-const selectedShoppingList = ref<ShoppingListSummary | null>(null);
+const selectedShoppingList = ref<ShoppingListSummary | ShoppingListOut | null>(null);
+
+const defaultShoppingListName = computed(() => {
+  return props.defaultListName?.trim()
+    || props.recipes?.[0]?.name?.trim()
+    || i18n.t("shopping-list.shopping-list");
+});
 
 watch([dialog, () => preferences.value.viewAllLists], () => {
   if (dialog.value) {
@@ -258,11 +287,19 @@ watch([dialog, () => preferences.value.viewAllLists], () => {
       list => preferences.value.viewAllLists || list.userId === auth.user.value?.id,
     );
 
-    if (filteredShoppingLists.value.length === 1 && !state.shoppingListShowAllToggled) {
+    newShoppingListName.value = defaultShoppingListName.value;
+
+    if (props.defaultCreateNewList) {
+      shoppingListTarget.value = "new";
+      state.shoppingListDialog = true;
+      ready.value = true;
+    }
+    else if (filteredShoppingLists.value.length === 1 && !state.shoppingListShowAllToggled) {
       selectedShoppingList.value = filteredShoppingLists.value[0];
       openShoppingListIngredientDialog(selectedShoppingList.value);
     }
     else {
+      shoppingListTarget.value = filteredShoppingLists.value[0]?.id || "new";
       state.shoppingListDialog = true;
       ready.value = true;
     }
@@ -402,11 +439,14 @@ function initState() {
   state.shoppingListShowAllToggled = false;
   recipeIngredientSections.value = [];
   selectedShoppingList.value = null;
+  shoppingListTarget.value = "new";
+  newShoppingListName.value = "";
+  shoppingListSelectionLoading.value = false;
 }
 
 initState();
 
-async function openShoppingListIngredientDialog(list: ShoppingListSummary) {
+async function openShoppingListIngredientDialog(list: ShoppingListSummary | ShoppingListOut) {
   if (!props.recipes?.length) {
     return;
   }
@@ -415,6 +455,42 @@ async function openShoppingListIngredientDialog(list: ShoppingListSummary) {
   await consolidateRecipesIntoSections(props.recipes);
   state.shoppingListDialog = false;
   state.shoppingListIngredientDialog = true;
+}
+
+async function createShoppingListFromSelection() {
+  const name = newShoppingListName.value.trim() || defaultShoppingListName.value;
+  const { data, error } = await api.shopping.lists.createOne({ name });
+
+  if (error || !data) {
+    alert.error(i18n.t("events.something-went-wrong"));
+    return null;
+  }
+
+  return data;
+}
+
+async function prepareShoppingListSelection() {
+  shoppingListSelectionLoading.value = true;
+
+  try {
+    if (shoppingListTarget.value === "new") {
+      const list = await createShoppingListFromSelection();
+      if (list) {
+        await openShoppingListIngredientDialog(list);
+      }
+      return;
+    }
+
+    const selectedList = filteredShoppingLists.value.find(list => list.id === shoppingListTarget.value)
+      || props.shoppingLists.find(list => list.id === shoppingListTarget.value);
+
+    if (selectedList) {
+      await openShoppingListIngredientDialog(selectedList);
+    }
+  }
+  finally {
+    shoppingListSelectionLoading.value = false;
+  }
 }
 
 function setShowAllToggled() {

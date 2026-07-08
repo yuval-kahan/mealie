@@ -233,11 +233,16 @@
 
 - נוספה אפשרות למחוק מתכון מתוך תפריט שלוש הנקודות בכרטיס מתכון, בלי להיכנס לעמוד המתכון עצמו.
 - פעולה זו נוספה גם לתצוגות כרטיסים שונות של מתכונים.
+- שם הפעולה "הוסף לרשימה" עודכן ל"הוסף לרשימת קניות", כדי שיהיה ברור שהיא מוסיפה את רכיבי המתכון לרשימת קניות.
+- בתפריט שלוש הנקודות, הוספה לרשימת קניות פותחת כברירת מחדל יצירת רשימת קניות חדשה בשם המתכון.
+- מאותו חלון עדיין אפשר לבחור רשימת קניות קיימת, או ליצור רשימה חדשה בשם אחר. אם משאירים את שם הרשימה החדשה ריק, שם המתכון משמש כשם הרשימה.
+- דירוג מהיר של מתכון בתפריט שלוש הנקודות הועבר לסוף הרשימה, כדי ששאר הפעולות הרגילות יישארו ראשונות.
 
 קבצים מרכזיים:
 
 - `frontend/app/components/Domain/Recipe/RecipeContextMenu/RecipeContextMenu.vue`
 - `frontend/app/components/Domain/Recipe/RecipeContextMenu/RecipeContextMenuContent.vue`
+- `frontend/app/components/Domain/Recipe/RecipeDialogAddToShoppingList.vue`
 - `frontend/app/components/Domain/Recipe/RecipeCard.vue`
 - `frontend/app/components/Domain/Recipe/RecipeCardMobile.vue`
 - `frontend/app/components/Domain/Recipe/RecipeCardSection.vue`

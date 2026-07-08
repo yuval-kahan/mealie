@@ -63,23 +63,14 @@
     v-model="shoppingListDialog"
     :recipes="[recipeRefWithScale]"
     :shopping-lists="shoppingLists"
+    :default-create-new-list="true"
+    :default-list-name="name"
   />
 
-  <v-list density="compact">
-    <template v-if="useItems.rating && isOwnGroup">
-      <v-list-item class="recipe-menu-rating-item" @click.stop>
-        <template #prepend>
-          <v-icon color="undefined">
-            {{ $globals.icons.star }}
-          </v-icon>
-        </template>
-        <v-list-item-title>{{ $t("general.rating") }}</v-list-item-title>
-        <template #append>
-          <RecipeRating v-model="ratingModel" :recipe-id="recipeId" :slug="slug" small @click.stop />
-        </template>
-      </v-list-item>
-      <v-divider />
-    </template>
+  <v-list
+    density="compact"
+    class="recipe-context-menu-list"
+  >
     <v-list-item v-for="(item, index) in menuItems" :key="index" @click="contextMenuEventHandler(item.event)">
       <template #prepend>
         <v-icon :color="item.color">
@@ -101,6 +92,20 @@
         </v-list-item-title>
       </v-list-item>
     </div>
+    <template v-if="useItems.rating && isOwnGroup">
+      <v-divider />
+      <v-list-item class="recipe-menu-rating-item" @click.stop>
+        <template #prepend>
+          <v-icon color="undefined">
+            {{ $globals.icons.star }}
+          </v-icon>
+        </template>
+        <v-list-item-title>{{ $t("general.rating") }}</v-list-item-title>
+        <template #append>
+          <RecipeRating v-model="ratingModel" :recipe-id="recipeId" :slug="slug" small @click.stop />
+        </template>
+      </v-list-item>
+    </template>
   </v-list>
 </template>
 
@@ -480,6 +485,11 @@ const recipeActions = groupRecipeActionsStore.recipeActions;
 </script>
 
 <style scoped>
+.recipe-context-menu-list {
+  min-width: 240px;
+  overflow-x: hidden;
+}
+
 .recipe-menu-rating-item :deep(.v-list-item__append) {
   margin-inline-start: 12px;
 }
