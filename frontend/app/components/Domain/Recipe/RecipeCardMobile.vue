@@ -3,21 +3,14 @@
     <v-expand-transition>
       <v-card
         :ripple="false"
-        :class="[
-          isFlat ? 'mx-auto flat' : 'mx-auto',
-          { 'disable-highlight': disableHighlight },
-        ]"
+        :class="[isFlat ? 'mx-auto flat' : 'mx-auto', { 'disable-highlight': disableHighlight }]"
         :style="{ cursor }"
         hover
         height="100%"
         :to="$attrs.selected ? undefined : recipeRoute"
         @click="$emit('selected')"
       >
-        <v-img
-          v-if="vertical"
-          class="rounded-sm"
-          cover
-        >
+        <v-img v-if="vertical" class="rounded-sm" cover>
           <RecipeCardImage
             tiny
             :icon-size="100"
@@ -28,7 +21,7 @@
           />
         </v-img>
         <v-list-item
-          lines="two"
+          lines="three"
           class="py-0"
           :class="vertical ? 'px-2' : 'px-0'"
           item-props
@@ -36,10 +29,7 @@
           density="compact"
         >
           <template #prepend>
-            <slot
-              v-if="!vertical"
-              name="avatar"
-            >
+            <slot v-if="!vertical" name="avatar">
               <RecipeCardImage
                 tiny
                 :icon-size="100"
@@ -52,7 +42,7 @@
             </slot>
           </template>
           <div class="pl-4 d-flex flex-column justify-space-between align-stretch pr-2">
-            <v-list-item-title class="mt-3 mb-1 text-top text-truncate w-100">
+            <v-list-item-title class="recipe-mobile-card-title mt-3 mb-1 text-top w-100">
               {{ name }}
             </v-list-item-title>
             <v-list-item-subtitle class="ma-0 text-top">
@@ -65,7 +55,7 @@
             </v-list-item-subtitle>
             <div
               class="d-flex flex-nowrap justify-start ma-0 pt-2 pb-0"
-              style="overflow-x: hidden; overflow-y: hidden; white-space: nowrap;"
+              style="overflow-x: hidden; overflow-y: hidden; white-space: nowrap"
             >
               <RecipeChips
                 :truncate="true"
@@ -86,7 +76,8 @@
                 show-always
                 class="ma-0 pa-0"
               />
-              <div v-else class="my-0 px-1 py-0" /> <!-- Empty div to keep the layout consistent -->
+              <div v-else class="my-0 px-1 py-0" />
+              <!-- Empty div to keep the layout consistent -->
               <RecipeCardRating
                 v-if="showRecipeContent"
                 :class="[{ 'pb-2': !isOwnGroup }, 'ml-n2']"
@@ -102,10 +93,12 @@
                 :menu-icon="$globals.icons.dotsHorizontal"
                 :name="name"
                 :recipe-id="recipeId"
+                :rating="rating"
                 :redirect-on-delete="false"
                 class="ml-auto"
                 :use-items="{
                   edit: false,
+                  rating: true,
                   download: true,
                   mealplanner: true,
                   shoppingList: true,
@@ -170,7 +163,7 @@ const showRecipeContent = computed(() => props.recipeId && props.slug);
 const recipeRoute = computed<string>(() => {
   return showRecipeContent.value ? `/g/${groupSlug.value}/r/${props.slug}` : "";
 });
-const cursor = computed(() => showRecipeContent.value ? "pointer" : "auto");
+const cursor = computed(() => (showRecipeContent.value ? "pointer" : "auto"));
 </script>
 
 <style scoped>
@@ -198,6 +191,18 @@ const cursor = computed(() => showRecipeContent.value ? "pointer" : "auto");
   word-break: normal;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.recipe-mobile-card-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  white-space: normal;
+  word-break: break-word;
+  overflow: hidden;
+  line-height: 1.25;
+  max-height: 3.75em;
 }
 
 .text-top {

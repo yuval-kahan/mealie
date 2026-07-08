@@ -24,10 +24,7 @@
           v-bind="activatorProps"
           @click.prevent
         >
-          <v-icon
-            :size="!fab ? undefined : 'x-large'"
-            :color="fab ? 'white' : 'secondary'"
-          >
+          <v-icon :size="!fab ? undefined : 'x-large'" :color="fab ? 'white' : 'secondary'">
             {{ icon }}
           </v-icon>
         </v-btn>
@@ -49,6 +46,7 @@ import type { Recipe } from "~/lib/api/types/recipe";
 interface ContextMenuIncludes {
   delete?: boolean;
   edit?: boolean;
+  rating?: boolean;
   download?: boolean;
   duplicate?: boolean;
   mealplanner?: boolean;
@@ -79,6 +77,7 @@ interface Props {
   name: string;
   recipe?: Recipe;
   recipeId: string;
+  rating?: number;
   recipeScale?: number;
   redirectOnDelete?: boolean;
 }
@@ -87,6 +86,7 @@ const props = withDefaults(defineProps<Props>(), {
   useItems: () => ({
     delete: true,
     edit: true,
+    rating: true,
     download: true,
     duplicate: false,
     mealplanner: true,
@@ -103,6 +103,7 @@ const props = withDefaults(defineProps<Props>(), {
   color: "primary",
   menuIcon: null,
   recipe: undefined,
+  rating: 0,
   recipeScale: 1,
   redirectOnDelete: true,
 });
@@ -133,7 +134,5 @@ function onMenuToggle(isOpen: boolean) {
   }
 }
 
-const RecipeContextMenuContent = defineAsyncComponent(
-  () => import("./RecipeContextMenuContent.vue"),
-);
+const RecipeContextMenuContent = defineAsyncComponent(() => import("./RecipeContextMenuContent.vue"));
 </script>

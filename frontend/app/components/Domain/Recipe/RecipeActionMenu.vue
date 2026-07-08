@@ -1,7 +1,7 @@
 <template>
   <v-toolbar
     class="fixed-bar mt-0"
-    style="z-index: 2; position: sticky; background: transparent; box-shadow: none;"
+    style="z-index: 2; position: sticky; background: transparent; box-shadow: none"
     density="compact"
     elevation="0"
   >
@@ -62,9 +62,11 @@
         :card-menu="false"
         :recipe="recipe"
         :recipe-id="recipe.id!"
+        :rating="recipe.rating ?? 0"
         :recipe-scale="recipeScale"
         :use-items="{
           edit: false,
+          rating: loggedIn,
           download: loggedIn,
           duplicate: loggedIn,
           mealplanner: loggedIn,

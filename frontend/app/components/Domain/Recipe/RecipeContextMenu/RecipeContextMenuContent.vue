@@ -27,12 +27,7 @@
     @confirm="duplicateRecipe()"
   >
     <v-card-text>
-      <v-text-field
-        v-model="recipeName"
-        density="compact"
-        :label="$t('recipe.recipe-name')"
-        autofocus
-      />
+      <v-text-field v-model="recipeName" density="compact" :label="$t('recipe.recipe-name')" autofocus />
     </v-card-text>
   </BaseDialog>
   <BaseDialog
@@ -71,6 +66,20 @@
   />
 
   <v-list density="compact">
+    <template v-if="useItems.rating && isOwnGroup">
+      <v-list-item class="recipe-menu-rating-item" @click.stop>
+        <template #prepend>
+          <v-icon color="undefined">
+            {{ $globals.icons.star }}
+          </v-icon>
+        </template>
+        <v-list-item-title>{{ $t("general.rating") }}</v-list-item-title>
+        <template #append>
+          <RecipeRating v-model="ratingModel" :recipe-id="recipeId" :slug="slug" small @click.stop />
+        </template>
+      </v-list-item>
+      <v-divider />
+    </template>
     <v-list-item v-for="(item, index) in menuItems" :key="index" @click="contextMenuEventHandler(item.event)">
       <template #prepend>
         <v-icon :color="item.color">
@@ -81,11 +90,7 @@
     </v-list-item>
     <div v-if="useItems.recipeActions && recipeActions && recipeActions.length">
       <v-divider />
-      <v-list-item
-        v-for="(action, index) in recipeActions"
-        :key="index"
-        @click="executeRecipeAction(action)"
-      >
+      <v-list-item v-for="(action, index) in recipeActions" :key="index" @click="executeRecipeAction(action)">
         <template #prepend>
           <v-icon color="undefined">
             {{ $globals.icons.linkVariantPlus }}
@@ -103,6 +108,7 @@
 import RecipeDialogAddToShoppingList from "~/components/Domain/Recipe/RecipeDialogAddToShoppingList.vue";
 import RecipeDialogPrintPreferences from "~/components/Domain/Recipe/RecipeDialogPrintPreferences.vue";
 import RecipeDialogShare from "~/components/Domain/Recipe/RecipeDialogShare.vue";
+import RecipeRating from "~/components/Domain/Recipe/RecipeRating.vue";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import { useUserApi } from "~/composables/api";
 import { useGroupRecipeActions } from "~/composables/use-group-recipe-actions";
@@ -117,6 +123,7 @@ import { useDownloader } from "~/composables/api/use-downloader";
 export interface ContextMenuIncludes {
   delete: boolean;
   edit: boolean;
+  rating: boolean;
   download: boolean;
   duplicate: boolean;
   mealplanner: boolean;
@@ -147,6 +154,7 @@ interface Props {
   name: string;
   recipe?: Recipe;
   recipeId: string;
+  rating?: number;
   recipeScale?: number;
   redirectOnDelete?: boolean;
 }
@@ -154,6 +162,7 @@ const props = withDefaults(defineProps<Props>(), {
   useItems: () => ({
     delete: true,
     edit: true,
+    rating: true,
     download: true,
     duplicate: false,
     mealplanner: true,
@@ -170,6 +179,7 @@ const props = withDefaults(defineProps<Props>(), {
   color: "primary",
   menuIcon: null,
   recipe: undefined,
+  rating: 0,
   recipeScale: 1,
   redirectOnDelete: true,
 });
@@ -189,6 +199,7 @@ const mealplannerDialog = ref(false);
 const shoppingListDialog = ref(false);
 const recipeDuplicateDialog = ref(false);
 const recipeName = ref(props.name);
+const ratingModel = ref(props.rating ?? 0);
 const loading = ref(false);
 const menuItems = ref<ContextMenuItem[]>([]);
 const newMealdate = ref(new Date());
@@ -210,6 +221,13 @@ const { isOwnGroup } = useLoggedInState();
 
 const route = useRoute();
 const groupSlug = computed(() => route.params.groupSlug || auth.user.value?.groupSlug || "");
+
+watch(
+  () => props.rating,
+  (rating) => {
+    ratingModel.value = rating ?? 0;
+  },
+);
 
 const firstDayOfWeek = computed(() => {
   return household.value?.preferences?.firstDayOfWeek || 0;
@@ -296,11 +314,7 @@ const recipeRefWithScale = computed(() =>
   recipeRef.value ? { scale: props.recipeScale, ...recipeRef.value } : undefined,
 );
 const isAdminAndNotOwner = computed(() => {
-  return (
-    !!recipeRef.value
-    && auth.user.value?.admin
-    && auth.user.value?.id !== recipeRef.value?.userId
-  );
+  return !!recipeRef.value && auth.user.value?.admin && auth.user.value?.id !== recipeRef.value?.userId;
 });
 const canDelete = computed(() => {
   const user = auth.user.value;
@@ -464,3 +478,9 @@ function contextMenuEventHandler(eventKey: string) {
 const planTypeOptions = usePlanTypeOptions();
 const recipeActions = groupRecipeActionsStore.recipeActions;
 </script>
+
+<style scoped>
+.recipe-menu-rating-item :deep(.v-list-item__append) {
+  margin-inline-start: 12px;
+}
+</style>

@@ -1,10 +1,7 @@
 <template>
   <!-- Wrap v-hover with a div to provide a proper DOM element for the transition -->
   <div>
-    <v-hover
-      v-slot="{ isHovering, props: hoverProps }"
-      :open-delay="50"
-    >
+    <v-hover v-slot="{ isHovering, props: hoverProps }" :open-delay="50">
       <v-card
         v-bind="hoverProps"
         :class="{ 'on-hover': isHovering }"
@@ -36,26 +33,17 @@
             </div>
           </v-expand-transition>
         </RecipeCardImage>
-        <v-card-title class="mb-n3 px-4" style="font-size: 1.25rem;">
+        <v-card-title class="recipe-card-title px-4">
           {{ name }}
         </v-card-title>
 
         <slot name="actions">
-          <v-card-actions
-            v-if="showRecipeContent"
-            class="px-1"
-          >
-            <RecipeFavoriteBadge
-              v-if="isOwnGroup"
-              :recipe-id="recipeId"
-              show-always
-            />
-            <div v-else class="px-1" /> <!-- Empty div to keep the layout consistent -->
+          <v-card-actions v-if="showRecipeContent" class="px-1">
+            <RecipeFavoriteBadge v-if="isOwnGroup" :recipe-id="recipeId" show-always />
+            <div v-else class="px-1" />
+            <!-- Empty div to keep the layout consistent -->
 
-            <RecipeCardRating
-              :model-value="rating"
-              :recipe-id="recipeId"
-            />
+            <RecipeCardRating :model-value="rating" :recipe-id="recipeId" />
             <v-spacer />
             <RecipeChips
               :truncate="true"
@@ -75,9 +63,11 @@
               :menu-icon="$globals.icons.dotsVertical"
               :name="name"
               :recipe-id="recipeId"
+              :rating="rating"
               :redirect-on-delete="false"
               :use-items="{
                 edit: false,
+                rating: true,
                 download: true,
                 mealplanner: true,
                 shoppingList: true,
@@ -138,7 +128,7 @@ const showRecipeContent = computed(() => props.recipeId && props.slug);
 const recipeRoute = computed<string>(() => {
   return showRecipeContent.value ? `/g/${groupSlug.value}/r/${props.slug}` : "";
 });
-const cursor = computed(() => showRecipeContent.value ? "pointer" : "auto");
+const cursor = computed(() => (showRecipeContent.value ? "pointer" : "auto"));
 </script>
 
 <style>
@@ -158,6 +148,19 @@ const cursor = computed(() => showRecipeContent.value ? "pointer" : "auto");
   word-break: normal;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.recipe-card-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  white-space: normal;
+  word-break: break-word;
+  overflow: hidden;
+  line-height: 1.3;
+  font-size: 1.25rem;
+  min-height: 1.3em;
+  max-height: 3.9em;
 }
 .descriptionWrapper {
   display: -webkit-box;
