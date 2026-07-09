@@ -30,6 +30,26 @@
         :slug="recipe.slug"
         :recipe-name="recipe.name!"
       />
+      <v-tooltip v-if="loggedIn" location="bottom" color="info">
+        <template #activator="{ props: tooltipProps }">
+          <v-btn
+            icon
+            variant="flat"
+            rounded="circle"
+            size="small"
+            color="info"
+            class="ml-1"
+            :loading="shoppingListLoading"
+            v-bind="tooltipProps"
+            @click="openRecipeShoppingList"
+          >
+            <v-icon size="x-large">
+              {{ $globals.icons.cartCheck }}
+            </v-icon>
+          </v-btn>
+        </template>
+        <span>{{ $t("recipe.open-or-create-shopping-list") }}</span>
+      </v-tooltip>
       <div v-if="loggedIn">
         <v-tooltip v-if="canEdit" location="bottom" color="info">
           <template #activator="{ props: tooltipProps }">
@@ -109,6 +129,7 @@
 import RecipeContextMenu from "./RecipeContextMenu/RecipeContextMenu.vue";
 import RecipeFavoriteBadge from "./RecipeFavoriteBadge.vue";
 import RecipeTimelineBadge from "./RecipeTimelineBadge.vue";
+import { useRecipeShoppingList } from "~/composables/recipes/use-recipe-shopping-list";
 import type { Recipe } from "~/lib/api/types/recipe";
 
 const SAVE_EVENT = "save";
@@ -127,7 +148,7 @@ interface Props {
   canEdit?: boolean;
   inline?: boolean;
 }
-withDefaults(defineProps<Props>(), {
+const props = withDefaults(defineProps<Props>(), {
   recipeScale: 1,
   loggedIn: false,
   canEdit: false,
@@ -140,6 +161,8 @@ const deleteDialog = ref(false);
 
 const i18n = useI18n();
 const { $globals } = useNuxtApp();
+const { openOrCreateRecipeShoppingList } = useRecipeShoppingList();
+const shoppingListLoading = ref(false);
 
 const editorButtons = [
   {
@@ -180,6 +203,20 @@ function emitHandler(event: string) {
     default:
       emit(event as any);
       break;
+  }
+}
+
+async function openRecipeShoppingList() {
+  if (shoppingListLoading.value || !props.recipe.slug) {
+    return;
+  }
+
+  shoppingListLoading.value = true;
+  try {
+    await openOrCreateRecipeShoppingList(props.recipe.slug);
+  }
+  finally {
+    shoppingListLoading.value = false;
   }
 }
 

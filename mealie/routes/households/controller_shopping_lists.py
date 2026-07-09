@@ -7,6 +7,7 @@ from pydantic import UUID4
 from mealie.routes._base.base_controllers import BaseCrudController
 from mealie.routes._base.controller import controller
 from mealie.routes._base.mixins import HttpRepo
+from mealie.schema._mealie import MealieModel
 from mealie.schema.household.group_shopping_list import (
     ShoppingListAddRecipeParams,
     ShoppingListAddRecipeParamsBulk,
@@ -36,6 +37,10 @@ from mealie.services.event_bus_service.event_types import (
 from mealie.services.household_services.shopping_lists import ShoppingListService
 
 item_router = APIRouter(prefix="/households/shopping/items", tags=["Households: Shopping List Items"])
+
+
+class ShoppingListOrganizeAIRequest(MealieModel):
+    include_ai_tips: bool = False
 
 
 def publish_list_item_events(publisher: Callable, items_collection: ShoppingListItemsCollectionOut) -> None:
@@ -254,7 +259,11 @@ class ShoppingListController(BaseCrudController):
         return updated_list
 
     @router.post("/{item_id}/organize-ai", response_model=ShoppingListOut)
-    async def organize_shopping_list_with_ai(self, item_id: UUID4):
+    async def organize_shopping_list_with_ai(
+        self,
+        item_id: UUID4,
+        data: ShoppingListOrganizeAIRequest | None = None,
+    ):
         ai_settings = self.group.ai_provider_settings
         if not (ai_settings and ai_settings.ai_enabled):
             raise HTTPException(
@@ -263,7 +272,10 @@ class ShoppingListController(BaseCrudController):
             )
 
         try:
-            shopping_list, items = await self.service.organize_with_ai(item_id)
+            shopping_list, items = await self.service.organize_with_ai(
+                item_id,
+                include_ai_tips=bool(data and data.include_ai_tips),
+            )
         except ValueError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

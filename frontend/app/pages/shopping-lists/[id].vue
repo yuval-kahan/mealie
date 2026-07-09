@@ -110,13 +110,26 @@
               {{ $t("shopping-list.organize-with-ai") }}
             </v-btn>
             <v-btn
+              class="shopping-list-ready-action"
+              :class="{ 'shopping-list-ready-action--active': shoppingListGroceriesReady }"
               :color="shoppingListGroceriesReady ? 'success' : 'grey'"
               :variant="shoppingListGroceriesReady ? 'tonal' : 'outlined'"
               :prepend-icon="$globals.icons.cartCheck"
               :disabled="!hasShoppingListItems || isOffline"
-              @click="toggleShoppingListGroceriesReady"
+              @click="setShoppingListGroceriesReady(true)"
             >
               {{ shoppingListGroceriesReady ? $t("shopping-list.all-groceries-ready") : $t("shopping-list.mark-all-groceries-ready") }}
+            </v-btn>
+            <v-btn
+              v-if="shoppingListGroceriesReady"
+              class="shopping-list-ready-action shopping-list-ready-action--reset"
+              color="warning"
+              variant="outlined"
+              :prepend-icon="$globals.icons.refresh"
+              :disabled="!hasShoppingListItems || isOffline"
+              @click="setShoppingListGroceriesReady(false)"
+            >
+              {{ $t("shopping-list.reset-groceries-ready") }}
             </v-btn>
             <v-btn
               color="primary"
@@ -432,7 +445,7 @@ const {
   aiOrganizing,
   shoppingListAiOrganized,
   shoppingListGroceriesReady,
-  toggleShoppingListGroceriesReady,
+  setShoppingListGroceriesReady,
   toggleReorderLabelsDialog,
   isOffline,
   createEditorOpen,
@@ -526,6 +539,28 @@ const hasShoppingListItems = computed(() => {
 
 .shopping-list-ai-chip {
   font-weight: 700;
+}
+
+.shopping-list-ready-action {
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+.shopping-list-ready-action:hover,
+.shopping-list-ready-action:focus-visible {
+  box-shadow: 0 2px 8px rgba(var(--v-theme-on-surface), 0.18);
+  transform: translateY(-1px);
+}
+
+.shopping-list-ready-action--active {
+  box-shadow: inset 0 0 0 1px rgba(var(--v-theme-success), 0.28);
+}
+
+.shopping-list-ready-action--reset:hover,
+.shopping-list-ready-action--reset:focus-visible {
+  background-color: rgba(var(--v-theme-warning), 0.12) !important;
 }
 
 @media (max-width: 600px) {

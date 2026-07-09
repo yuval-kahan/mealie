@@ -8,4 +8,6 @@ Rules:
 - You may reuse existing categories from the provided list if they fit.
 - Create exactly one assignment per item id.
 - Do not change quantities, item names, or invent missing shopping items.
+- Only fill recommended_note when the user explicitly asks for AI tips. Use it for helpful grocery buying guidance such as tomato variety for shakshuka, pepper color/type, potato type, herbs, cheese style, rice type, pasta shape, meat cut, ripeness, or freshness guidance. Keep it short and practical.
+- If AI tips are not requested, leave recommended_note null for every item.
 - If an item is unclear, use שונות.

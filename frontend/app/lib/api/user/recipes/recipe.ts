@@ -36,6 +36,30 @@ export interface CreateAsset {
 export interface CreateRecipeFromText {
   text: string;
   translateLanguage?: string | null;
+  includeAiTips?: boolean;
+  autoImage?: boolean;
+}
+
+export interface RecipeAIShoppingListRequest {
+  includeAiTips?: boolean;
+  organizeShoppingListWithAi?: boolean;
+}
+
+export interface RecipeAIShoppingListResponse {
+  recipeSlug?: string;
+  recipe_slug?: string;
+  groupSlug?: string | null;
+  group_slug?: string | null;
+  shoppingListId?: string | null;
+  shopping_list_id?: string | null;
+  shoppingListName?: string | null;
+  shopping_list_name?: string | null;
+  shoppingListCreated?: boolean;
+  shopping_list_created?: boolean;
+  shoppingListOrganized?: boolean;
+  shopping_list_organized?: boolean;
+  shoppingListError?: string | null;
+  shopping_list_error?: string | null;
 }
 
 const prefix = "/api";
@@ -59,7 +83,10 @@ const routes = {
   recipesTimelineEvent: `${prefix}/recipes/timeline/events`,
 
   recipesRecipeSlug: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}`,
+  recipesRecipeSlugShoppingListAi: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/shopping-list-ai`,
+  recipesRecipeSlugShoppingListOpenOrCreate: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/shopping-list/open-or-create`,
   recipesRecipeSlugImage: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/image`,
+  recipesRecipeSlugImageAi: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/image/ai`,
   recipesRecipeSlugAssets: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/assets`,
 
   recipesSlugComments: (slug: string) => `${prefix}/recipes/${slug}/comments`,
@@ -156,6 +183,10 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
     return this.requests.post<UpdateImageResponse>(routes.recipesRecipeSlugImage(slug), { url });
   }
 
+  createAIImage(slug: string) {
+    return this.requests.post<UpdateImageResponse>(routes.recipesRecipeSlugImageAi(slug), {});
+  }
+
   deleteImage(slug: string) {
     return this.requests.delete<string>(routes.recipesRecipeSlugImage(slug));
   }
@@ -244,7 +275,11 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
     return await this.requests.post<string>(routes.recipesCreateUrlBulk, payload);
   }
 
-  async createOneFromImages(fileObjects: (Blob | File)[], translateLanguage: string | null = null) {
+  async createOneFromImages(
+    fileObjects: (Blob | File)[],
+    translateLanguage: string | null = null,
+    includeAiTips = true,
+  ) {
     const formData = new FormData();
 
     fileObjects.forEach((file) => {
@@ -252,8 +287,14 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
     });
 
     let apiRoute = routes.recipesCreateFromImage;
+    const query = new URLSearchParams();
     if (translateLanguage) {
-      apiRoute = `${apiRoute}?translateLanguage=${translateLanguage}`;
+      query.set("translateLanguage", translateLanguage);
+    }
+    query.set("includeAiTips", String(includeAiTips));
+    const queryString = query.toString();
+    if (queryString) {
+      apiRoute = `${apiRoute}?${queryString}`;
     }
 
     return await this.requests.post<string>(apiRoute, formData);
@@ -261,6 +302,25 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
 
   async createOneFromText(payload: CreateRecipeFromText) {
     return await this.requests.post<string>(routes.recipesCreateFromText, payload, { suppressAlert: true });
+  }
+
+  async createAIShoppingList(recipeSlug: string, payload: RecipeAIShoppingListRequest = {}) {
+    return await this.requests.post<RecipeAIShoppingListResponse>(
+      routes.recipesRecipeSlugShoppingListAi(recipeSlug),
+      {
+        includeAiTips: payload.includeAiTips !== false,
+        organizeShoppingListWithAi: payload.organizeShoppingListWithAi !== false,
+      },
+      { suppressAlert: true },
+    );
+  }
+
+  async openOrCreateShoppingList(recipeSlug: string) {
+    return await this.requests.post<RecipeAIShoppingListResponse>(
+      routes.recipesRecipeSlugShoppingListOpenOrCreate(recipeSlug),
+      {},
+      { suppressAlert: true },
+    );
   }
 
   async parseIngredients(parser: Parser, ingredients: Array<string>) {

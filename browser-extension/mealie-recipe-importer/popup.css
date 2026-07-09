@@ -1,0 +1,162 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: #f7f4ef;
+  color: #221815;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  margin: 0;
+  min-width: 380px;
+}
+
+.popup-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+}
+
+.popup-header {
+  align-items: center;
+  border-bottom: 1px solid #ead9c5;
+  display: flex;
+  gap: 10px;
+  padding-bottom: 10px;
+}
+
+.popup-logo {
+  flex: 0 0 auto;
+  height: 42px;
+  width: 42px;
+}
+
+h1 {
+  font-size: 1.2rem;
+  margin: 0;
+}
+
+p {
+  color: #695c54;
+  margin: 4px 0 0;
+}
+
+.settings,
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+label {
+  color: #4f4039;
+  display: flex;
+  flex-direction: column;
+  font-size: 0.82rem;
+  font-weight: 700;
+  gap: 5px;
+}
+
+input[type="text"],
+input[type="url"],
+input[type="password"],
+select,
+textarea {
+  background: #fff;
+  border: 1px solid #d9c6b3;
+  border-radius: 7px;
+  color: #221815;
+  font: inherit;
+  padding: 9px 10px;
+}
+
+.checkbox-row {
+  align-items: center;
+  flex-direction: row;
+  font-weight: 600;
+  gap: 8px;
+}
+
+.checkbox-row input {
+  accent-color: #ef7d17;
+  height: 16px;
+  width: 16px;
+}
+
+.actions {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr 1fr;
+}
+
+button {
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  padding: 10px 12px;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.primary {
+  background: #ef7d17;
+  color: #fff;
+}
+
+.secondary {
+  background: #fff;
+  border: 1px solid #d9c6b3;
+  color: #744117;
+}
+
+.connect-button {
+  background: #fff7ed;
+  border: 1px solid #efb16b;
+  color: #9a4a00;
+  width: 100%;
+}
+
+.preview-panel {
+  border-top: 1px solid #ead9c5;
+  padding-top: 10px;
+}
+
+.preview-title {
+  color: #4f4039;
+  font-size: 0.82rem;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+textarea {
+  direction: ltr;
+  height: 180px;
+  resize: vertical;
+  width: 100%;
+}
+
+.status {
+  color: #4f4039;
+  font-size: 0.86rem;
+  min-height: 18px;
+  white-space: pre-wrap;
+}
+
+.status.error {
+  color: #a01414;
+}
+
+.status.success {
+  color: #157347;
+}
+
+.recipe-link {
+  color: #bd5b00;
+  font-weight: 800;
+  text-decoration: none;
+}

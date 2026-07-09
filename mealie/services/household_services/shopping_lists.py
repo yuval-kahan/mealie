@@ -118,7 +118,11 @@ class ShoppingListService:
             if self._shopping_list_item_ai_text(item)
         ]
 
-    async def organize_with_ai(self, list_id: UUID4) -> tuple[ShoppingListOut, ShoppingListItemsCollectionOut]:
+    async def organize_with_ai(
+        self,
+        list_id: UUID4,
+        include_ai_tips: bool = False,
+    ) -> tuple[ShoppingListOut, ShoppingListItemsCollectionOut]:
         shopping_list = self.shopping_lists.get_one(list_id)
         if shopping_list is None:
             raise UnexpectedNone("Shopping list not found")
@@ -139,6 +143,7 @@ class ShoppingListService:
         prompt = openai_service.get_prompt("shopping-lists.organize-shopping-list")
         message = (
             "Organize the shopping list items into practical grocery categories.\n\n"
+            f"Add AI shopping notes JSON boolean: {json.dumps(include_ai_tips)}\n\n"
             f"Existing categories JSON:\n{json.dumps(existing_categories, ensure_ascii=False)}\n\n"
             f"Shopping list items JSON:\n{json.dumps(items_payload, ensure_ascii=False)}"
         )
@@ -153,6 +158,7 @@ class ShoppingListService:
 
         valid_items_by_id = {str(item.id): item for item in shopping_list.list_items}
         category_by_item_id: dict[str, str] = {}
+        recommended_note_by_item_id: dict[str, str] = {}
         for assignment in response.assignments:
             item_id = str(assignment.item_id)
             if item_id not in valid_items_by_id:
@@ -160,6 +166,10 @@ class ShoppingListService:
 
             category_name = self._normalize_ai_label_name(assignment.category) or "שונות"
             category_by_item_id[item_id] = category_name
+            if include_ai_tips and assignment.recommended_note:
+                recommended_note = " ".join(assignment.recommended_note.split()).strip()
+                if recommended_note:
+                    recommended_note_by_item_id[item_id] = recommended_note
 
         # Make sure every item receives a stable category even if the model omitted one.
         for item_id, item in valid_items_by_id.items():
@@ -172,10 +182,17 @@ class ShoppingListService:
         for item_id, category_name in category_by_item_id.items():
             item = valid_items_by_id[item_id]
             label = labels_by_key.get(self._ai_label_key(category_name))
-            if not label or item.label_id == label.id:
+            note = recommended_note_by_item_id.get(item_id)
+            if note and note not in (item.note or ""):
+                item.note = " | ".join([part for part in [item.note, note] if part])
+
+            if not label and not note:
+                continue
+            if label and item.label_id == label.id and not note:
                 continue
 
-            item.label_id = label.id
+            if label:
+                item.label_id = label.id
             update_items.append(item.cast(ShoppingListItemUpdateBulk, id=item.id))
 
         updated_items = cast(list[ShoppingListItemOut], self.list_items.update_many(update_items) if update_items else [])

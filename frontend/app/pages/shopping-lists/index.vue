@@ -231,14 +231,29 @@
                 </v-btn>
                 <v-btn
                   size="small"
+                  class="shopping-list-ready-action"
+                  :class="{ 'shopping-list-ready-action--active': isShoppingListGroceriesReady(expandedShoppingLists[list.id]) }"
                   :color="isShoppingListGroceriesReady(expandedShoppingLists[list.id]) ? 'success' : 'grey'"
                   :variant="isShoppingListGroceriesReady(expandedShoppingLists[list.id]) ? 'tonal' : 'outlined'"
                   :prepend-icon="$globals.icons.cartCheck"
                   :loading="isUpdatingShoppingListReady(list.id)"
                   :disabled="!expandedShoppingLists[list.id].listItems?.length"
-                  @click.stop.prevent="toggleShoppingListGroceriesReady(expandedShoppingLists[list.id])"
+                  @click.stop.prevent="setShoppingListGroceriesReady(expandedShoppingLists[list.id], true)"
                 >
                   {{ isShoppingListGroceriesReady(expandedShoppingLists[list.id]) ? $t("shopping-list.all-groceries-ready") : $t("shopping-list.mark-all-groceries-ready") }}
+                </v-btn>
+                <v-btn
+                  v-if="isShoppingListGroceriesReady(expandedShoppingLists[list.id])"
+                  size="small"
+                  class="shopping-list-ready-action shopping-list-ready-action--reset"
+                  color="warning"
+                  variant="outlined"
+                  :prepend-icon="$globals.icons.refresh"
+                  :loading="isUpdatingShoppingListReady(list.id)"
+                  :disabled="!expandedShoppingLists[list.id].listItems?.length"
+                  @click.stop.prevent="setShoppingListGroceriesReady(expandedShoppingLists[list.id], false)"
+                >
+                  {{ $t("shopping-list.reset-groceries-ready") }}
                 </v-btn>
               </div>
               <template v-if="!expandedShoppingLists[list.id].listItems?.length">
@@ -269,7 +284,66 @@
                       class="shopping-list-inline-checkbox"
                       @click.stop.prevent="toggleInlineShoppingListItem(list.id, item)"
                     />
-                    <span>{{ formatInlineShoppingListItem(item) }}</span>
+                    <template v-if="isEditingInlineShoppingListItem(item.id)">
+                      <v-text-field
+                        v-model="inlineShoppingListItemDrafts[item.id]"
+                        density="compact"
+                        hide-details
+                        class="shopping-list-inline-edit-input"
+                        autofocus
+                        @keydown.enter.stop.prevent="saveInlineShoppingListItemName(list.id, item)"
+                        @keydown.esc.stop.prevent="cancelInlineShoppingListItemEdit(item.id)"
+                      />
+                      <v-btn
+                        icon
+                        size="x-small"
+                        variant="text"
+                        color="success"
+                        class="shopping-list-inline-action"
+                        :loading="isUpdatingInlineShoppingListItem(item.id)"
+                        @click.stop.prevent="saveInlineShoppingListItemName(list.id, item)"
+                      >
+                        <v-icon>{{ $globals.icons.save }}</v-icon>
+                      </v-btn>
+                      <v-btn
+                        icon
+                        size="x-small"
+                        variant="text"
+                        class="shopping-list-inline-action"
+                        :disabled="isUpdatingInlineShoppingListItem(item.id)"
+                        @click.stop.prevent="cancelInlineShoppingListItemEdit(item.id)"
+                      >
+                        <v-icon>{{ $globals.icons.close }}</v-icon>
+                      </v-btn>
+                    </template>
+                    <template v-else>
+                      <span class="shopping-list-inline-item-text">{{ formatInlineShoppingListItem(item) }}</span>
+                      <v-spacer />
+                      <v-btn
+                        icon
+                        size="x-small"
+                        variant="text"
+                        class="shopping-list-inline-action"
+                        :title="$t('general.edit')"
+                        :aria-label="$t('general.edit')"
+                        @click.stop.prevent="startInlineShoppingListItemEdit(item)"
+                      >
+                        <v-icon>{{ $globals.icons.edit }}</v-icon>
+                      </v-btn>
+                      <v-btn
+                        icon
+                        size="x-small"
+                        variant="text"
+                        color="error"
+                        class="shopping-list-inline-action"
+                        :loading="isUpdatingInlineShoppingListItem(item.id)"
+                        :title="$t('general.delete')"
+                        :aria-label="$t('general.delete')"
+                        @click.stop.prevent="deleteInlineShoppingListItem(list.id, item)"
+                      >
+                        <v-icon>{{ $globals.icons.delete }}</v-icon>
+                      </v-btn>
+                    </template>
                   </div>
                 </div>
               </template>
@@ -306,6 +380,9 @@ const organizingShoppingListIds = ref<Set<string>>(new Set());
 const expandedShoppingListIds = ref<Set<string>>(new Set());
 const loadingExpandedShoppingListIds = ref<Set<string>>(new Set());
 const updatingReadyShoppingListIds = ref<Set<string>>(new Set());
+const editingInlineShoppingListItemIds = ref<Set<string>>(new Set());
+const updatingInlineShoppingListItemIds = ref<Set<string>>(new Set());
+const inlineShoppingListItemDrafts = ref<Record<string, string>>({});
 const expandedShoppingLists = ref<Record<string, ShoppingListOut>>({});
 const { updateAvailabilityForListName } = useShoppingListAvailability();
 
@@ -471,6 +548,44 @@ function isUpdatingShoppingListReady(id: string) {
   return updatingReadyShoppingListIds.value.has(id);
 }
 
+function setInlineShoppingListItemUpdating(id: string, updating: boolean) {
+  const next = new Set(updatingInlineShoppingListItemIds.value);
+  if (updating) {
+    next.add(id);
+  }
+  else {
+    next.delete(id);
+  }
+  updatingInlineShoppingListItemIds.value = next;
+}
+
+function isUpdatingInlineShoppingListItem(id: string) {
+  return updatingInlineShoppingListItemIds.value.has(id);
+}
+
+function isEditingInlineShoppingListItem(id: string) {
+  return editingInlineShoppingListItemIds.value.has(id);
+}
+
+function startInlineShoppingListItemEdit(item: ShoppingListItemOut) {
+  const next = new Set(editingInlineShoppingListItemIds.value);
+  next.add(item.id);
+  editingInlineShoppingListItemIds.value = next;
+  inlineShoppingListItemDrafts.value = {
+    ...inlineShoppingListItemDrafts.value,
+    [item.id]: formatInlineShoppingListItem(item),
+  };
+}
+
+function cancelInlineShoppingListItemEdit(id: string) {
+  const next = new Set(editingInlineShoppingListItemIds.value);
+  next.delete(id);
+  editingInlineShoppingListItemIds.value = next;
+  inlineShoppingListItemDrafts.value = Object.fromEntries(
+    Object.entries(inlineShoppingListItemDrafts.value).filter(([itemId]) => itemId !== id),
+  );
+}
+
 function removeExpandedShoppingList(id: string) {
   const nextExpanded = new Set(expandedShoppingListIds.value);
   nextExpanded.delete(id);
@@ -615,6 +730,84 @@ function replaceInlineShoppingListItem(listId: string, item: ShoppingListItemOut
   };
 }
 
+function removeInlineShoppingListItem(listId: string, itemId: string) {
+  const list = expandedShoppingLists.value[listId];
+  if (!list?.listItems) {
+    return;
+  }
+
+  const nextList = {
+    ...list,
+    listItems: list.listItems.filter(existingItem => existingItem.id !== itemId),
+  };
+  expandedShoppingLists.value = {
+    ...expandedShoppingLists.value,
+    [listId]: nextList,
+  };
+}
+
+async function saveInlineShoppingListItemName(listId: string, item: ShoppingListItemOut) {
+  if (isUpdatingInlineShoppingListItem(item.id)) {
+    return;
+  }
+
+  const draft = (inlineShoppingListItemDrafts.value[item.id] || "").trim();
+  if (!draft) {
+    return;
+  }
+
+  const originalItem = { ...item };
+  const optimisticItem = {
+    ...item,
+    display: draft,
+    updatedAt: new Date().toISOString(),
+  };
+
+  setInlineShoppingListItemUpdating(item.id, true);
+  replaceInlineShoppingListItem(listId, optimisticItem);
+  try {
+    const { data, error } = await userApi.shopping.items.updateOne(item.id, optimisticItem);
+    if (error || !data) {
+      replaceInlineShoppingListItem(listId, originalItem);
+      alert.error(i18n.t("events.something-went-wrong"));
+      return;
+    }
+
+    replaceInlineShoppingListItem(listId, data);
+    cancelInlineShoppingListItemEdit(item.id);
+  }
+  finally {
+    setInlineShoppingListItemUpdating(item.id, false);
+  }
+}
+
+async function deleteInlineShoppingListItem(listId: string, item: ShoppingListItemOut) {
+  if (isUpdatingInlineShoppingListItem(item.id)) {
+    return;
+  }
+
+  const list = expandedShoppingLists.value[listId];
+  const originalItems = [...(list?.listItems || [])];
+  setInlineShoppingListItemUpdating(item.id, true);
+  removeInlineShoppingListItem(listId, item.id);
+  cancelInlineShoppingListItemEdit(item.id);
+  try {
+    const { error } = await userApi.shopping.items.deleteOne(item.id);
+    if (error) {
+      if (list) {
+        expandedShoppingLists.value = {
+          ...expandedShoppingLists.value,
+          [listId]: { ...list, listItems: originalItems },
+        };
+      }
+      alert.error(i18n.t("events.something-went-wrong"));
+    }
+  }
+  finally {
+    setInlineShoppingListItemUpdating(item.id, false);
+  }
+}
+
 async function toggleInlineShoppingListItem(listId: string, item: ShoppingListItemOut) {
   const originalItem = { ...item };
   const optimisticItem = {
@@ -634,7 +827,7 @@ async function toggleInlineShoppingListItem(listId: string, item: ShoppingListIt
   replaceInlineShoppingListItem(listId, data);
 }
 
-async function toggleShoppingListGroceriesReady(list: ShoppingListOut) {
+async function setShoppingListGroceriesReady(list: ShoppingListOut, nextReady: boolean) {
   if (isUpdatingShoppingListReady(list.id)) {
     return;
   }
@@ -643,7 +836,10 @@ async function toggleShoppingListGroceriesReady(list: ShoppingListOut) {
   try {
     const { data: fullList } = await userApi.shopping.lists.getOne(list.id);
     const sourceList = fullList || list;
-    const nextReady = !isShoppingListGroceriesReady(sourceList);
+    if (isShoppingListGroceriesReady(sourceList) === nextReady) {
+      return;
+    }
+
     const { data, error } = await userApi.shopping.lists.updateOne(
       list.id,
       {
@@ -877,6 +1073,28 @@ async function deleteOne() {
   margin-bottom: 8px;
 }
 
+.shopping-list-ready-action {
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+.shopping-list-ready-action:hover,
+.shopping-list-ready-action:focus-visible {
+  box-shadow: 0 2px 8px rgba(var(--v-theme-on-surface), 0.18);
+  transform: translateY(-1px);
+}
+
+.shopping-list-ready-action--active {
+  box-shadow: inset 0 0 0 1px rgba(var(--v-theme-success), 0.28);
+}
+
+.shopping-list-ready-action--reset:hover,
+.shopping-list-ready-action--reset:focus-visible {
+  background-color: rgba(var(--v-theme-warning), 0.12) !important;
+}
+
 .shopping-list-inline-group + .shopping-list-inline-group {
   margin-top: 10px;
 }
@@ -899,10 +1117,41 @@ async function deleteOne() {
 
 .shopping-list-inline-item--checked {
   color: rgba(var(--v-theme-on-surface), 0.52);
+}
+
+.shopping-list-inline-item--checked .shopping-list-inline-item-text {
   text-decoration: line-through;
 }
 
 .shopping-list-inline-checkbox {
   flex: 0 0 auto;
+}
+
+.shopping-list-inline-item-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shopping-list-inline-edit-input {
+  flex: 1 1 auto;
+  min-width: 140px;
+}
+
+.shopping-list-inline-action {
+  flex: 0 0 auto;
+  opacity: 0.68;
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.shopping-list-inline-action:hover,
+.shopping-list-inline-action:focus-visible {
+  background-color: rgba(var(--v-theme-primary), 0.1) !important;
+  box-shadow: inset 0 0 0 1px rgba(var(--v-theme-primary), 0.24);
+  opacity: 1;
 }
 </style>

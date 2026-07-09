@@ -1,14 +1,14 @@
 <template>
   <v-img
-    v-if="!fallBackImage"
+    v-if="imageSource && !fallBackImage"
     :height="height"
     cover
     min-height="125"
     max-height="fill-height"
-    :src="getImage(recipeId)"
+    :src="imageSource"
     @click="$emit('click')"
-    @load="fallBackImage = false"
-    @error="fallBackImage = true"
+    @load="handleImageLoad"
+    @error="handleImageError"
   >
     <slot />
   </v-img>
@@ -51,13 +51,24 @@ const props = withDefaults(defineProps<Props>(), {
   height: "100%",
 });
 
-defineEmits<{
+const emit = defineEmits<{
   click: [];
+  imageStatus: [hasImage: boolean];
 }>();
 
 const { recipeImage, recipeSmallImage, recipeTinyImage } = useStaticRoutes();
 
 const fallBackImage = ref(false);
+const isExternalImage = computed(() => {
+  return typeof props.imageVersion === "string" && props.imageVersion.toLowerCase().startsWith("http");
+});
+const imageSource = computed(() => {
+  if (!props.imageVersion) {
+    return "";
+  }
+
+  return isExternalImage.value ? props.imageVersion : getImage(props.recipeId);
+});
 const imageSize = computed(() => {
   if (props.tiny) return "tiny";
   if (props.small) return "small";
@@ -66,11 +77,21 @@ const imageSize = computed(() => {
 });
 
 watch(
-  () => props.recipeId,
+  () => [props.recipeId, props.imageVersion],
   () => {
     fallBackImage.value = false;
   },
 );
+
+function handleImageLoad() {
+  fallBackImage.value = false;
+  emit("imageStatus", true);
+}
+
+function handleImageError() {
+  fallBackImage.value = true;
+  emit("imageStatus", false);
+}
 
 function getImage(recipeId: string) {
   switch (imageSize.value) {

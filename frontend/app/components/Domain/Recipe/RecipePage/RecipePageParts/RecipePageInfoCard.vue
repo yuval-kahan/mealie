@@ -74,7 +74,7 @@
                 </div>
               </div>
               <div
-                v-if="recipe.recipeYieldQuantity || recipe.recipeYield || isOwnGroup || hasAllGroceries"
+                v-if="hasQuickStats"
                 class="recipe-info-card__quick-stats"
               >
                 <v-chip
@@ -101,14 +101,9 @@
                   class="mb-4"
                 />
               </div>
-            </div>
-            <v-divider v-if="recipe.description || recipe.source || recipe.createdBy || recipe.recipeYieldQuantity || recipe.recipeYield || isOwnGroup || hasAllGroceries" />
-            <v-container
-              v-if="recipe.prepTime || recipe.totalTime || recipe.performTime"
-              class="recipe-info-card__stats px-0"
-            >
               <div
-                class="recipe-info-card__stat-group"
+                v-if="hasTimeStats"
+                class="recipe-info-card__time-stats"
               >
                 <RecipeTimeCard
                   container-class="d-flex flex-wrap justify-start"
@@ -118,7 +113,8 @@
                   class="mb-4"
                 />
               </div>
-            </v-container>
+            </div>
+            <v-divider v-if="hasInfoDetails" />
           </div>
         </v-card-text>
       </v-card>
@@ -149,6 +145,20 @@ const props = withDefaults(defineProps<Props>(), {
 const { isOwnGroup } = useLoggedInState();
 const { ensureAvailability, hasAllGroceriesForRecipe } = useShoppingListAvailability();
 const hasAllGroceries = computed(() => hasAllGroceriesForRecipe(props.recipe.name));
+const hasQuickStats = computed(() => Boolean(
+  props.recipe.recipeYieldQuantity
+  || props.recipe.recipeYield
+  || isOwnGroup.value
+  || hasAllGroceries.value,
+));
+const hasTimeStats = computed(() => Boolean(props.recipe.prepTime || props.recipe.totalTime || props.recipe.performTime));
+const hasInfoDetails = computed(() => Boolean(
+  props.recipe.description
+  || props.recipe.source
+  || props.recipe.createdBy
+  || hasQuickStats.value
+  || hasTimeStats.value,
+));
 
 onMounted(() => {
   void ensureAvailability();
@@ -207,6 +217,13 @@ function externalUrlFromSource(source?: string | null) {
   min-width: min(100%, 240px);
 }
 
+.recipe-info-card__time-stats {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  min-width: min(100%, 240px);
+}
+
 .recipe-info-card__ready-chip {
   font-weight: 700;
 }
@@ -252,17 +269,6 @@ function externalUrlFromSource(source?: string | null) {
   width: 100%;
 }
 
-.recipe-info-card__stats {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-start;
-  gap: 16px 48px;
-}
-
-.recipe-info-card__stat-group {
-  min-width: min(100%, 260px);
-}
-
 .recipe-origin-meta__link {
   color: rgb(var(--v-theme-primary));
   text-decoration: underline;
@@ -272,24 +278,29 @@ function externalUrlFromSource(source?: string | null) {
 
 @media (min-width: 960px) {
   .recipe-info-card__details {
-    width: calc(66.666667% - 8px);
-    margin-inline-start: 0;
-    margin-inline-end: auto;
+    width: min(100%, 1140px);
+    margin-inline: auto;
   }
 
   .recipe-info-card__details-row {
-    flex-direction: row;
-    justify-content: flex-start;
+    display: grid;
+    grid-template-columns: minmax(360px, 1fr) minmax(220px, max-content) minmax(240px, max-content);
+    justify-content: stretch;
+    align-items: flex-start;
   }
 
   .recipe-info-card__meta-column {
-    flex: 1 1 440px;
-    max-width: 520px;
+    max-width: 560px;
+    min-width: 0;
   }
 
   .recipe-info-card__quick-stats {
-    flex: 0 0 260px;
     align-items: center;
+    padding-top: 12px;
+  }
+
+  .recipe-info-card__time-stats {
+    justify-content: center;
     padding-top: 12px;
   }
 }

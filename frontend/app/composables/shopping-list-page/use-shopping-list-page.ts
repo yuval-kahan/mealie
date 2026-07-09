@@ -194,15 +194,18 @@ export function useShoppingListPage(listId: string) {
     }
   }
 
-  async function toggleShoppingListGroceriesReady() {
+  async function setShoppingListGroceriesReady(nextReady: boolean) {
     if (!shoppingList.value) {
+      return;
+    }
+
+    if (shoppingListGroceriesReady.value === nextReady) {
       return;
     }
 
     loadingCounter.value += 1;
     try {
       await shoppingListItemActions.process();
-      const nextReady = !shoppingListGroceriesReady.value;
       const payload = {
         ...shoppingList.value,
         extras: buildShoppingListReadyExtras(shoppingList.value, nextReady),
@@ -220,6 +223,10 @@ export function useShoppingListPage(listId: string) {
     finally {
       loadingCounter.value -= 1;
     }
+  }
+
+  async function toggleShoppingListGroceriesReady() {
+    await setShoppingListGroceriesReady(!shoppingListGroceriesReady.value);
   }
 
   // Label reordering helpers
@@ -262,6 +269,7 @@ export function useShoppingListPage(listId: string) {
     aiOrganizing,
     shoppingListAiOrganized,
     shoppingListGroceriesReady,
+    setShoppingListGroceriesReady,
     toggleShoppingListGroceriesReady,
 
     // Dialog actions

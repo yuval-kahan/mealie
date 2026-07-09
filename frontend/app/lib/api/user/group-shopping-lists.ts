@@ -42,8 +42,8 @@ export class ShoppingListsApi extends BaseCRUDAPI<ShoppingListCreate, ShoppingLi
     return await this.requests.put(routes.shoppingListIdUpdateLabelSettings(itemId), listSettings);
   }
 
-  async organizeWithAi(itemId: string) {
-    return await this.requests.post<ShoppingListOut>(routes.shoppingListIdOrganizeAi(itemId), {});
+  async organizeWithAi(itemId: string, includeAiTips = false) {
+    return await this.requests.post<ShoppingListOut>(routes.shoppingListIdOrganizeAi(itemId), { includeAiTips });
   }
 }
 

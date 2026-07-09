@@ -16,8 +16,9 @@
             :icon-size="100"
             :slug="slug"
             :recipe-id="recipeId"
-            :image-version="image"
+            :image-version="localImageVersion"
             :height="height"
+            @image-status="handleImageStatus"
           />
         </v-img>
         <v-list-item
@@ -35,9 +36,10 @@
                 :icon-size="100"
                 :slug="slug"
                 :recipe-id="recipeId"
-                :image-version="image"
+                :image-version="localImageVersion"
                 width="125"
                 :height="height"
+                @image-status="handleImageStatus"
               />
             </slot>
           </template>
@@ -156,17 +158,34 @@
                   download: true,
                   mealplanner: true,
                   shoppingList: true,
+                  aiShoppingList: true,
+                  aiImage: true,
                   print: false,
                   printPreferences: false,
                   share: true,
                   delete: true,
                 }"
                 @deleted="$emit('delete', slug)"
+                @image-updated="handleImageUpdated"
                 @renamed="handleRenamed"
               />
             </v-card-actions>
           </slot>
         </v-list-item>
+        <v-btn
+          v-if="showAiImageButton"
+          icon
+          variant="flat"
+          size="x-small"
+          class="recipe-mobile-card-ai-image-btn"
+          color="primary"
+          :loading="aiImageLoading"
+          :title="$t('recipe.add-ai-image')"
+          :aria-label="$t('recipe.add-ai-image')"
+          @click.stop.prevent="createAIImageFromCard"
+        >
+          <v-icon>{{ $globals.icons.fileImage }}</v-icon>
+        </v-btn>
         <slot />
       </v-card>
     </v-expand-transition>
@@ -222,6 +241,9 @@ const { isOwnGroup } = useLoggedInState();
 const { ensureAvailability, hasAllGroceriesForRecipe } = useShoppingListAvailability();
 const displayName = ref(props.name);
 const copyLoading = ref(false);
+const aiImageLoading = ref(false);
+const imageLoadFailed = ref(false);
+const localImageVersion = ref<string | null>(props.image ?? null);
 const recipeContextMenu = ref<{
   openMealplannerDialog: () => Promise<void>;
   openShoppingListDialog: () => Promise<void>;
@@ -234,6 +256,14 @@ watch(
   },
 );
 
+watch(
+  () => props.image,
+  (image) => {
+    localImageVersion.value = image ?? null;
+    imageLoadFailed.value = false;
+  },
+);
+
 const route = useRoute();
 const groupSlug = computed(() => route.params.groupSlug || auth.user.value?.groupSlug || "");
 const showRecipeContent = computed(() => props.recipeId && props.slug);
@@ -242,6 +272,7 @@ const recipeRoute = computed<string>(() => {
 });
 const cursor = computed(() => (showRecipeContent.value ? "pointer" : "auto"));
 const hasAllGroceries = computed(() => hasAllGroceriesForRecipe(displayName.value));
+const showAiImageButton = computed(() => isOwnGroup.value && showRecipeContent.value && (!localImageVersion.value || imageLoadFailed.value));
 
 onMounted(() => {
   void ensureAvailability();
@@ -250,6 +281,36 @@ onMounted(() => {
 function handleRenamed(payload: { slug: string; name: string; recipe?: any }) {
   displayName.value = payload.name;
   emit("renamed", payload);
+}
+
+function handleImageStatus(hasImage: boolean) {
+  imageLoadFailed.value = !hasImage;
+}
+
+function handleImageUpdated(payload: { slug: string; image: string }) {
+  localImageVersion.value = payload.image;
+  imageLoadFailed.value = false;
+}
+
+async function createAIImageFromCard() {
+  if (aiImageLoading.value || !showRecipeContent.value) {
+    return;
+  }
+
+  aiImageLoading.value = true;
+  try {
+    const { data, error } = await api.recipes.createAIImage(props.slug);
+    if (error || !data?.image) {
+      alert.error(i18n.t("recipe.ai-image-create-failed"));
+      return;
+    }
+
+    handleImageUpdated({ slug: props.slug, image: data.image });
+    alert.success(i18n.t("recipe.recipe-image-updated"));
+  }
+  finally {
+    aiImageLoading.value = false;
+  }
 }
 
 async function copyRecipeFromCard() {
@@ -344,6 +405,24 @@ async function openShoppingListFromCard() {
   background-color: rgba(var(--v-theme-primary), 0.14) !important;
   box-shadow: inset 0 0 0 1px rgba(var(--v-theme-primary), 0.28);
   color: rgb(var(--v-theme-primary)) !important;
+}
+
+.recipe-mobile-card-ai-image-btn {
+  position: absolute !important;
+  right: 8px;
+  top: 8px;
+  z-index: 4;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+.recipe-mobile-card-ai-image-btn:hover,
+.recipe-mobile-card-ai-image-btn:focus-visible {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
+  transform: translateY(-1px);
 }
 
 .recipe-mobile-card-tags {

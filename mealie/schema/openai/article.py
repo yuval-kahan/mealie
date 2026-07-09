@@ -8,6 +8,21 @@ class OpenAIArticle(OpenAIBase):
         True,
         description="False when the input is not a usable article or article-like educational text.",
     )
+    content_kind: str = Field(
+        "article",
+        description="One of: article, recipe, article_with_recipe, or other.",
+    )
+    contains_recipe: bool = Field(
+        False,
+        description="True when the input includes a complete usable recipe with ingredients and instructions.",
+    )
+    recipe_text: str = Field(
+        "",
+        description=(
+            "The complete recipe text when contains_recipe is true. Include title, ingredients, instructions, yield, "
+            "source, and notes when available. Leave empty when there is no complete recipe."
+        ),
+    )
     title: str = Field("", description="Article title.")
     summary: str = Field("", description="Short summary of the article.")
     content: str = Field("", description="Full article content, preserving all meaningful information.")

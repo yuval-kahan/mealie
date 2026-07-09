@@ -116,7 +116,7 @@ class RecipeDataService(BaseService):
             image_path = image_dir.joinpath(img_type.value)
             image_path.unlink(missing_ok=True)
 
-    async def scrape_image(self, image_url: str | dict[str, str] | list[str]) -> None:
+    async def scrape_image(self, image_url: str | dict[str, str] | list[str]) -> bool:
         self.logger.info(f"Image URL: {image_url}")
 
         image_url_str = ""
@@ -151,12 +151,12 @@ class RecipeDataService(BaseService):
                 r = await client.get(image_url_str)
             except Exception:
                 self.logger.exception("Fatal Image Request Exception")
-                return None
+                return False
 
             if r.status_code != 200:
                 # TODO: Probably should throw an exception in this case as well, but before these changes
                 # we were returning None if it failed anyways.
-                return None
+                return False
 
             content_type = r.headers.get("content-type", "")
 
@@ -167,3 +167,4 @@ class RecipeDataService(BaseService):
             self.logger.debug(f"File Name Suffix {file_path.suffix}")
             self.write_image(r.read(), file_path.suffix)
             file_path.unlink(missing_ok=True)
+            return True

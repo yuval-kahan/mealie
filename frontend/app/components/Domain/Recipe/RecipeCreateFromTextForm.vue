@@ -108,6 +108,13 @@
           :label="$t('recipe.create-ai-shopping-list-description')"
           :disabled="state.loading"
         />
+        <v-checkbox
+          v-model="includeAiTips"
+          color="primary"
+          hide-details
+          :label="$t('recipe.include-ai-tips-description')"
+          :disabled="state.loading"
+        />
         <v-divider class="my-4" />
         <div class="d-flex flex-column ga-3">
           <RecipeCoverImageUpload
@@ -156,6 +163,15 @@ import type { VForm } from "~/types/auto-forms";
 
 type CreateMode = "text" | "url" | "image";
 
+type ExtensionRecipeImportResponse = {
+  ok?: boolean;
+  recipeSlug?: string;
+  recipe_slug?: string;
+  groupSlug?: string;
+  group_slug?: string;
+  error?: string;
+};
+
 const props = withDefaults(defineProps<{
   showTitle?: boolean;
   returnTo?: string;
@@ -184,6 +200,7 @@ const tags = useTagStore();
 const domCreateForm = ref<VForm | null>(null);
 const shouldTranslate = ref(true);
 const shouldCreateShoppingList = ref(true);
+const includeAiTips = ref(true);
 const recipeImageFile = ref<File | null>(null);
 const additionalImageFiles = ref<File[]>([]);
 const videoFile = ref<File | null>(null);
@@ -294,6 +311,14 @@ function createLinkErrorMessage(error: unknown) {
   return typedError.response?.data?.detail?.message || i18n.t("recipe.recipe-link-import-error");
 }
 
+function extensionRecipeSlug(response: ExtensionRecipeImportResponse | null) {
+  return response?.recipeSlug || response?.recipe_slug || null;
+}
+
+function extensionGroupSlug(response: ExtensionRecipeImportResponse | null) {
+  return response?.groupSlug || response?.group_slug || groupSlug.value;
+}
+
 function fileBaseName(fileName: string) {
   const lastDot = fileName.lastIndexOf(".");
   return lastDot > 0 ? fileName.substring(0, lastDot) : fileName;
@@ -338,6 +363,8 @@ async function createRecipeFromText() {
   const { data, error } = await api.recipes.createOneFromText({
     text,
     translateLanguage: shouldTranslate.value ? i18n.locale.value : null,
+    includeAiTips: includeAiTips.value,
+    autoImage: !recipeImageFile.value,
   });
 
   if (error || !data) {
@@ -361,7 +388,11 @@ async function createRecipeFromImages() {
   }
 
   const translateLanguage = shouldTranslate.value ? i18n.locale.value : null;
-  const { data, error } = await api.recipes.createOneFromImages(uploadedImages.value, translateLanguage);
+  const { data, error } = await api.recipes.createOneFromImages(
+    uploadedImages.value,
+    translateLanguage,
+    includeAiTips.value,
+  );
 
   if (error || !data) {
     alert.error(i18n.t("events.something-went-wrong"));
@@ -395,6 +426,22 @@ async function createRecipeFromUrl() {
   createStatus.value = null;
 
   if (error || response?.status !== 201 || !response?.data) {
+    const extensionResponse = await createRecipeFromUrlViaExtension(url);
+    const extensionSlug = extensionRecipeSlug(extensionResponse);
+    if (extensionResponse?.ok && extensionSlug) {
+      await attachMediaToRecipe(extensionSlug);
+      await refreshRecipeOrganizers();
+      emit("created", extensionSlug);
+      navigateToRecipe(extensionSlug, extensionGroupSlug(extensionResponse), props.returnTo || route.path);
+      return;
+    }
+
+    if (extensionResponse?.error) {
+      alert.error(extensionResponse.error);
+      state.loading = false;
+      return;
+    }
+
     alert.error(createLinkErrorMessage(error));
     state.loading = false;
     return;
@@ -405,6 +452,85 @@ async function createRecipeFromUrl() {
   await refreshRecipeOrganizers();
   emit("created", response.data);
   navigateToRecipe(response.data, groupSlug.value, props.returnTo || route.path);
+}
+
+async function createRecipeFromUrlViaExtension(url: string): Promise<ExtensionRecipeImportResponse | null> {
+  if (!import.meta.client) {
+    return null;
+  }
+
+  const requestId = `mealie-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  createStatus.value = i18n.t("recipe.recipe-link-extension-fallback-status");
+
+  return await new Promise((resolve) => {
+    let acknowledged = false;
+    let ackTimer: ReturnType<typeof setTimeout> | null = null;
+    let finalTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function cleanup() {
+      window.removeEventListener("message", onMessage);
+      if (ackTimer) {
+        clearTimeout(ackTimer);
+      }
+      if (finalTimer) {
+        clearTimeout(finalTimer);
+      }
+    }
+
+    function onMessage(event: MessageEvent) {
+      if (event.source !== window) {
+        return;
+      }
+
+      const data = event.data as { type?: string; requestId?: string; response?: ExtensionRecipeImportResponse };
+      if (!data || data.requestId !== requestId) {
+        return;
+      }
+
+      if (data.type === "MEALIE_EXTENSION_IMPORT_RECIPE_URL_ACK") {
+        acknowledged = true;
+        if (ackTimer) {
+          clearTimeout(ackTimer);
+        }
+        createStatus.value = i18n.t("recipe.recipe-link-extension-extracting-status");
+        return;
+      }
+
+      if (data.type === "MEALIE_EXTENSION_IMPORT_RECIPE_URL_RESULT") {
+        cleanup();
+        resolve(data.response || { ok: false, error: i18n.t("recipe.recipe-link-extension-not-available") });
+      }
+    }
+
+    window.addEventListener("message", onMessage);
+    window.postMessage(
+      {
+        type: "MEALIE_EXTENSION_IMPORT_RECIPE_URL",
+        requestId,
+        payload: {
+          url,
+          mealieUrl: window.location.origin,
+          translateLanguage: i18n.locale.value,
+          createShoppingList: shouldCreateShoppingList.value,
+          organizeShoppingListWithAi: shouldCreateShoppingList.value,
+          includeAiTips: includeAiTips.value,
+        },
+      },
+      window.location.origin,
+    );
+
+    ackTimer = setTimeout(() => {
+      if (!acknowledged) {
+        cleanup();
+        resolve(null);
+      }
+    }, 1500);
+
+    finalTimer = setTimeout(() => {
+      cleanup();
+      resolve({ ok: false, error: i18n.t("recipe.recipe-link-extension-timeout") });
+    }, 180000);
+  });
 }
 
 async function refreshRecipeOrganizers() {
@@ -502,7 +628,7 @@ async function createShoppingListForRecipe(recipeSlug: string) {
     }
 
     createStatus.value = i18n.t("recipe.organizing-ai-shopping-list");
-    const { error: organizeError } = await api.shopping.lists.organizeWithAi(shoppingList.id);
+    const { error: organizeError } = await api.shopping.lists.organizeWithAi(shoppingList.id, includeAiTips.value);
     if (organizeError) {
       alert.error(i18n.t("recipe.ai-shopping-list-organize-failed"));
       return;

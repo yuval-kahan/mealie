@@ -150,6 +150,8 @@ export interface ContextMenuIncludes {
   duplicate: boolean;
   mealplanner: boolean;
   shoppingList: boolean;
+  aiShoppingList: boolean;
+  aiImage: boolean;
   print: boolean;
   printPreferences: boolean;
   share: boolean;
@@ -191,6 +193,8 @@ const props = withDefaults(defineProps<Props>(), {
     duplicate: false,
     mealplanner: true,
     shoppingList: true,
+    aiShoppingList: true,
+    aiImage: true,
     print: true,
     printPreferences: true,
     share: true,
@@ -212,6 +216,7 @@ const emit = defineEmits<{
   [key: string]: any;
   deleted: [slug: string];
   renamed: [{ slug: string; name: string; recipe?: Recipe }];
+  imageUpdated: [{ slug: string; image: string }];
   print: [];
 }>();
 
@@ -327,6 +332,20 @@ const defaultItems: { [key: string]: ContextMenuItem } = {
     icon: $globals.icons.cartCheck,
     color: undefined,
     event: "shoppingList",
+    isPublic: false,
+  },
+  aiShoppingList: {
+    title: i18n.t("recipe.create-ai-shopping-list"),
+    icon: $globals.icons.robot,
+    color: undefined,
+    event: "aiShoppingList",
+    isPublic: false,
+  },
+  aiImage: {
+    title: i18n.t("recipe.add-ai-image"),
+    icon: $globals.icons.fileImage,
+    color: undefined,
+    event: "aiImage",
     isPublic: false,
   },
   print: {
@@ -518,6 +537,42 @@ async function copyRecipe() {
   copyRecipeText(recipeRef.value, props.name);
 }
 
+async function createAIShoppingList() {
+  const { data, error } = await api.recipes.createAIShoppingList(props.slug, {
+    includeAiTips: true,
+    organizeShoppingListWithAi: true,
+  });
+
+  if (error || !data) {
+    alert.error(i18n.t("recipe.ai-shopping-list-create-failed"));
+    return;
+  }
+
+  const shoppingListError = data.shoppingListError || data.shopping_list_error;
+  if (shoppingListError) {
+    alert.error(shoppingListError);
+    return;
+  }
+
+  alert.success(i18n.t("recipe.ai-shopping-list-created"));
+  window.dispatchEvent(new CustomEvent("mealie:shopping-lists-updated"));
+}
+
+async function createAIImage() {
+  const { data, error } = await api.recipes.createAIImage(props.slug);
+  if (error || !data?.image) {
+    alert.error(i18n.t("recipe.ai-image-create-failed"));
+    return;
+  }
+
+  if (recipeRef.value) {
+    recipeRef.value.image = data.image;
+  }
+
+  alert.success(i18n.t("recipe.recipe-image-updated"));
+  emit("imageUpdated", { slug: props.slug, image: data.image });
+}
+
 // Note: Print is handled as an event in the parent component
 // eslint-disable-next-line @typescript-eslint/no-invalid-void-type
 const eventHandlers: { [key: string]: () => void | Promise<any> } = {
@@ -542,6 +597,8 @@ const eventHandlers: { [key: string]: () => void | Promise<any> } = {
     printPreferencesDialog.value = true;
   },
   shoppingList: openShoppingListDialog,
+  aiShoppingList: createAIShoppingList,
+  aiImage: createAIImage,
   share: async () => {
     if (!recipeRef.value) {
       await refreshRecipe();

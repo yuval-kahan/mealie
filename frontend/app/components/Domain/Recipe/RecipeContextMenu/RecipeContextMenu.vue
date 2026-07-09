@@ -36,6 +36,7 @@
         v-bind="contentProps"
         @print="$emit('print')"
         @deleted="$emit('deleted', $event)"
+        @image-updated="$emit('imageUpdated', $event)"
         @renamed="$emit('renamed', $event)"
       />
     </v-menu>
@@ -55,6 +56,8 @@ interface ContextMenuIncludes {
   duplicate?: boolean;
   mealplanner?: boolean;
   shoppingList?: boolean;
+  aiShoppingList?: boolean;
+  aiImage?: boolean;
   print?: boolean;
   printPreferences?: boolean;
   share?: boolean;
@@ -97,6 +100,8 @@ const props = withDefaults(defineProps<Props>(), {
     duplicate: false,
     mealplanner: true,
     shoppingList: true,
+    aiShoppingList: true,
+    aiImage: true,
     print: true,
     printPreferences: true,
     share: true,
@@ -119,6 +124,7 @@ defineEmits<{
   print: [];
   deleted: [slug: string];
   renamed: [{ slug: string; name: string; recipe?: Recipe }];
+  imageUpdated: [{ slug: string; image: string }];
 }>();
 
 const { $globals } = useNuxtApp();

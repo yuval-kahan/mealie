@@ -4,6 +4,15 @@ Return structured JSON only.
 
 Rules:
 - If the input is not a usable article or article-like educational text, return is_article=false and leave the other fields empty.
+- Classify the input in content_kind:
+  - article: article/educational text without a complete recipe.
+  - recipe: a standalone recipe page with ingredients and instructions but no meaningful article content.
+  - article_with_recipe: article/educational text that also includes a complete recipe.
+  - other: not a usable article and not a usable recipe.
+- Set contains_recipe=true only when the input includes a complete usable recipe with a title, ingredients, and instructions.
+- When contains_recipe=true, fill recipe_text with the complete recipe text only. Include recipe title, yield, source/author, ingredients, instructions, notes, and tips that are actually present. If a target language is requested, translate recipe_text to the target language too.
+- When content_kind=recipe, set is_article=false, keep article fields empty, and fill recipe_text.
+- When content_kind=article_with_recipe, set is_article=true and keep the full article content including the recipe in the content field. Do not remove the recipe from the saved article.
 - Preserve all important information from the article. Do not invent facts.
 - If a target language is requested, return the title, summary, full content, categories, and tags in that target language, even when the source article is written in another language.
 - If the input is already written in the requested target language, do not translate it; only cleanly structure, preserve, and tag it.

@@ -30,6 +30,10 @@ const { imageKey } = usePageState(props.recipe.slug);
 const hideImage = ref(false);
 
 const recipeImageUrl = computed(() => {
+  if (typeof props.recipe.image === "string" && props.recipe.image.toLowerCase().startsWith("http")) {
+    return props.recipe.image;
+  }
+
   return display.smAndDown.value
     ? recipeSmallImage(props.recipe.id, props.recipe.image, imageKey.value)
     : recipeImage(props.recipe.id, props.recipe.image, imageKey.value);

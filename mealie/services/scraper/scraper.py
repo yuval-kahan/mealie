@@ -67,19 +67,20 @@ async def create_from_html(
     recipe_data_service = RecipeDataService(new_recipe.id)
 
     try:
+        image_downloaded = False
         if new_recipe.image:
             if isinstance(new_recipe.image, list):
                 new_recipe.image = new_recipe.image[0]
 
             if on_progress:
                 await on_progress(translator.t("recipe.create-progress.downloading-image"))
-            await recipe_data_service.scrape_image(new_recipe.image)  # type: ignore
+            image_downloaded = await recipe_data_service.scrape_image(new_recipe.image)  # type: ignore
 
         if new_recipe.name is None:
             new_recipe.name = "Untitled"
 
         new_recipe.slug = slugify(new_recipe.name)
-        new_recipe.image = cache.new_key(4)
+        new_recipe.image = cache.new_key(4) if image_downloaded else "no image"
     except Exception as e:
         recipe_data_service.logger.exception(f"Error Scraping Image: {e}")
         new_recipe.image = "no image"

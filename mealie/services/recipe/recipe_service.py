@@ -1,4 +1,5 @@
 import hashlib
+import httpx
 import json
 import math
 import os
@@ -49,6 +50,11 @@ from mealie.services.recipe.recipe_data_service import RecipeDataService
 from .template_service import TemplateService
 
 RECIPE_CREATED_EVENT_SUBJECT = "recipe.recipe-created"
+AUTO_IMAGE_SEARCH_URL = "https://api.openverse.engineering/v1/images/"
+
+
+def is_external_recipe_image(image: object) -> bool:
+    return isinstance(image, str) and image.lower().startswith(("http://", "https://"))
 
 
 class RecipeServiceBase(BaseService):
@@ -344,7 +350,12 @@ class RecipeService(RecipeServiceBase):
 
         return recipe
 
-    async def create_from_images(self, images: list[UploadFile], translate_language: str | None = None) -> Recipe:
+    async def create_from_images(
+        self,
+        images: list[UploadFile],
+        translate_language: str | None = None,
+        include_ai_tips: bool = True,
+    ) -> Recipe:
         openai_recipe_service = OpenAIRecipeService(self.repos, self.user, self.household, self.translator)
         with get_temporary_path() as temp_path:
             local_images: list[Path] = []
@@ -356,7 +367,7 @@ class RecipeService(RecipeServiceBase):
                 local_images.append(image_path)
 
             recipe_data = await openai_recipe_service.build_recipe_from_images(
-                local_images, translate_language=translate_language
+                local_images, translate_language=translate_language, include_ai_tips=include_ai_tips
             )
 
             recipe = self.create_one(recipe_data)
@@ -366,10 +377,108 @@ class RecipeService(RecipeServiceBase):
                 data_service.write_image(f.read(), "webp")
             return recipe
 
-    async def create_from_text(self, text: str, translate_language: str | None = None) -> Recipe:
+    async def create_from_text(
+        self,
+        text: str,
+        translate_language: str | None = None,
+        include_ai_tips: bool = True,
+        auto_image: bool = True,
+    ) -> Recipe:
         openai_recipe_service = OpenAIRecipeService(self.repos, self.user, self.household, self.translator)
-        recipe_data = await openai_recipe_service.build_recipe_from_text(text, translate_language)
-        return self.create_one(recipe_data)
+        recipe_data = await openai_recipe_service.build_recipe_from_text(text, translate_language, include_ai_tips)
+        recipe = self.create_one(recipe_data)
+        if auto_image:
+            await self.attach_best_effort_image(recipe, search_query=recipe.name)
+        return recipe
+
+    async def attach_best_effort_image(
+        self,
+        recipe: Recipe,
+        image_url: str | None = None,
+        search_query: str | None = None,
+    ) -> bool:
+        """Attach a recipe image from a source URL, or find a best-effort public image by recipe name.
+
+        Image import should never block recipe creation; failures are logged and ignored.
+        """
+
+        if not recipe or not recipe.id:
+            return False
+
+        data_service = RecipeDataService(recipe.id, self.logger)
+        source_candidates = [image_url.strip()] if image_url and image_url.strip() else []
+        fallback_candidates: list[str] = []
+        for candidate in source_candidates:
+            fallback_candidates.append(candidate)
+            try:
+                image_downloaded = await data_service.scrape_image(candidate)
+            except Exception:
+                self.logger.exception("Failed to attach automatic recipe image from %s", candidate)
+                continue
+
+            if not image_downloaded:
+                continue
+
+            recipe.image = cache.cache_key.new_key()
+            self.update_one(recipe.slug, recipe)
+            return True
+
+        search_candidates = await self._find_public_recipe_image_urls(search_query or recipe.name or recipe.slug)
+        for candidate in search_candidates:
+            fallback_candidates.append(candidate)
+            try:
+                image_downloaded = await data_service.scrape_image(candidate)
+            except Exception:
+                self.logger.exception("Failed to attach searched recipe image from %s", candidate)
+                continue
+
+            if not image_downloaded:
+                continue
+
+            recipe.image = cache.cache_key.new_key()
+            self.update_one(recipe.slug, recipe)
+            return True
+
+        for candidate in fallback_candidates:
+            if is_external_recipe_image(candidate):
+                recipe.image = candidate
+                self.update_one(recipe.slug, recipe)
+                return True
+
+        return False
+
+    async def _find_public_recipe_image_urls(self, query: str | None) -> list[str]:
+        query = (query or "").strip()
+        if not query:
+            return []
+
+        try:
+            async with httpx.AsyncClient(timeout=6.0, follow_redirects=True) as client:
+                response = await client.get(
+                    AUTO_IMAGE_SEARCH_URL,
+                    params={
+                        "q": f"{query} recipe dish food",
+                        "page_size": 5,
+                        "mature": "false",
+                    },
+                    headers={"User-Agent": "Mealie personal recipe image search"},
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except Exception:
+            self.logger.exception("Failed to search for automatic recipe image")
+            return []
+
+        urls: list[str] = []
+        for result in payload.get("results", []):
+            candidate = (result.get("url") or result.get("thumbnail") or "").strip()
+            if not candidate.lower().startswith(("http://", "https://")):
+                continue
+            if candidate.lower().split("?")[0].endswith(".svg"):
+                continue
+            urls.append(candidate)
+
+        return urls
 
     async def search_with_ai(self, query: str, limit: int) -> RecipeAISearchResponse:
         openai_recipe_service = OpenAIRecipeService(self.repos, self.user, self.household, self.translator)
@@ -399,7 +508,13 @@ class RecipeService(RecipeServiceBase):
         new_name = dup_data.name if dup_data.name else old_recipe.name or ""
         new_recipe.id = uuid4()
         new_recipe.slug = create_recipe_slug(new_name)
-        new_recipe.image = cache.cache_key.new_key() if old_recipe.image else None
+        new_recipe.image = (
+            old_recipe.image
+            if is_external_recipe_image(old_recipe.image)
+            else cache.cache_key.new_key()
+            if old_recipe.image
+            else None
+        )
         new_recipe.recipe_instructions = (
             None
             if old_recipe.recipe_instructions is None
@@ -1080,7 +1195,12 @@ class OpenAIRecipeService(RecipeServiceBase):
         has_instructions = any(instruction.text.strip() for instruction in openai_recipe.instructions)
         return has_name and has_ingredients and has_instructions
 
-    async def build_recipe_from_images(self, images: list[Path], translate_language: str | None) -> Recipe:
+    async def build_recipe_from_images(
+        self,
+        images: list[Path],
+        translate_language: str | None,
+        include_ai_tips: bool = True,
+    ) -> Recipe:
         openai_service = OpenAIService(self.repos)
         if not (openai_service.provider_settings and openai_service.provider_settings.image_provider_enabled):
             raise ValueError("OpenAI image services are not available")
@@ -1095,6 +1215,8 @@ class OpenAIRecipeService(RecipeServiceBase):
 
         if translate_language:
             message += f" Please translate the recipe to {translate_language}."
+        if include_ai_tips:
+            message += " Add concise AI cooking tips and practical recommended ingredient varieties when useful."
 
         try:
             response = await openai_service.get_response(
@@ -1116,7 +1238,12 @@ class OpenAIRecipeService(RecipeServiceBase):
 
         return recipe
 
-    async def build_recipe_from_text(self, text: str, translate_language: str | None = None) -> Recipe:
+    async def build_recipe_from_text(
+        self,
+        text: str,
+        translate_language: str | None = None,
+        include_ai_tips: bool = True,
+    ) -> Recipe:
         openai_service = OpenAIService(self.repos)
         if not (openai_service.provider_settings and openai_service.provider_settings.ai_enabled):
             raise ValueError("OpenAI services are not available")
@@ -1126,6 +1253,11 @@ class OpenAIRecipeService(RecipeServiceBase):
 
         if translate_language:
             message += f" Please translate the recipe to {translate_language}."
+        if include_ai_tips:
+            message += (
+                " The user wants AI tips: add concise practical cooking notes and recommended ingredient varieties "
+                "when they materially help the recipe."
+            )
 
         message += f"\n\nPasted recipe text:\n{text.strip()}"
 

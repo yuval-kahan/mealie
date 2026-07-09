@@ -44,6 +44,10 @@ from mealie.schema.recipe.recipe import (
     RecipeLastMade,
     RecipeSummary,
 )
+from mealie.schema.household.group_shopping_list import (
+    ShoppingListAddRecipeParamsBulk,
+    ShoppingListCreate,
+)
 from mealie.schema.recipe.recipe_ai_search import RecipeAISearchRequest, RecipeAISearchResponse
 from mealie.schema.recipe.recipe_asset import RecipeAsset
 from mealie.schema.recipe.recipe_scraper import ScrapeRecipeTest
@@ -69,6 +73,7 @@ from mealie.services.event_bus_service.event_types import (
     EventRecipeData,
     EventTypes,
 )
+from mealie.services.household_services.shopping_lists import ShoppingListService
 from mealie.services.recipe.recipe_data_service import (
     InvalidDomainError,
     NotAnImageError,
@@ -108,10 +113,89 @@ router = UserAPIRouter(prefix="/recipes", route_class=MealieCrudRoute)
 class CreateRecipeFromText(MealieModel):
     text: str = Field(..., min_length=1, max_length=200000)
     translate_language: str | None = None
+    include_ai_tips: bool = True
+    auto_image: bool = True
+
+
+class CreateRecipeFromBrowserPage(CreateRecipeFromText):
+    source_url: str | None = None
+    source_title: str | None = None
+    image_url: str | None = Field(None, max_length=4000)
+    create_shopping_list: bool = True
+    organize_shopping_list_with_ai: bool = True
+
+
+class CreateRecipeAIShoppingList(MealieModel):
+    include_ai_tips: bool = True
+    organize_shopping_list_with_ai: bool = True
+
+
+class CreateRecipeFromBrowserPageResponse(MealieModel):
+    recipe_slug: str
+    group_slug: str | None = None
+    shopping_list_id: UUID4 | None = None
+    shopping_list_name: str | None = None
+    shopping_list_created: bool = False
+    shopping_list_organized: bool = False
+    shopping_list_error: str | None = None
+
+
+class CreateRecipeFromBrowserPageStatus(MealieModel):
+    ai_enabled: bool
+    provider_count: int = 0
+    default_provider_configured: bool = False
 
 
 @controller(router)
 class RecipeController(BaseRecipeController):
+    def _raw_ai_provider_status(self) -> tuple[int, str | None, str | None, str | None]:
+        settings = self.session.execute(
+            sqlalchemy.text(
+                """
+                SELECT id, default_provider_id, image_provider_id
+                FROM ai_provider_settings
+                WHERE group_id = :group_id
+                """
+            ),
+            {"group_id": self.repos.uuid_to_str(self.group_id)},
+        ).mappings().one_or_none()
+        if not settings:
+            return 0, None, None, None
+
+        provider_count = self.session.execute(
+            sqlalchemy.text("SELECT COUNT(*) FROM ai_providers WHERE settings_id = :settings_id"),
+            {"settings_id": settings["id"]},
+        ).scalar_one()
+        return (
+            int(provider_count or 0),
+            settings["default_provider_id"],
+            settings["image_provider_id"],
+            settings["id"],
+        )
+
+    def _ai_enabled(self) -> bool:
+        provider_count, default_provider_id, _image_provider_id, settings_id = self._raw_ai_provider_status()
+        if not (provider_count and default_provider_id and settings_id):
+            return False
+
+        provider_exists = self.session.execute(
+            sqlalchemy.text("SELECT 1 FROM ai_providers WHERE id = :provider_id AND settings_id = :settings_id LIMIT 1"),
+            {"provider_id": default_provider_id, "settings_id": settings_id},
+        ).scalar()
+        return bool(provider_exists)
+
+    def _image_ai_enabled(self) -> bool:
+        provider_count, default_provider_id, image_provider_id, settings_id = self._raw_ai_provider_status()
+        provider_id = image_provider_id or default_provider_id
+        if not (provider_count and provider_id and settings_id):
+            return False
+
+        provider_exists = self.session.execute(
+            sqlalchemy.text("SELECT 1 FROM ai_providers WHERE id = :provider_id AND settings_id = :settings_id LIMIT 1"),
+            {"provider_id": provider_id, "settings_id": settings_id},
+        ).scalar()
+        return bool(provider_exists)
+
     def handle_exceptions(self, ex: Exception) -> None:
         thrownType = type(ex)
 
@@ -426,20 +510,20 @@ class RecipeController(BaseRecipeController):
         self,
         images: list[UploadFile] = File(...),
         translate_language: str | None = Query(None, alias="translateLanguage"),
+        include_ai_tips: bool = Query(True, alias="includeAiTips"),
     ):
         """
         Create a recipe from an image using OpenAI.
         Optionally specify a language for it to translate the recipe to.
         """
 
-        ai_settings = self.group.ai_provider_settings
-        if not (ai_settings and ai_settings.image_provider_enabled):
+        if not self._image_ai_enabled():
             raise HTTPException(
                 status_code=400,
                 detail=ErrorResponse.respond("OpenAI image services are not enabled"),
             )
 
-        recipe = await self.service.create_from_images(images, translate_language)
+        recipe = await self.service.create_from_images(images, translate_language, include_ai_tips)
         self.publish_event(
             event_type=EventTypes.recipe_created,
             document_data=EventRecipeData(operation=EventOperation.create, recipe_slug=recipe.slug),
@@ -453,8 +537,7 @@ class RecipeController(BaseRecipeController):
     async def create_recipe_from_text(self, data: CreateRecipeFromText):
         """Create a recipe from pasted recipe text using OpenAI."""
 
-        ai_settings = self.group.ai_provider_settings
-        if not (ai_settings and ai_settings.ai_enabled):
+        if not self._ai_enabled():
             raise HTTPException(
                 status_code=400,
                 detail=ErrorResponse.respond("OpenAI services are not enabled"),
@@ -468,7 +551,12 @@ class RecipeController(BaseRecipeController):
             )
 
         try:
-            recipe = await self.service.create_from_text(recipe_text, data.translate_language)
+            recipe = await self.service.create_from_text(
+                recipe_text,
+                translate_language=data.translate_language,
+                include_ai_tips=data.include_ai_tips,
+                auto_image=data.auto_image,
+            )
         except exceptions.NotARecipe as e:
             raise HTTPException(
                 status_code=400,
@@ -487,12 +575,258 @@ class RecipeController(BaseRecipeController):
 
         return recipe.slug
 
+    @router.get("/create/browser-page/status", response_model=CreateRecipeFromBrowserPageStatus)
+    def create_recipe_from_browser_page_status(self):
+        """Return whether browser-extension recipe creation can use AI for the current group."""
+
+        provider_count, default_provider_id, _image_provider_id, settings_id = self._raw_ai_provider_status()
+        return CreateRecipeFromBrowserPageStatus(
+            ai_enabled=self._ai_enabled(),
+            provider_count=provider_count,
+            default_provider_configured=bool(default_provider_id and settings_id),
+        )
+
+    @router.post("/create/browser-page", response_model=CreateRecipeFromBrowserPageResponse, status_code=201)
+    async def create_recipe_from_browser_page(self, data: CreateRecipeFromBrowserPage):
+        """Create a recipe from page content extracted by the browser extension."""
+
+        if not self._ai_enabled():
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("OpenAI services are not enabled"),
+            )
+
+        recipe_text = self._browser_page_recipe_text(data)
+        if not recipe_text:
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("Recipe text cannot be empty"),
+            )
+
+        try:
+            recipe = await self.service.create_from_text(
+                recipe_text,
+                data.translate_language,
+                data.include_ai_tips,
+                auto_image=not data.image_url,
+            )
+        except exceptions.NotARecipe as e:
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond(
+                    message=str(e) or "The extracted page content does not look like a recipe",
+                    exception="NotARecipe",
+                ),
+            ) from e
+
+        self.publish_event(
+            event_type=EventTypes.recipe_created,
+            document_data=EventRecipeData(operation=EventOperation.create, recipe_slug=recipe.slug),
+            group_id=recipe.group_id,
+            household_id=recipe.household_id,
+        )
+
+        if data.image_url:
+            await self.service.attach_best_effort_image(recipe, image_url=data.image_url, search_query=recipe.name)
+
+        response = CreateRecipeFromBrowserPageResponse(
+            recipe_slug=recipe.slug,
+            group_slug=getattr(self.group, "slug", None),
+        )
+        if data.create_shopping_list:
+            response = await self._create_browser_recipe_shopping_list(recipe, data, response)
+
+        return response
+
+    def _browser_page_recipe_text(self, data: CreateRecipeFromBrowserPage) -> str:
+        recipe_text = data.text.strip()
+        source_parts = []
+        if data.source_title:
+            source_parts.append(f"Source title: {data.source_title.strip()}")
+        if data.source_url:
+            source_parts.append(f"Source URL: {data.source_url.strip()}")
+
+        if not source_parts:
+            return recipe_text
+
+        return "\n".join(source_parts + ["", recipe_text]).strip()
+
+    def _browser_shopping_list_name(self, recipe: Recipe, shopping_service: ShoppingListService) -> str:
+        base_name = (recipe.name or recipe.slug or "Shopping List").strip()
+        existing_lists = shopping_service.shopping_lists.page_all(PaginationQuery(page=1, per_page=-1))
+        existing_names = {
+            (shopping_list.name or "").strip().casefold()
+            for shopping_list in existing_lists.items
+            if (shopping_list.name or "").strip()
+        }
+
+        name = base_name
+        suffix = 2
+        while name.casefold() in existing_names:
+            name = f"{base_name} ({suffix})"
+            suffix += 1
+
+        return name
+
+    def _find_recipe_named_shopping_list(self, recipe: Recipe, shopping_service: ShoppingListService):
+        recipe_name = (recipe.name or "").strip().casefold()
+        if not recipe_name:
+            return None
+
+        existing_lists = shopping_service.shopping_lists.page_all(PaginationQuery(page=1, per_page=-1))
+        for shopping_list in existing_lists.items:
+            if (shopping_list.name or "").strip().casefold() == recipe_name:
+                return shopping_list
+
+        return None
+
+    async def _create_browser_recipe_shopping_list(
+        self,
+        recipe: Recipe,
+        data: CreateRecipeFromBrowserPage,
+        response: CreateRecipeFromBrowserPageResponse,
+    ) -> CreateRecipeFromBrowserPageResponse:
+        return await self._create_recipe_shopping_list(
+            recipe,
+            response,
+            include_ai_tips=data.include_ai_tips,
+            organize_shopping_list_with_ai=data.organize_shopping_list_with_ai,
+            extras={
+                "aiCreatedFromBrowserExtension": True,
+                "sourceUrl": data.source_url,
+            },
+        )
+
+    async def _create_recipe_shopping_list(
+        self,
+        recipe: Recipe,
+        response: CreateRecipeFromBrowserPageResponse,
+        include_ai_tips: bool,
+        organize_shopping_list_with_ai: bool,
+        extras: dict[str, object | None] | None = None,
+    ) -> CreateRecipeFromBrowserPageResponse:
+        shopping_service = ShoppingListService(self.repos)
+
+        try:
+            shopping_list = shopping_service.create_one_list(
+                ShoppingListCreate(
+                    name=self._browser_shopping_list_name(recipe, shopping_service),
+                    extras={
+                        **(extras or {}),
+                        "aiCreatedFromRecipeSlug": recipe.slug,
+                        "aiCreatedFromRecipeId": str(recipe.id),
+                    },
+                ),
+                self.user.id,
+            )
+
+            if not shopping_list:
+                raise ValueError("Shopping list was not created")
+
+            shopping_list, _items = shopping_service.add_recipe_ingredients_to_list(
+                shopping_list.id,
+                [
+                    ShoppingListAddRecipeParamsBulk(
+                        recipe_id=recipe.id,
+                        recipe_increment_quantity=1,
+                        recipe_ingredients=recipe.recipe_ingredient or None,
+                    )
+                ],
+            )
+
+            response.shopping_list_id = shopping_list.id
+            response.shopping_list_name = shopping_list.name
+            response.shopping_list_created = True
+
+            if organize_shopping_list_with_ai:
+                try:
+                    shopping_list, _items = await shopping_service.organize_with_ai(
+                        shopping_list.id,
+                        include_ai_tips=include_ai_tips,
+                    )
+                    response.shopping_list_id = shopping_list.id
+                    response.shopping_list_name = shopping_list.name
+                    response.shopping_list_organized = True
+                except Exception as e:
+                    self.logger.exception("Failed to organize browser-extension shopping list with AI")
+                    response.shopping_list_error = str(e) or "AI shopping list organization failed"
+        except Exception as e:
+            self.logger.exception("Failed to create browser-extension shopping list")
+            response.shopping_list_error = str(e) or "Shopping list creation failed"
+
+        return response
+
+    @router.post("/{slug}/shopping-list-ai", response_model=CreateRecipeFromBrowserPageResponse, status_code=201)
+    async def create_ai_shopping_list_for_recipe(
+        self,
+        slug: str,
+        data: CreateRecipeAIShoppingList,
+    ) -> CreateRecipeFromBrowserPageResponse:
+        """Create a new shopping list from a recipe and optionally organize it with AI."""
+
+        if not self._ai_enabled():
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("OpenAI services are not enabled"),
+            )
+
+        try:
+            recipe = self.service.get_one(slug)
+        except Exception as e:
+            self.handle_exceptions(e)
+            raise
+
+        response = CreateRecipeFromBrowserPageResponse(
+            recipe_slug=recipe.slug,
+            group_slug=getattr(self.group, "slug", None),
+        )
+        return await self._create_recipe_shopping_list(
+            recipe,
+            response,
+            include_ai_tips=data.include_ai_tips,
+            organize_shopping_list_with_ai=data.organize_shopping_list_with_ai,
+            extras={"aiCreatedFromRecipeAction": True},
+        )
+
+    @router.post("/{slug}/shopping-list/open-or-create", response_model=CreateRecipeFromBrowserPageResponse, status_code=201)
+    async def open_or_create_shopping_list_for_recipe(self, slug: str) -> CreateRecipeFromBrowserPageResponse:
+        """Return an existing recipe-named shopping list, or create one and organize it with AI when available."""
+
+        try:
+            recipe = self.service.get_one(slug)
+        except Exception as e:
+            self.handle_exceptions(e)
+            raise
+
+        shopping_service = ShoppingListService(self.repos)
+        existing_list = self._find_recipe_named_shopping_list(recipe, shopping_service)
+        if existing_list:
+            return CreateRecipeFromBrowserPageResponse(
+                recipe_slug=recipe.slug,
+                group_slug=getattr(self.group, "slug", None),
+                shopping_list_id=existing_list.id,
+                shopping_list_name=existing_list.name,
+                shopping_list_created=False,
+                shopping_list_organized=bool((existing_list.extras or {}).get("aiOrganized")),
+            )
+
+        response = CreateRecipeFromBrowserPageResponse(
+            recipe_slug=recipe.slug,
+            group_slug=getattr(self.group, "slug", None),
+        )
+        return await self._create_recipe_shopping_list(
+            recipe,
+            response,
+            include_ai_tips=True,
+            organize_shopping_list_with_ai=self._ai_enabled(),
+            extras={"createdFromOpenOrCreateRecipeShoppingList": True},
+        )
+
     @router.post("/ai-search", response_model=RecipeAISearchResponse)
     async def search_recipes_with_ai(self, data: RecipeAISearchRequest) -> RecipeAISearchResponse:
         """Search existing recipes using the configured AI provider."""
 
-        ai_settings = self.group.ai_provider_settings
-        if not (ai_settings and ai_settings.ai_enabled):
+        if not self._ai_enabled():
             raise HTTPException(
                 status_code=400,
                 detail=ErrorResponse.respond("OpenAI services are not enabled"),
@@ -794,7 +1128,7 @@ class RecipeController(BaseRecipeController):
         data_service = RecipeDataService(recipe.id)
 
         try:
-            await data_service.scrape_image(url.url)
+            image_scraped = await data_service.scrape_image(url.url)
         except NotAnImageError as e:
             raise HTTPException(
                 status_code=400,
@@ -806,8 +1140,48 @@ class RecipeController(BaseRecipeController):
                 detail=ErrorResponse.respond("Url is not from an allowed domain"),
             ) from e
 
+        if not image_scraped:
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("Unable to download image"),
+            )
+
         recipe.image = cache.cache_key.new_key()
         self.service.update_one(recipe.slug, recipe)
+
+    @router.post("/{slug}/image/ai", response_model=UpdateImageResponse, tags=["Recipe: Images and Assets"])
+    async def create_ai_recipe_image(self, slug: str):
+        recipe = self.mixins.get_one(slug)
+        query_parts = [
+            recipe.name,
+            recipe.description,
+            recipe.created_by,
+            recipe.source,
+            " ".join(category.name for category in recipe.recipe_category or [] if category.name),
+            " ".join(tag.name for tag in recipe.tags or [] if tag.name),
+            " ".join(
+                ingredient.display or ingredient.note or (ingredient.food.name if ingredient.food else "")
+                for ingredient in (recipe.recipe_ingredient or [])[:10]
+            ),
+        ]
+        search_query = " ".join(part.strip() for part in query_parts if part and part.strip())[:500]
+
+        try:
+            image_attached = await self.service.attach_best_effort_image(
+                recipe,
+                search_query=search_query or recipe.name or recipe.slug,
+            )
+        except Exception as e:
+            self.handle_exceptions(e)
+            return None
+
+        if not image_attached or not recipe.image:
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("Could not find a usable image for this recipe"),
+            )
+
+        return UpdateImageResponse(image=recipe.image)
 
     @router.put("/{slug}/image", response_model=UpdateImageResponse, tags=["Recipe: Images and Assets"])
     def update_recipe_image(self, slug: str, image: bytes = File(...), extension: str = Form(...)):

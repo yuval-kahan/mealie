@@ -273,6 +273,10 @@ const recipeYield = computed(() => {
 });
 
 const recipeImageUrl = computed(() => {
+  if (typeof props.recipe.image === "string" && props.recipe.image.toLowerCase().startsWith("http")) {
+    return props.recipe.image;
+  }
+
   return recipeImage(props.recipe.id, props.recipe.image, imageKey.value);
 });
 

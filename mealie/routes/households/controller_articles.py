@@ -7,21 +7,29 @@ from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import UUID4
 from slugify import slugify
 
+from mealie.core import exceptions
 from mealie.db.models.household.article import Article
 from mealie.routes._base import controller
 from mealie.routes._base.base_controllers import BaseUserController
+from mealie.schema.household.group_shopping_list import ShoppingListAddRecipeParamsBulk, ShoppingListCreate
 from mealie.schema.household.article import (
     ArticleAIRequest,
     ArticleAISearchItem,
     ArticleAISearchRequest,
     ArticleAISearchResponse,
+    ArticleBrowserPageRequest,
+    ArticleBrowserPageResponse,
     ArticleCreate,
     ArticleOut,
     ArticleUpdate,
 )
 from mealie.schema.openai.article import OpenAIArticle, OpenAIArticleSearchResponse
+from mealie.schema.recipe import Recipe
+from mealie.schema.response import PaginationQuery
 from mealie.schema.response.responses import ErrorResponse
+from mealie.services.household_services.shopping_lists import ShoppingListService
 from mealie.services.openai import OpenAIDataInjection, OpenAIService
+from mealie.services.recipe.recipe_service import RecipeService
 
 router = APIRouter(prefix="/households/articles", tags=["Households: Articles"])
 
@@ -50,6 +58,26 @@ def clean_html_text(value: str) -> str:
 
 @controller(router)
 class ArticlesController(BaseUserController):
+    def _ai_enabled(self) -> bool:
+        settings = self.session.execute(
+            sa.text(
+                """
+                SELECT id, default_provider_id
+                FROM ai_provider_settings
+                WHERE group_id = :group_id
+                """
+            ),
+            {"group_id": self.repos.uuid_to_str(self.group_id)},
+        ).mappings().one_or_none()
+        if not settings or not settings["default_provider_id"]:
+            return False
+
+        provider_exists = self.session.execute(
+            sa.text("SELECT 1 FROM ai_providers WHERE id = :provider_id AND settings_id = :settings_id LIMIT 1"),
+            {"provider_id": settings["default_provider_id"], "settings_id": settings["id"]},
+        ).scalar()
+        return bool(provider_exists)
+
     def _article_to_out(self, article: Article) -> ArticleOut:
         return ArticleOut(
             id=article.id,
@@ -140,16 +168,36 @@ class ArticlesController(BaseUserController):
         text = clean_html_text(response.text)
         return text[:250000]
 
-    async def _article_from_ai(self, data: ArticleAIRequest) -> ArticleCreate:
-        text = (data.text or "").strip()
-        url = (data.url or "").strip()
+    def _article_create_from_openai(self, response: OpenAIArticle, fallback_source: str | None = None) -> ArticleCreate:
+        return ArticleCreate(
+            title=response.title,
+            summary=response.summary or None,
+            content=response.content,
+            source=response.source or fallback_source or None,
+            author=response.author or None,
+            categories=response.categories,
+            tags=response.tags,
+        )
 
-        if url:
+    async def _parse_article_ai(self, data: ArticleAIRequest) -> tuple[OpenAIArticle, str | None]:
+        text = (data.text or "").strip()
+        url = (data.url or getattr(data, "source_url", None) or "").strip()
+        source_title = (getattr(data, "source_title", None) or "").strip()
+
+        if url and not text:
             fetched_text = await self._fetch_url_text(url)
             text = f"Source URL: {url}\n\n{fetched_text}"
 
         if not text:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ErrorResponse.respond("Article text cannot be empty"))
+
+        source_parts = []
+        if source_title:
+            source_parts.append(f"Source title: {source_title}")
+        if url:
+            source_parts.append(f"Source URL: {url}")
+        if source_parts:
+            text = "\n".join(source_parts + ["", text])
 
         openai_service = OpenAIService(self.repos)
         prompt = openai_service.get_prompt("articles.parse-article")
@@ -159,21 +207,23 @@ class ArticlesController(BaseUserController):
             message = f"Target language: {target_language}\n\n{message}"
 
         response = await openai_service.get_response(prompt, message, response_schema=OpenAIArticle)
-        if not response or not response.is_article or not response.title.strip() or not response.content.strip():
+        if not response:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
                 detail=ErrorResponse.respond("The provided text does not look like an article"),
             )
 
-        return ArticleCreate(
-            title=response.title,
-            summary=response.summary or None,
-            content=response.content,
-            source=response.source or url or None,
-            author=response.author or None,
-            categories=response.categories,
-            tags=response.tags,
-        )
+        return response, url or None
+
+    async def _article_from_ai(self, data: ArticleAIRequest) -> ArticleCreate:
+        response, url = await self._parse_article_ai(data)
+        if not response.is_article or not response.title.strip() or not response.content.strip():
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=ErrorResponse.respond("The provided text does not look like an article"),
+            )
+
+        return self._article_create_from_openai(response, url)
 
     @router.get("", response_model=list[ArticleOut])
     def get_articles(
@@ -217,12 +267,141 @@ class ArticlesController(BaseUserController):
 
     @router.post("/ai-create", response_model=ArticleOut, status_code=status.HTTP_201_CREATED)
     async def create_article_with_ai(self, data: ArticleAIRequest) -> ArticleOut:
-        ai_settings = self.group.ai_provider_settings
-        if not (ai_settings and ai_settings.ai_enabled):
+        if not self._ai_enabled():
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ErrorResponse.respond("OpenAI services are not enabled"))
 
         article_data = await self._article_from_ai(data)
         return self.create_article(article_data)
+
+    @router.post("/browser-page", response_model=ArticleBrowserPageResponse, status_code=status.HTTP_201_CREATED)
+    async def create_article_from_browser_page(self, data: ArticleBrowserPageRequest) -> ArticleBrowserPageResponse:
+        if not self._ai_enabled():
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ErrorResponse.respond("OpenAI services are not enabled"))
+
+        response, url = await self._parse_article_ai(data)
+        content_kind = (response.content_kind or "other").strip() or "other"
+        has_recipe = response.contains_recipe or content_kind in {"recipe", "article_with_recipe"}
+        result = ArticleBrowserPageResponse(
+            content_kind=content_kind,
+            contains_recipe=has_recipe,
+            group_slug=getattr(self.group, "slug", None),
+        )
+
+        if response.is_article and response.title.strip() and response.content.strip():
+            result.article = self.create_article(self._article_create_from_openai(response, url))
+
+        if data.create_recipe_if_present and has_recipe:
+            recipe_text = (response.recipe_text or "").strip() or (data.text or "").strip()
+            if recipe_text:
+                if data.source_title:
+                    recipe_text = f"Source title: {data.source_title.strip()}\n{recipe_text}"
+                if data.source_url:
+                    recipe_text = f"Source URL: {data.source_url.strip()}\n{recipe_text}"
+
+                try:
+                    recipe_service = RecipeService(self.repos, self.user, self.household, self.translator)
+                    recipe = await recipe_service.create_from_text(
+                        recipe_text,
+                        data.translate_language,
+                        data.include_ai_tips,
+                        auto_image=not data.image_url,
+                    )
+                    if data.image_url:
+                        await recipe_service.attach_best_effort_image(
+                            recipe,
+                            image_url=data.image_url,
+                            search_query=recipe.name,
+                        )
+                    result.recipe_slug = recipe.slug
+                    if data.create_shopping_list:
+                        result = await self._create_article_recipe_shopping_list(recipe, data, result)
+                except exceptions.NotARecipe as e:
+                    result.recipe_error = str(e) or "The article recipe could not be converted into a recipe"
+                except Exception as e:
+                    self.logger.exception("Failed to create recipe from browser article")
+                    result.recipe_error = str(e) or "Recipe creation from article failed"
+
+        if not result.article and not result.recipe_slug:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=ErrorResponse.respond("The provided page does not look like an article or a complete recipe"),
+            )
+
+        return result
+
+    def _browser_shopping_list_name(self, recipe: Recipe, shopping_service: ShoppingListService) -> str:
+        base_name = (recipe.name or recipe.slug or "Shopping List").strip()
+        existing_lists = shopping_service.shopping_lists.page_all(PaginationQuery(page=1, per_page=-1))
+        existing_names = {
+            (shopping_list.name or "").strip().casefold()
+            for shopping_list in existing_lists.items
+            if (shopping_list.name or "").strip()
+        }
+
+        name = base_name
+        suffix = 2
+        while name.casefold() in existing_names:
+            name = f"{base_name} ({suffix})"
+            suffix += 1
+
+        return name
+
+    async def _create_article_recipe_shopping_list(
+        self,
+        recipe: Recipe,
+        data: ArticleBrowserPageRequest,
+        response: ArticleBrowserPageResponse,
+    ) -> ArticleBrowserPageResponse:
+        shopping_service = ShoppingListService(self.repos)
+
+        try:
+            shopping_list = shopping_service.create_one_list(
+                ShoppingListCreate(
+                    name=self._browser_shopping_list_name(recipe, shopping_service),
+                    extras={
+                        "aiCreatedFromBrowserExtension": True,
+                        "aiCreatedFromArticleImport": True,
+                        "aiCreatedFromRecipeSlug": recipe.slug,
+                        "aiCreatedFromRecipeId": str(recipe.id),
+                        "sourceUrl": data.source_url,
+                    },
+                ),
+                self.user.id,
+            )
+            if not shopping_list:
+                raise ValueError("Shopping list was not created")
+
+            shopping_list, _items = shopping_service.add_recipe_ingredients_to_list(
+                shopping_list.id,
+                [
+                    ShoppingListAddRecipeParamsBulk(
+                        recipe_id=recipe.id,
+                        recipe_increment_quantity=1,
+                        recipe_ingredients=recipe.recipe_ingredient or None,
+                    )
+                ],
+            )
+
+            response.shopping_list_id = shopping_list.id
+            response.shopping_list_name = shopping_list.name
+
+            if data.organize_shopping_list_with_ai:
+                try:
+                    shopping_list, _items = await shopping_service.organize_with_ai(
+                        shopping_list.id,
+                        include_ai_tips=data.include_ai_tips,
+                    )
+                    response.shopping_list_id = shopping_list.id
+                    response.shopping_list_name = shopping_list.name
+                    response.shopping_list_organized = True
+                except Exception as e:
+                    self.logger.exception("Failed to organize browser article shopping list with AI")
+                    response.shopping_list_error = str(e) or "AI shopping list organization failed"
+        except Exception as e:
+            self.logger.exception("Failed to create browser article shopping list")
+            response.shopping_list_error = str(e) or "Shopping list creation failed"
+
+        return response
 
     @router.put("/{article_id}", response_model=ArticleOut)
     def update_article(self, article_id: UUID4, data: ArticleUpdate) -> ArticleOut:
@@ -243,8 +422,7 @@ class ArticlesController(BaseUserController):
 
     @router.post("/ai-search", response_model=ArticleAISearchResponse)
     async def search_articles_with_ai(self, data: ArticleAISearchRequest) -> ArticleAISearchResponse:
-        ai_settings = self.group.ai_provider_settings
-        if not (ai_settings and ai_settings.ai_enabled):
+        if not self._ai_enabled():
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ErrorResponse.respond("OpenAI services are not enabled"))
 
         articles = self.get_articles()

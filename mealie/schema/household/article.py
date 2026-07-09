@@ -40,6 +40,29 @@ class ArticleAIRequest(MealieModel):
     translate_language: str | None = None
 
 
+class ArticleBrowserPageRequest(ArticleAIRequest):
+    source_url: str | None = Field(None, max_length=2000)
+    source_title: str | None = Field(None, max_length=255)
+    image_url: str | None = Field(None, max_length=4000)
+    create_recipe_if_present: bool = True
+    create_shopping_list: bool = True
+    organize_shopping_list_with_ai: bool = True
+    include_ai_tips: bool = True
+
+
+class ArticleBrowserPageResponse(MealieModel):
+    article: ArticleOut | None = None
+    content_kind: str = "other"
+    contains_recipe: bool = False
+    recipe_slug: str | None = None
+    group_slug: str | None = None
+    recipe_error: str | None = None
+    shopping_list_id: UUID4 | None = None
+    shopping_list_name: str | None = None
+    shopping_list_organized: bool = False
+    shopping_list_error: str | None = None
+
+
 class ArticleAISearchRequest(MealieModel):
     query: str = Field(..., min_length=1, max_length=4000)
     limit: int = Field(10, ge=1, le=50)
