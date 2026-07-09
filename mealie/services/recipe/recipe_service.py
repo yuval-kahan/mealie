@@ -6,11 +6,14 @@ import os
 import re
 import shutil
 from collections import Counter
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
+from html import unescape
 from pathlib import Path
 from shutil import copytree, rmtree
 from textwrap import dedent
 from typing import Any
+from urllib.parse import urljoin
 from uuid import UUID, uuid4
 from zipfile import ZipFile
 
@@ -24,11 +27,12 @@ from mealie.core.dependencies.dependencies import get_temporary_path
 from mealie.db.models.recipe.ai_search_index import RecipeAISearchIndex
 from mealie.db.models.recipe.ingredient import RecipeIngredientModel
 from mealie.lang.providers import Translator
-from mealie.pkgs import cache
+from mealie.pkgs import cache, safehttp
 from mealie.repos.all_repositories import get_repositories
 from mealie.repos.repository_factory import AllRepositories
 from mealie.repos.repository_generic import RepositoryGeneric
 from mealie.schema.household.household import HouseholdInDB, HouseholdRecipeUpdate
+from mealie.schema.openai.general import OpenAIText
 from mealie.schema.openai.recipe import OpenAIRecipe, OpenAIRecipeTextParse
 from mealie.schema.openai.recipe_search import OpenAIRecipeSearchResponse
 from mealie.schema.recipe.recipe_category import CategorySave, TagSave
@@ -50,11 +54,31 @@ from mealie.services.recipe.recipe_data_service import RecipeDataService
 from .template_service import TemplateService
 
 RECIPE_CREATED_EVENT_SUBJECT = "recipe.recipe-created"
-AUTO_IMAGE_SEARCH_URL = "https://api.openverse.engineering/v1/images/"
+AUTO_IMAGE_SEARCH_URL = "https://api.openverse.org/v1/images/"
+AUTO_IMAGE_MAX_CANDIDATES = 12
+SOURCE_PAGE_MAX_BYTES = 1_500_000
+SOURCE_IMAGE_META_KEYS = {
+    "og:image",
+    "og:image:url",
+    "twitter:image",
+    "twitter:image:src",
+    "image",
+}
 
 
 def is_external_recipe_image(image: object) -> bool:
     return isinstance(image, str) and image.lower().startswith(("http://", "https://"))
+
+
+def external_url_from_text(value: str | None) -> str | None:
+    if not value:
+        return None
+
+    match = re.search(r"https?://[^\s<>'\")\]]+", value.strip())
+    if not match:
+        return None
+
+    return match.group(0).rstrip(".,;:")
 
 
 class RecipeServiceBase(BaseService):
@@ -396,8 +420,10 @@ class RecipeService(RecipeServiceBase):
         recipe: Recipe,
         image_url: str | None = None,
         search_query: str | None = None,
+        search_queries: Sequence[str | None] | None = None,
+        source_url: str | None = None,
     ) -> bool:
-        """Attach a recipe image from a source URL, or find a best-effort public image by recipe name.
+        """Attach a recipe image from a direct/source URL, or find a best-effort public image.
 
         Image import should never block recipe creation; failures are logged and ignored.
         """
@@ -406,7 +432,13 @@ class RecipeService(RecipeServiceBase):
             return False
 
         data_service = RecipeDataService(recipe.id, self.logger)
-        source_candidates = [image_url.strip()] if image_url and image_url.strip() else []
+        source_candidates = self._unique_image_urls([image_url])
+        source_page_url = external_url_from_text(source_url) or external_url_from_text(recipe.source)
+        if source_page_url:
+            source_candidates = self._unique_image_urls(
+                [*source_candidates, *(await self._find_source_page_image_urls(source_page_url))]
+            )
+
         fallback_candidates: list[str] = []
         for candidate in source_candidates:
             fallback_candidates.append(candidate)
@@ -423,7 +455,30 @@ class RecipeService(RecipeServiceBase):
             self.update_one(recipe.slug, recipe)
             return True
 
-        search_candidates = await self._find_public_recipe_image_urls(search_query or recipe.name or recipe.slug)
+        search_candidates: list[str] = []
+        query_values = list(search_queries or [search_query or recipe.name or recipe.slug])
+        normalized_queries = self._normalized_image_search_queries(query_values)
+        for query in normalized_queries:
+            for candidate in await self._find_public_recipe_image_urls(query):
+                if candidate not in search_candidates:
+                    search_candidates.append(candidate)
+                if len(search_candidates) >= AUTO_IMAGE_MAX_CANDIDATES:
+                    break
+
+            if len(search_candidates) >= AUTO_IMAGE_MAX_CANDIDATES:
+                break
+
+        if not search_candidates:
+            for query in await self._build_ai_image_search_queries(recipe, normalized_queries):
+                for candidate in await self._find_public_recipe_image_urls(query):
+                    if candidate not in search_candidates:
+                        search_candidates.append(candidate)
+                    if len(search_candidates) >= AUTO_IMAGE_MAX_CANDIDATES:
+                        break
+
+                if len(search_candidates) >= AUTO_IMAGE_MAX_CANDIDATES:
+                    break
+
         for candidate in search_candidates:
             fallback_candidates.append(candidate)
             try:
@@ -447,18 +502,255 @@ class RecipeService(RecipeServiceBase):
 
         return False
 
+    def _unique_image_urls(self, values: Sequence[str | None]) -> list[str]:
+        urls: list[str] = []
+        for value in values:
+            candidate = (value or "").strip()
+            if not candidate:
+                continue
+            if not candidate.lower().startswith(("http://", "https://")):
+                continue
+            if candidate.lower().split("?", 1)[0].endswith(".svg"):
+                continue
+            if candidate not in urls:
+                urls.append(candidate)
+
+        return urls
+
+    def _normalized_image_search_queries(self, values: Sequence[str | None]) -> list[str]:
+        queries: list[str] = []
+        for value in values:
+            text = re.sub(r"https?://\S+", " ", value or "")
+            text = re.sub(r"\s+", " ", text).strip(" -|,.;:")
+            if not text:
+                continue
+
+            if len(text) > 120:
+                text = text[:120].rsplit(" ", 1)[0].strip(" -|,.;:")
+
+            if text and text not in queries:
+                queries.append(text)
+
+        return queries
+
+    async def _build_ai_image_search_queries(self, recipe: Recipe, base_queries: Sequence[str]) -> list[str]:
+        try:
+            openai_service = OpenAIService(self.repos)
+            if not (openai_service.provider_settings and openai_service.provider_settings.ai_enabled):
+                return []
+
+            prompt = dedent(
+                """
+                You create short public image search queries for recipe photos.
+                Return only concise English search phrases, one per line.
+                Translate non-English recipe names when useful.
+                Do not describe people, brands, websites, or copyrighted pages.
+                Prefer generic dish/photo keywords that would find a similar finished food.
+                """
+            ).strip()
+            ingredient_preview = [
+                ingredient.display or ingredient.note or (ingredient.food.name if ingredient.food else "")
+                for ingredient in (recipe.recipe_ingredient or [])[:8]
+            ]
+            message = dedent(
+                f"""
+                Recipe name: {recipe.name or recipe.slug}
+                Existing search phrases: {json.dumps(list(base_queries), ensure_ascii=False)}
+                Description: {recipe.description or ""}
+                Categories: {", ".join(category.name for category in recipe.recipe_category or [] if category.name)}
+                Tags: {", ".join(tag.name for tag in recipe.tags or [] if tag.name)}
+                Main ingredients: {", ".join(item for item in ingredient_preview if item)}
+
+                Return 3 to 5 image search phrases.
+                """
+            ).strip()
+            response = await openai_service.get_response(prompt, message, response_schema=OpenAIText)
+        except Exception:
+            self.logger.exception("Failed to build AI image search queries")
+            return []
+
+        if not response or not response.text:
+            return []
+
+        raw_queries = [
+            re.sub(r"^\s*[-*\d.)]+", "", part).strip()
+            for part in re.split(r"[\n;,]+", response.text)
+            if part.strip()
+        ]
+        return self._normalized_image_search_queries(raw_queries)[:5]
+
+    async def _find_source_page_image_urls(self, source_url: str | None) -> list[str]:
+        source_url = external_url_from_text(source_url)
+        if not source_url:
+            return []
+
+        try:
+            async with httpx.AsyncClient(
+                transport=safehttp.AsyncSafeTransport(impersonate="chrome"),
+                timeout=8.0,
+                follow_redirects=True,
+                headers={"User-Agent": "Mealie personal recipe image fetcher"},
+            ) as client:
+                async with client.stream("GET", source_url) as response:
+                    response.raise_for_status()
+
+                    content_type = response.headers.get("content-type", "").lower()
+                    if "html" not in content_type and "text" not in content_type:
+                        return []
+
+                    chunks: list[bytes] = []
+                    total_bytes = 0
+                    async for chunk in response.aiter_bytes():
+                        remaining = SOURCE_PAGE_MAX_BYTES - total_bytes
+                        if remaining <= 0:
+                            break
+
+                        chunks.append(chunk[:remaining])
+                        total_bytes += len(chunks[-1])
+                        if total_bytes >= SOURCE_PAGE_MAX_BYTES:
+                            break
+
+                    html = b"".join(chunks).decode(response.encoding or "utf-8", errors="ignore")
+        except httpx.HTTPStatusError as e:
+            self.logger.warning("Source page did not allow automatic recipe image inspection: %s", e.response.url)
+            return []
+        except Exception:
+            self.logger.exception("Failed to inspect source page for automatic recipe image: %s", source_url)
+            return []
+
+        return self._extract_image_urls_from_html(source_url, html)
+
+    def _extract_image_urls_from_html(self, page_url: str, html: str) -> list[str]:
+        candidates: list[str] = []
+
+        for match in re.finditer(r"<meta\b[^>]*>", html, flags=re.IGNORECASE):
+            attrs = self._html_attrs(match.group(0))
+            key = (attrs.get("property") or attrs.get("name") or attrs.get("itemprop") or "").lower()
+            if key in SOURCE_IMAGE_META_KEYS:
+                self._add_page_image_candidate(candidates, page_url, attrs.get("content") or attrs.get("value"))
+            if len(candidates) >= AUTO_IMAGE_MAX_CANDIDATES:
+                return candidates[:AUTO_IMAGE_MAX_CANDIDATES]
+
+        for match in re.finditer(
+            r"<script\b[^>]*type=[\"']application/ld\+json[\"'][^>]*>(.*?)</script>",
+            html,
+            flags=re.IGNORECASE | re.DOTALL,
+        ):
+            raw_json = match.group(1)
+            raw_json = re.sub(r"^\s*<!--|-->\s*$", "", unescape(raw_json.strip()))
+            try:
+                self._collect_json_image_urls(candidates, page_url, json.loads(raw_json))
+            except Exception:
+                continue
+            if len(candidates) >= AUTO_IMAGE_MAX_CANDIDATES:
+                return candidates[:AUTO_IMAGE_MAX_CANDIDATES]
+
+        if candidates:
+            return candidates[:AUTO_IMAGE_MAX_CANDIDATES]
+
+        # Last resort: try visible page images. This is intentionally after metadata/JSON-LD
+        # because generic pages often include logos and navigation images before the recipe image.
+        for match in re.finditer(r"<img\b[^>]*>", html, flags=re.IGNORECASE):
+            attrs = self._html_attrs(match.group(0))
+            self._add_page_image_candidate(
+                candidates,
+                page_url,
+                attrs.get("src") or attrs.get("data-src") or attrs.get("data-lazy-src"),
+            )
+            if attrs.get("srcset"):
+                for part in attrs["srcset"].split(","):
+                    self._add_page_image_candidate(candidates, page_url, part.strip().split(" ", 1)[0])
+
+            if len(candidates) >= AUTO_IMAGE_MAX_CANDIDATES:
+                break
+
+        return candidates[:AUTO_IMAGE_MAX_CANDIDATES]
+
+    def _html_attrs(self, tag: str) -> dict[str, str]:
+        return {
+            name.lower(): unescape(value.strip())
+            for name, _quote, value in re.findall(r"([\w:-]+)\s*=\s*([\"'])(.*?)\2", tag, flags=re.DOTALL)
+        }
+
+    def _collect_json_image_urls(
+        self,
+        candidates: list[str],
+        page_url: str,
+        node: object,
+        *,
+        allow_string: bool = False,
+    ) -> None:
+        if len(candidates) >= AUTO_IMAGE_MAX_CANDIDATES:
+            return
+
+        if isinstance(node, str):
+            if allow_string:
+                self._add_page_image_candidate(candidates, page_url, node)
+            return
+
+        if isinstance(node, list):
+            for item in node:
+                if len(candidates) >= AUTO_IMAGE_MAX_CANDIDATES:
+                    break
+                self._collect_json_image_urls(candidates, page_url, item, allow_string=allow_string)
+            return
+
+        if not isinstance(node, dict):
+            return
+
+        node_type = node.get("@type")
+        node_types = [node_type] if isinstance(node_type, str) else node_type if isinstance(node_type, list) else []
+        normalized_types = {str(item).lower() for item in node_types}
+
+        for key in ("image", "thumbnailUrl"):
+            if key in node:
+                self._collect_json_image_urls(candidates, page_url, node[key], allow_string=True)
+
+        if "imageobject" in normalized_types:
+            self._collect_json_image_urls(
+                candidates,
+                page_url,
+                node.get("url") or node.get("contentUrl"),
+                allow_string=True,
+            )
+
+        for value in node.values():
+            if len(candidates) >= AUTO_IMAGE_MAX_CANDIDATES:
+                break
+            if isinstance(value, dict | list):
+                self._collect_json_image_urls(candidates, page_url, value)
+
+    def _add_page_image_candidate(self, candidates: list[str], page_url: str, value: str | None) -> None:
+        if len(candidates) >= AUTO_IMAGE_MAX_CANDIDATES:
+            return
+
+        candidate = unescape((value or "").strip())
+        if not candidate or candidate.startswith(("data:", "blob:")):
+            return
+
+        candidate = urljoin(page_url, candidate)
+        if not candidate.lower().startswith(("http://", "https://")):
+            return
+        if candidate.lower().split("?", 1)[0].endswith(".svg"):
+            return
+        if candidate not in candidates:
+            candidates.append(candidate)
+
     async def _find_public_recipe_image_urls(self, query: str | None) -> list[str]:
         query = (query or "").strip()
         if not query:
             return []
+
+        if " recipe" not in query.lower() and " food" not in query.lower():
+            query = f"{query} recipe food"
 
         try:
             async with httpx.AsyncClient(timeout=6.0, follow_redirects=True) as client:
                 response = await client.get(
                     AUTO_IMAGE_SEARCH_URL,
                     params={
-                        "q": f"{query} recipe dish food",
-                        "page_size": 5,
+                        "q": query,
+                        "page_size": 8,
                         "mature": "false",
                     },
                     headers={"User-Agent": "Mealie personal recipe image search"},

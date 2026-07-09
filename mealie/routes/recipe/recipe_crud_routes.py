@@ -1152,24 +1152,26 @@ class RecipeController(BaseRecipeController):
     @router.post("/{slug}/image/ai", response_model=UpdateImageResponse, tags=["Recipe: Images and Assets"])
     async def create_ai_recipe_image(self, slug: str):
         recipe = self.mixins.get_one(slug)
-        query_parts = [
-            recipe.name,
-            recipe.description,
-            recipe.created_by,
-            recipe.source,
-            " ".join(category.name for category in recipe.recipe_category or [] if category.name),
-            " ".join(tag.name for tag in recipe.tags or [] if tag.name),
-            " ".join(
-                ingredient.display or ingredient.note or (ingredient.food.name if ingredient.food else "")
-                for ingredient in (recipe.recipe_ingredient or [])[:10]
-            ),
+        category_names = [category.name for category in recipe.recipe_category or [] if category.name]
+        tag_names = [tag.name for tag in recipe.tags or [] if tag.name]
+        ingredient_names = [
+            ingredient.display or ingredient.note or (ingredient.food.name if ingredient.food else "")
+            for ingredient in (recipe.recipe_ingredient or [])[:8]
         ]
-        search_query = " ".join(part.strip() for part in query_parts if part and part.strip())[:500]
+        ingredient_names = [name.strip() for name in ingredient_names if name and name.strip()]
+        recipe_name = recipe.name or recipe.slug
+        search_queries = [
+            recipe_name,
+            " ".join([recipe_name, *category_names[:2], *tag_names[:2]]),
+            " ".join([recipe_name, *ingredient_names[:3]]),
+            " ".join([recipe_name, recipe.created_by or ""]),
+        ]
 
         try:
             image_attached = await self.service.attach_best_effort_image(
                 recipe,
-                search_query=search_query or recipe.name or recipe.slug,
+                search_queries=search_queries,
+                source_url=recipe.source,
             )
         except Exception as e:
             self.handle_exceptions(e)

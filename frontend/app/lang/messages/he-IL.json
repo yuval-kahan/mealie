@@ -605,7 +605,7 @@
     "upload-additional-recipe-images": "העלאת תמונות נוספות",
     "recipe-image-updated": "תמונת המתכון עודכנה",
     "add-ai-image": "הוסף תמונה עם AI",
-    "ai-image-create-failed": "יצירת תמונה עם AI נכשלה",
+    "ai-image-create-failed": "איתור תמונה עם AI נכשל",
     "delete-image": "מחק תמונת מתכון",
     "delete-image-confirmation": "האם אתה בטוח שאתה רוצה למחוק את תמונת המתכון?",
     "recipe-image-deleted": "תמונת מתכון נמחקה",
