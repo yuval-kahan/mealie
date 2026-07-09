@@ -77,8 +77,12 @@
         xxl="2"
         class="col-borders my-1 d-flex flex-column"
       >
-        <v-card class="mb-2 border-left-primary rounded-sm pa-2">
-          <p class="pl-2 mb-1">
+        <v-card
+          class="mb-2 border-left-primary rounded-sm pa-2"
+          :class="{ 'meal-plan-today-toggle': isToday(plan.date) }"
+          @click="toggleTodayEdit(plan.date)"
+        >
+          <p class="pl-2 mb-1" :class="{ 'text-primary': isToday(plan.date) }">
             {{ $d(plan.date, "short") }}
           </p>
         </v-card>
@@ -234,7 +238,7 @@
 </template>
 
 <script setup lang="ts">
-import { format } from "date-fns";
+import { format, isSameDay } from "date-fns";
 import type { SortableEvent } from "sortablejs";
 import { VueDraggable } from "vue-draggable-plus";
 import type { MealsByDate } from "./view.vue";
@@ -254,6 +258,8 @@ const props = defineProps<{
 
 const api = useUserApi();
 const auth = useMealieAuth();
+const route = useRoute();
+const router = useRouter();
 const { household } = useHouseholdSelf();
 const requiredRule = (value: any) => !!value || "Required.";
 
@@ -352,6 +358,21 @@ function openDialog(date: Date) {
   state.value.dialog = true;
 }
 
+function isToday(date: Date) {
+  return isSameDay(date, new Date());
+}
+
+function toggleTodayEdit(date: Date) {
+  if (!isToday(date)) {
+    return;
+  }
+
+  void router.push({
+    name: "household-mealplan-planner-view",
+    query: route.query,
+  });
+}
+
 function editMeal(mealplan: UpdatePlanEntry) {
   const { date, title, text, entryType, recipeId, id, groupId, userId } = mealplan;
   if (!entryType) return;
@@ -401,3 +422,18 @@ onMounted(async () => {
   await search.trigger();
 });
 </script>
+
+<style scoped>
+.meal-plan-today-toggle {
+  cursor: pointer;
+  transition:
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+.meal-plan-today-toggle:hover,
+.meal-plan-today-toggle:focus-within {
+  box-shadow: 0 2px 10px rgba(var(--v-theme-primary), 0.18);
+  transform: translateY(-1px);
+}
+</style>

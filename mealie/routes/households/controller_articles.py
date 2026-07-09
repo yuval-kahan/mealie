@@ -11,7 +11,6 @@ from mealie.core import exceptions
 from mealie.db.models.household.article import Article
 from mealie.routes._base import controller
 from mealie.routes._base.base_controllers import BaseUserController
-from mealie.schema.household.group_shopping_list import ShoppingListAddRecipeParamsBulk, ShoppingListCreate
 from mealie.schema.household.article import (
     ArticleAIRequest,
     ArticleAISearchItem,
@@ -23,11 +22,13 @@ from mealie.schema.household.article import (
     ArticleOut,
     ArticleUpdate,
 )
+from mealie.schema.household.group_shopping_list import ShoppingListAddRecipeParamsBulk, ShoppingListCreate
 from mealie.schema.openai.article import OpenAIArticle, OpenAIArticleSearchResponse
 from mealie.schema.recipe import Recipe
 from mealie.schema.response import PaginationQuery
 from mealie.schema.response.responses import ErrorResponse
 from mealie.services.household_services.shopping_lists import ShoppingListService
+from mealie.services.item_image_service import ItemImageService
 from mealie.services.openai import OpenAIDataInjection, OpenAIService
 from mealie.services.recipe.recipe_service import RecipeService
 
@@ -189,7 +190,10 @@ class ArticlesController(BaseUserController):
             text = f"Source URL: {url}\n\n{fetched_text}"
 
         if not text:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ErrorResponse.respond("Article text cannot be empty"))
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=ErrorResponse.respond("Article text cannot be empty"),
+            )
 
         source_parts = []
         if source_title:
@@ -265,18 +269,34 @@ class ArticlesController(BaseUserController):
         self.session.refresh(article)
         return self._article_to_out(article)
 
-    @router.post("/ai-create", response_model=ArticleOut, status_code=status.HTTP_201_CREATED)
-    async def create_article_with_ai(self, data: ArticleAIRequest) -> ArticleOut:
+    @router.post("/ai-create", response_model=ArticleBrowserPageResponse, status_code=status.HTTP_201_CREATED)
+    async def create_article_with_ai(self, data: ArticleAIRequest) -> ArticleBrowserPageResponse:
         if not self._ai_enabled():
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ErrorResponse.respond("OpenAI services are not enabled"))
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=ErrorResponse.respond("OpenAI services are not enabled"),
+            )
 
-        article_data = await self._article_from_ai(data)
-        return self.create_article(article_data)
+        browser_data = ArticleBrowserPageRequest(
+            text=data.text,
+            url=data.url,
+            source_url=data.url,
+            translate_language=data.translate_language,
+            create_recipe_if_present=data.create_recipe_if_present,
+            create_shopping_list=data.create_shopping_list,
+            organize_shopping_list_with_ai=data.organize_shopping_list_with_ai,
+            include_ai_tips=data.include_ai_tips,
+            include_item_images=data.include_item_images,
+        )
+        return await self.create_article_from_browser_page(browser_data)
 
     @router.post("/browser-page", response_model=ArticleBrowserPageResponse, status_code=status.HTTP_201_CREATED)
     async def create_article_from_browser_page(self, data: ArticleBrowserPageRequest) -> ArticleBrowserPageResponse:
         if not self._ai_enabled():
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ErrorResponse.respond("OpenAI services are not enabled"))
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=ErrorResponse.respond("OpenAI services are not enabled"),
+            )
 
         response, url = await self._parse_article_ai(data)
         content_kind = (response.content_kind or "other").strip() or "other"
@@ -312,6 +332,11 @@ class ArticlesController(BaseUserController):
                             image_url=data.image_url,
                             search_query=recipe.name,
                         )
+                    if data.include_item_images:
+                        try:
+                            await ItemImageService(self.group_id, self.repos).ensure_recipe_images(recipe)
+                        except Exception:
+                            self.logger.exception("Failed to ensure browser article recipe item images")
                     result.recipe_slug = recipe.slug
                     if data.create_shopping_list:
                         result = await self._create_article_recipe_shopping_list(recipe, data, result)
@@ -397,6 +422,12 @@ class ArticlesController(BaseUserController):
                 except Exception as e:
                     self.logger.exception("Failed to organize browser article shopping list with AI")
                     response.shopping_list_error = str(e) or "AI shopping list organization failed"
+
+            if data.include_item_images:
+                try:
+                    await ItemImageService(self.group_id, self.repos).ensure_shopping_list_images(shopping_list)
+                except Exception:
+                    self.logger.exception("Failed to ensure browser article shopping list item images")
         except Exception as e:
             self.logger.exception("Failed to create browser article shopping list")
             response.shopping_list_error = str(e) or "Shopping list creation failed"
@@ -423,7 +454,10 @@ class ArticlesController(BaseUserController):
     @router.post("/ai-search", response_model=ArticleAISearchResponse)
     async def search_articles_with_ai(self, data: ArticleAISearchRequest) -> ArticleAISearchResponse:
         if not self._ai_enabled():
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ErrorResponse.respond("OpenAI services are not enabled"))
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=ErrorResponse.respond("OpenAI services are not enabled"),
+            )
 
         articles = self.get_articles()
         if not articles:

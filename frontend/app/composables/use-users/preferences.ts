@@ -38,6 +38,7 @@ export interface UserRecipePreferences {
 export interface UserShoppingListPreferences {
   viewAllLists: boolean;
   openListsInline: boolean;
+  showItemImages: boolean;
 }
 
 export interface UserTimelinePreferences {
@@ -78,6 +79,7 @@ export interface UserRecipeCreatePreferences {
   importCategories: boolean;
   stayInEditMode: boolean;
   parseRecipe: boolean;
+  includeItemImages: boolean;
 }
 
 export interface UserActivityPreferences {
@@ -87,6 +89,7 @@ export interface UserActivityPreferences {
 export interface UserExperiencePreferences {
   lockScreen: boolean;
   strikeCompletedRecipeItems: boolean;
+  showRecipeItemImages: boolean;
 }
 
 export function useUserMealPlanPreferences(): Ref<UserMealPlanPreferences> {
@@ -166,6 +169,7 @@ export function useShoppingListPreferences(): Ref<UserShoppingListPreferences> {
     {
       viewAllLists: false,
       openListsInline: true,
+      showItemImages: true,
     },
     { mergeDefaults: true },
   );
@@ -271,6 +275,7 @@ export function useRecipeCreatePreferences(): Ref<UserRecipeCreatePreferences> {
       importCategories: false,
       stayInEditMode: false,
       parseRecipe: true,
+      includeItemImages: true,
     },
     { mergeDefaults: true },
   );
@@ -284,6 +289,7 @@ export function useUserExperiencePreferences(): Ref<UserExperiencePreferences> {
     {
       lockScreen: true,
       strikeCompletedRecipeItems: true,
+      showRecipeItemImages: true,
     },
     { mergeDefaults: true },
   );

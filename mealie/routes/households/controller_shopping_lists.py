@@ -35,12 +35,19 @@ from mealie.services.event_bus_service.event_types import (
     EventTypes,
 )
 from mealie.services.household_services.shopping_lists import ShoppingListService
+from mealie.services.item_image_service import ItemImageService
 
 item_router = APIRouter(prefix="/households/shopping/items", tags=["Households: Shopping List Items"])
 
 
 class ShoppingListOrganizeAIRequest(MealieModel):
     include_ai_tips: bool = False
+
+
+class ShoppingListItemImagesEnsureResponse(MealieModel):
+    existing: int = 0
+    created: int = 0
+    failed: int = 0
 
 
 def publish_list_item_events(publisher: Callable, items_collection: ShoppingListItemsCollectionOut) -> None:
@@ -298,6 +305,24 @@ class ShoppingListController(BaseCrudController):
         )
 
         return shopping_list
+
+    @router.post("/{item_id}/item-images/ensure", response_model=ShoppingListItemImagesEnsureResponse)
+    async def ensure_shopping_list_item_images(self, item_id: UUID4) -> ShoppingListItemImagesEnsureResponse:
+        shopping_list = self.get_one(item_id)
+        try:
+            result = await ItemImageService(self.group_id, self.repos).ensure_shopping_list_images(shopping_list)
+        except Exception as e:
+            self.logger.exception("Failed to ensure shopping list item images")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=ErrorResponse.respond("Shopping list item image lookup failed"),
+            ) from e
+
+        return ShoppingListItemImagesEnsureResponse(
+            existing=result.existing,
+            created=result.created,
+            failed=result.failed,
+        )
 
     @router.post("/{item_id}/recipe", response_model=ShoppingListOut)
     def add_recipe_ingredients_to_list(self, item_id: UUID4, data: list[ShoppingListAddRecipeParamsBulk]):

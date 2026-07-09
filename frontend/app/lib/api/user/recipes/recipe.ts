@@ -38,11 +38,19 @@ export interface CreateRecipeFromText {
   translateLanguage?: string | null;
   includeAiTips?: boolean;
   autoImage?: boolean;
+  includeItemImages?: boolean;
 }
 
 export interface RecipeAIShoppingListRequest {
   includeAiTips?: boolean;
   organizeShoppingListWithAi?: boolean;
+  includeItemImages?: boolean;
+}
+
+export interface ItemImagesEnsureResponse {
+  existing: number;
+  created: number;
+  failed: number;
 }
 
 export interface RecipeAIShoppingListResponse {
@@ -87,6 +95,7 @@ const routes = {
   recipesRecipeSlugShoppingListOpenOrCreate: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/shopping-list/open-or-create`,
   recipesRecipeSlugImage: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/image`,
   recipesRecipeSlugImageAi: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/image/ai`,
+  recipesRecipeSlugItemImagesEnsure: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/item-images/ensure`,
   recipesRecipeSlugAssets: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/assets`,
 
   recipesSlugComments: (slug: string) => `${prefix}/recipes/${slug}/comments`,
@@ -279,6 +288,7 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
     fileObjects: (Blob | File)[],
     translateLanguage: string | null = null,
     includeAiTips = true,
+    includeItemImages = true,
   ) {
     const formData = new FormData();
 
@@ -292,6 +302,7 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
       query.set("translateLanguage", translateLanguage);
     }
     query.set("includeAiTips", String(includeAiTips));
+    query.set("includeItemImages", String(includeItemImages));
     const queryString = query.toString();
     if (queryString) {
       apiRoute = `${apiRoute}?${queryString}`;
@@ -304,12 +315,21 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
     return await this.requests.post<string>(routes.recipesCreateFromText, payload, { suppressAlert: true });
   }
 
+  async ensureItemImages(recipeSlug: string) {
+    return await this.requests.post<ItemImagesEnsureResponse>(
+      routes.recipesRecipeSlugItemImagesEnsure(recipeSlug),
+      {},
+      { suppressAlert: true },
+    );
+  }
+
   async createAIShoppingList(recipeSlug: string, payload: RecipeAIShoppingListRequest = {}) {
     return await this.requests.post<RecipeAIShoppingListResponse>(
       routes.recipesRecipeSlugShoppingListAi(recipeSlug),
       {
         includeAiTips: payload.includeAiTips !== false,
         organizeShoppingListWithAi: payload.organizeShoppingListWithAi !== false,
+        includeItemImages: payload.includeItemImages !== false,
       },
       { suppressAlert: true },
     );

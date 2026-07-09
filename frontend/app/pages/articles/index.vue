@@ -120,6 +120,50 @@
             />
           </v-window-item>
         </v-window>
+        <div
+          v-if="!editingArticle && createMode !== 'manual'"
+          class="article-ai-options mt-2"
+        >
+          <v-checkbox
+            v-model="extractRecipeIfPresent"
+            hide-details
+            color="primary"
+            density="compact"
+            :label="$t('article.extract-recipe-if-present')"
+          />
+          <v-checkbox
+            v-model="createShoppingListForExtractedRecipes"
+            hide-details
+            color="primary"
+            density="compact"
+            :disabled="!extractRecipeIfPresent"
+            :label="$t('article.create-shopping-list-for-recipes')"
+          />
+          <v-checkbox
+            v-model="organizeExtractedShoppingListWithAI"
+            hide-details
+            color="primary"
+            density="compact"
+            :disabled="!extractRecipeIfPresent || !createShoppingListForExtractedRecipes"
+            :label="$t('article.organize-shopping-list-with-ai')"
+          />
+          <v-checkbox
+            v-model="includeExtractedAiTips"
+            hide-details
+            color="primary"
+            density="compact"
+            :disabled="!extractRecipeIfPresent"
+            :label="$t('recipe.include-ai-tips-description')"
+          />
+          <v-checkbox
+            v-model="includeExtractedItemImages"
+            hide-details
+            color="primary"
+            density="compact"
+            :disabled="!extractRecipeIfPresent"
+            :label="$t('recipe.include-item-images-description')"
+          />
+        </div>
       </v-card-text>
     </BaseDialog>
 
@@ -311,6 +355,11 @@ const aiSearchIds = ref<string[]>([]);
 const aiReasons = ref<Record<string, string>>({});
 const aiText = ref("");
 const aiUrl = ref("");
+const extractRecipeIfPresent = ref(true);
+const createShoppingListForExtractedRecipes = ref(true);
+const organizeExtractedShoppingListWithAI = ref(true);
+const includeExtractedAiTips = ref(true);
+const includeExtractedItemImages = ref(true);
 
 const form = reactive<ArticleCreate>({
   title: "",
@@ -425,6 +474,11 @@ function resetArticleForm() {
   form.tags = [];
   aiText.value = "";
   aiUrl.value = "";
+  extractRecipeIfPresent.value = true;
+  createShoppingListForExtractedRecipes.value = true;
+  organizeExtractedShoppingListWithAI.value = true;
+  includeExtractedAiTips.value = true;
+  includeExtractedItemImages.value = true;
 }
 
 function openCreateDialog() {
@@ -466,6 +520,13 @@ async function submitArticle() {
       text: createMode.value === "ai-text" ? aiText.value : null,
       url: createMode.value === "ai-link" ? aiUrl.value : null,
       translateLanguage: displayLanguage.value,
+      createRecipeIfPresent: extractRecipeIfPresent.value,
+      createShoppingList: extractRecipeIfPresent.value && createShoppingListForExtractedRecipes.value,
+      organizeShoppingListWithAi: extractRecipeIfPresent.value
+        && createShoppingListForExtractedRecipes.value
+        && organizeExtractedShoppingListWithAI.value,
+      includeAiTips: includeExtractedAiTips.value,
+      includeItemImages: includeExtractedItemImages.value,
     });
   })().finally(() => {
     saving.value = false;
@@ -532,6 +593,12 @@ function handleArticlesUpdated() {
 
 .articles-ai-search {
   grid-template-columns: minmax(220px, 1fr) auto auto;
+}
+
+.article-ai-options {
+  display: grid;
+  gap: 2px 12px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
 
 .article-card {

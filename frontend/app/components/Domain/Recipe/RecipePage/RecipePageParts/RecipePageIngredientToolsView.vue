@@ -4,6 +4,10 @@
       :value="recipe.recipeIngredient"
       :scale="scale"
       :is-cook-mode="isCookMode"
+      :group-id="recipe.groupId"
+      :recipe-slug="recipe.slug"
+      :item-images-ensured="recipeItemImagesEnsured(recipe.extras)"
+      @item-images-ensured="markItemImagesEnsured"
     />
     <div v-if="!isEditMode && recipe.tools && recipe.tools.length > 0">
       <h2 class="mt-4 text-h5 font-weight-medium opacity-80">
@@ -26,8 +30,13 @@
               @change="updateTool(index)"
             />
           </template>
-          <v-list-item-title>
-            {{ tool.name }}
+          <v-list-item-title class="d-flex align-center ga-2">
+            <ItemImageThumb
+              v-if="userExperiencePreferences.showRecipeItemImages"
+              :src="itemImage(recipe.groupId, 'tool', tool.name)"
+              :alt="tool.name"
+            />
+            <span>{{ tool.name }}</span>
           </v-list-item-title>
         </v-list-item>
       </v-list>
@@ -37,10 +46,14 @@
 
 <script setup lang="ts">
 import { useLoggedInState } from "~/composables/use-logged-in-state";
+import { useStaticRoutes } from "~/composables/api";
 import { usePageState, usePageUser } from "~/composables/recipe-page/shared-state";
 import { useToolStore } from "~/composables/store";
+import { useUserExperiencePreferences } from "~/composables/use-users/preferences";
+import { markRecipeItemImagesEnsured, recipeItemImagesEnsured } from "~/composables/recipes/use-recipe-item-images";
 import type { NoUndefinedField } from "~/lib/api/types/non-generated";
 import type { Recipe, RecipeTool } from "~/lib/api/types/recipe";
+import ItemImageThumb from "~/components/Domain/ItemImages/ItemImageThumb.vue";
 import RecipeIngredients from "~/components/Domain/Recipe/RecipeIngredients.vue";
 
 interface RecipeToolWithOnHand extends RecipeTool {
@@ -61,6 +74,8 @@ const { isOwnGroup } = useLoggedInState();
 const toolStore = isOwnGroup.value ? useToolStore() : null;
 const { user } = usePageUser();
 const { isEditMode } = usePageState(props.recipe.slug);
+const userExperiencePreferences = useUserExperiencePreferences();
+const { itemImage } = useStaticRoutes();
 
 const recipeTools = ref<RecipeToolWithOnHand[]>([]);
 watch(() => props.recipe.tools, () => {
@@ -95,5 +110,9 @@ function updateTool(index: number) {
   else {
     console.log("no user, skipping server update");
   }
+}
+
+function markItemImagesEnsured() {
+  markRecipeItemImagesEnsured(props.recipe);
 }
 </script>

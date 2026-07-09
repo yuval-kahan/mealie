@@ -1,5 +1,10 @@
 <template>
   <div class="text-subtitle-1 dense-markdown ingredient-item">
+    <ItemImageThumb
+      v-if="showImage && imageUrl"
+      :src="imageUrl"
+      :alt="parsedIng.name || ingredient.display || ingredient.note || ''"
+    />
     <SafeMarkdown
       v-if="parsedIng.quantity"
       class="d-inline"
@@ -45,13 +50,18 @@
 <script setup lang="ts">
 import type { RecipeIngredient } from "~/lib/api/types/household";
 import { useIngredientTextParser } from "~/composables/recipes";
+import ItemImageThumb from "~/components/Domain/ItemImages/ItemImageThumb.vue";
 
 interface Props {
   ingredient: RecipeIngredient;
   scale?: number;
+  showImage?: boolean;
+  imageUrl?: string;
 }
 const props = withDefaults(defineProps<Props>(), {
   scale: 1,
+  showImage: false,
+  imageUrl: "",
 });
 const route = useRoute();
 const auth = useMealieAuth();

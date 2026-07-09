@@ -81,11 +81,7 @@ import {
   usePublicToolStore,
 } from "~/composables/store";
 
-const auth = useMealieAuth();
-const route = useRoute();
-
-const { isOwnGroup } = useLoggedInState();
-const groupSlug = computed(() => route.params.groupSlug as string || auth.user.value?.groupSlug || "");
+const { isOwnGroup, groupSlug } = useLoggedInState();
 
 const {
   state,

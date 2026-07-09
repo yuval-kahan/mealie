@@ -115,6 +115,13 @@
           :label="$t('recipe.include-ai-tips-description')"
           :disabled="state.loading"
         />
+        <v-checkbox
+          v-model="includeItemImages"
+          color="primary"
+          hide-details
+          :label="$t('recipe.include-item-images-description')"
+          :disabled="state.loading"
+        />
         <v-divider class="my-4" />
         <div class="d-flex flex-column ga-3">
           <RecipeCoverImageUpload
@@ -156,6 +163,7 @@ import { useUserApi } from "~/composables/api/api-client";
 import { useCategoryStore } from "~/composables/store/use-category-store";
 import { useTagStore } from "~/composables/store/use-tag-store";
 import { useNewRecipeOptions } from "~/composables/use-new-recipe-options";
+import { useRecipeCreatePreferences } from "~/composables/use-users/preferences";
 import { alert } from "~/composables/use-toast";
 import { validators } from "~/composables/use-validators";
 import type { Recipe } from "~/lib/api/types/recipe";
@@ -201,11 +209,26 @@ const domCreateForm = ref<VForm | null>(null);
 const shouldTranslate = ref(true);
 const shouldCreateShoppingList = ref(true);
 const includeAiTips = ref(true);
+const recipeCreatePreferences = useRecipeCreatePreferences();
+const includeItemImages = computed({
+  get: () => recipeCreatePreferences.value.includeItemImages,
+  set: (value: boolean) => {
+    recipeCreatePreferences.value.includeItemImages = value;
+  },
+});
 const recipeImageFile = ref<File | null>(null);
 const additionalImageFiles = ref<File[]>([]);
 const videoFile = ref<File | null>(null);
 const createStatus = ref<string | null>(null);
+const pendingExtensionRequestCancellations = new Set<() => void>();
 const { attachVideoToRecipe } = useRecipeVideoAsset();
+
+onBeforeUnmount(() => {
+  for (const cancel of [...pendingExtensionRequestCancellations]) {
+    cancel();
+  }
+  pendingExtensionRequestCancellations.clear();
+});
 
 function isHttpUrl(value: string | null) {
   if (!value) {
@@ -365,6 +388,7 @@ async function createRecipeFromText() {
     translateLanguage: shouldTranslate.value ? i18n.locale.value : null,
     includeAiTips: includeAiTips.value,
     autoImage: !recipeImageFile.value,
+    includeItemImages: includeItemImages.value,
   });
 
   if (error || !data) {
@@ -374,6 +398,7 @@ async function createRecipeFromText() {
   }
 
   await attachMediaToRecipe(data);
+  await ensureRecipeItemImages(data);
   await createShoppingListForRecipe(data);
   await refreshRecipeOrganizers();
 
@@ -392,6 +417,7 @@ async function createRecipeFromImages() {
     uploadedImages.value,
     translateLanguage,
     includeAiTips.value,
+    includeItemImages.value,
   );
 
   if (error || !data) {
@@ -401,6 +427,7 @@ async function createRecipeFromImages() {
   }
 
   await attachMediaToRecipe(data);
+  await ensureRecipeItemImages(data);
   await createShoppingListForRecipe(data);
   await refreshRecipeOrganizers();
   emit("created", data);
@@ -430,6 +457,7 @@ async function createRecipeFromUrl() {
     const extensionSlug = extensionRecipeSlug(extensionResponse);
     if (extensionResponse?.ok && extensionSlug) {
       await attachMediaToRecipe(extensionSlug);
+      await ensureRecipeItemImages(extensionSlug);
       await refreshRecipeOrganizers();
       emit("created", extensionSlug);
       navigateToRecipe(extensionSlug, extensionGroupSlug(extensionResponse), props.returnTo || route.path);
@@ -448,6 +476,7 @@ async function createRecipeFromUrl() {
   }
 
   await attachMediaToRecipe(response.data);
+  await ensureRecipeItemImages(response.data);
   await createShoppingListForRecipe(response.data);
   await refreshRecipeOrganizers();
   emit("created", response.data);
@@ -464,6 +493,7 @@ async function createRecipeFromUrlViaExtension(url: string): Promise<ExtensionRe
 
   return await new Promise((resolve) => {
     let acknowledged = false;
+    let settled = false;
     let ackTimer: ReturnType<typeof setTimeout> | null = null;
     let finalTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -475,6 +505,21 @@ async function createRecipeFromUrlViaExtension(url: string): Promise<ExtensionRe
       if (finalTimer) {
         clearTimeout(finalTimer);
       }
+      pendingExtensionRequestCancellations.delete(cancel);
+    }
+
+    function finish(response: ExtensionRecipeImportResponse | null) {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      cleanup();
+      resolve(response);
+    }
+
+    function cancel() {
+      finish(null);
     }
 
     function onMessage(event: MessageEvent) {
@@ -497,11 +542,11 @@ async function createRecipeFromUrlViaExtension(url: string): Promise<ExtensionRe
       }
 
       if (data.type === "MEALIE_EXTENSION_IMPORT_RECIPE_URL_RESULT") {
-        cleanup();
-        resolve(data.response || { ok: false, error: i18n.t("recipe.recipe-link-extension-not-available") });
+        finish(data.response || { ok: false, error: i18n.t("recipe.recipe-link-extension-not-available") });
       }
     }
 
+    pendingExtensionRequestCancellations.add(cancel);
     window.addEventListener("message", onMessage);
     window.postMessage(
       {
@@ -514,6 +559,7 @@ async function createRecipeFromUrlViaExtension(url: string): Promise<ExtensionRe
           createShoppingList: shouldCreateShoppingList.value,
           organizeShoppingListWithAi: shouldCreateShoppingList.value,
           includeAiTips: includeAiTips.value,
+          includeItemImages: includeItemImages.value,
         },
       },
       window.location.origin,
@@ -521,14 +567,12 @@ async function createRecipeFromUrlViaExtension(url: string): Promise<ExtensionRe
 
     ackTimer = setTimeout(() => {
       if (!acknowledged) {
-        cleanup();
-        resolve(null);
+        finish(null);
       }
     }, 1500);
 
     finalTimer = setTimeout(() => {
-      cleanup();
-      resolve({ ok: false, error: i18n.t("recipe.recipe-link-extension-timeout") });
+      finish({ ok: false, error: i18n.t("recipe.recipe-link-extension-timeout") });
     }, 180000);
   });
 }
@@ -561,6 +605,20 @@ async function attachMediaToRecipe(recipeSlug: string) {
 
   await attachAdditionalImagesToRecipe(recipeSlug);
   await attachVideoToRecipe(recipeSlug, videoFile.value);
+}
+
+async function ensureRecipeItemImages(recipeSlug: string) {
+  if (!includeItemImages.value) {
+    return;
+  }
+
+  try {
+    createStatus.value = i18n.t("recipe.finding-item-images");
+    await api.recipes.ensureItemImages(recipeSlug);
+  }
+  catch (e) {
+    console.error("Failed to ensure recipe item images", e);
+  }
 }
 
 async function attachAdditionalImagesToRecipe(recipeSlug: string) {
@@ -632,6 +690,14 @@ async function createShoppingListForRecipe(recipeSlug: string) {
     if (organizeError) {
       alert.error(i18n.t("recipe.ai-shopping-list-organize-failed"));
       return;
+    }
+
+    if (includeItemImages.value) {
+      createStatus.value = i18n.t("recipe.finding-item-images");
+      const { error: imageError } = await api.shopping.lists.ensureItemImages(shoppingList.id);
+      if (imageError) {
+        console.error("Failed to ensure shopping list item images", imageError);
+      }
     }
 
     if (import.meta.client) {

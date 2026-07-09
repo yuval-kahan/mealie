@@ -49,6 +49,20 @@
         >
           <v-icon>{{ $globals.icons.fileImage }}</v-icon>
         </v-btn>
+        <v-btn
+          v-if="showAiItemImagesButton"
+          icon
+          variant="flat"
+          size="x-small"
+          class="recipe-card-ai-item-images-btn"
+          color="success"
+          :loading="itemImagesLoading"
+          :title="$t('recipe.create-item-images')"
+          :aria-label="$t('recipe.create-item-images')"
+          @click.stop.prevent="ensureItemImagesFromCard"
+        >
+          <v-icon>{{ $globals.icons.fileImage }}</v-icon>
+        </v-btn>
         <v-card-title class="recipe-card-title px-4">
           {{ displayName }}
         </v-card-title>
@@ -98,6 +112,19 @@
                 @click.stop.prevent="copyRecipeFromCard"
               >
                 <v-icon>{{ $globals.icons.contentCopy }}</v-icon>
+              </v-btn>
+              <v-btn
+                icon
+                variant="text"
+                size="x-small"
+                class="recipe-card-action-btn"
+                color="primary"
+                :loading="copyShoppingListLoading"
+                :title="$t('recipe.copy-shopping-list')"
+                :aria-label="$t('recipe.copy-shopping-list')"
+                @click.stop.prevent="copyShoppingListFromCard"
+              >
+                <v-icon>{{ $globals.icons.formatListCheck }}</v-icon>
               </v-btn>
               <v-btn
                 icon
@@ -171,6 +198,8 @@ import RecipeCardImage from "./RecipeCardImage.vue";
 import RecipeCardRating from "./RecipeCardRating.vue";
 import { useUserApi } from "~/composables/api/api-client";
 import { useRecipeCopy } from "~/composables/recipes/use-recipe-copy";
+import { recipeItemImagesEnsured, useRecipeItemImages } from "~/composables/recipes/use-recipe-item-images";
+import { useRecipeShoppingListCopy } from "~/composables/recipes/use-recipe-shopping-list-copy";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import { useShoppingListAvailability } from "~/composables/shopping-list-page/use-shopping-list-availability";
 import { alert } from "~/composables/use-toast";
@@ -185,6 +214,7 @@ interface Props {
   tags?: Array<any>;
   recipeId: string;
   imageHeight?: number;
+  extras?: Record<string, unknown> | null;
 }
 const props = withDefaults(defineProps<Props>(), {
   description: null,
@@ -193,6 +223,7 @@ const props = withDefaults(defineProps<Props>(), {
   image: "abc123",
   tags: () => [],
   imageHeight: 200,
+  extras: null,
 });
 
 const emit = defineEmits<{
@@ -201,15 +232,19 @@ const emit = defineEmits<{
   renamed: [{ slug: string; name: string; recipe?: any }];
 }>();
 
-const auth = useMealieAuth();
 const api = useUserApi();
 const { copyRecipeText } = useRecipeCopy();
+const { copyRecipeShoppingList } = useRecipeShoppingListCopy();
+const { ensureRecipeItemImages } = useRecipeItemImages();
 const i18n = useI18n();
-const { isOwnGroup } = useLoggedInState();
+const { isOwnGroup, groupSlug } = useLoggedInState();
 const { ensureAvailability, hasAllGroceriesForRecipe } = useShoppingListAvailability();
 const displayName = ref(props.name);
 const copyLoading = ref(false);
+const copyShoppingListLoading = ref(false);
 const aiImageLoading = ref(false);
+const itemImagesLoading = ref(false);
+const itemImagesEnsured = ref(recipeItemImagesEnsured(props.extras));
 const imageLoadFailed = ref(false);
 const localImageVersion = ref<string | null>(props.image ?? null);
 const recipeContextMenu = ref<{
@@ -232,8 +267,13 @@ watch(
   },
 );
 
-const route = useRoute();
-const groupSlug = computed(() => route.params.groupSlug || auth.user.value?.groupSlug || "");
+watch(
+  () => props.extras,
+  (extras) => {
+    itemImagesEnsured.value = recipeItemImagesEnsured(extras);
+  },
+);
+
 const showRecipeContent = computed(() => props.recipeId && props.slug);
 const recipeRoute = computed<string>(() => {
   return showRecipeContent.value ? `/g/${groupSlug.value}/r/${props.slug}` : "";
@@ -241,6 +281,7 @@ const recipeRoute = computed<string>(() => {
 const cursor = computed(() => (showRecipeContent.value ? "pointer" : "auto"));
 const hasAllGroceries = computed(() => hasAllGroceriesForRecipe(displayName.value));
 const showAiImageButton = computed(() => isOwnGroup.value && showRecipeContent.value && (!localImageVersion.value || imageLoadFailed.value));
+const showAiItemImagesButton = computed(() => isOwnGroup.value && showRecipeContent.value && !itemImagesEnsured.value);
 
 onMounted(() => {
   void ensureAvailability();
@@ -298,6 +339,37 @@ async function copyRecipeFromCard() {
   }
   finally {
     copyLoading.value = false;
+  }
+}
+
+async function copyShoppingListFromCard() {
+  if (copyShoppingListLoading.value || !showRecipeContent.value) {
+    return;
+  }
+
+  copyShoppingListLoading.value = true;
+  try {
+    await copyRecipeShoppingList(props.slug);
+  }
+  finally {
+    copyShoppingListLoading.value = false;
+  }
+}
+
+async function ensureItemImagesFromCard() {
+  if (itemImagesLoading.value || !showRecipeContent.value) {
+    return;
+  }
+
+  itemImagesLoading.value = true;
+  try {
+    const result = await ensureRecipeItemImages(props.slug);
+    if (result) {
+      itemImagesEnsured.value = true;
+    }
+  }
+  finally {
+    itemImagesLoading.value = false;
   }
 }
 
@@ -361,6 +433,22 @@ async function openShoppingListFromCard() {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
   transform: translateY(-1px);
 }
+.recipe-card-ai-item-images-btn {
+  position: absolute !important;
+  left: 8px;
+  top: 8px;
+  z-index: 4;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+.recipe-card-ai-item-images-btn:hover,
+.recipe-card-ai-item-images-btn:focus-visible {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
+  transform: translateY(-1px);
+}
 .recipe-card-actions {
   align-items: center;
   flex-wrap: nowrap;
@@ -372,7 +460,7 @@ async function openShoppingListFromCard() {
   display: flex;
   flex: 0 0 auto;
   gap: 0;
-  max-width: 96px;
+  max-width: 128px;
   overflow: hidden;
 }
 .recipe-card-action-btn {

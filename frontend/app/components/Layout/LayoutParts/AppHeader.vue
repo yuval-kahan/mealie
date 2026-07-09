@@ -95,9 +95,7 @@ defineProps({
   },
 });
 const auth = useMealieAuth();
-const { loggedIn } = useLoggedInState();
-const route = useRoute();
-const groupSlug = computed(() => route.params.groupSlug as string || auth.user.value?.groupSlug || "");
+const { loggedIn, groupSlug } = useLoggedInState();
 const { xs, smAndUp } = useDisplay();
 
 const routerLink = computed(() => groupSlug.value ? `/g/${groupSlug.value}` : "/");

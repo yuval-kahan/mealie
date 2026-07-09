@@ -4,7 +4,7 @@
       :post="false"
       :text="$t('recipe.upload-video')"
       :icon="$globals.icons.play"
-      accept="video/mp4,video/webm,video/quicktime,video/x-m4v,video/ogg,.mp4,.webm,.mov,.m4v,.ogv"
+      accept="video/*,.mp4,.webm,.mov,.m4v,.ogv,.avi,.mkv,.flv,.f4v,.wmv,.mpg,.mpeg,.mpe,.m1v,.m2v,.3gp,.3g2,.ts,.mts,.m2ts"
       :disabled="disabled"
       @uploaded="setVideoFile"
     />

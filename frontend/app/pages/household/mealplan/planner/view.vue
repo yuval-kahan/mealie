@@ -12,7 +12,11 @@
         xxl="2"
         class="col-borders my-1 d-flex flex-column"
       >
-        <v-card class="mb-2 border-left-primary rounded-sm px-2">
+        <v-card
+          class="mb-2 border-left-primary rounded-sm px-2"
+          :class="{ 'meal-plan-today-toggle': isToday(day.date) }"
+          @click="toggleTodayEdit(day.date)"
+        >
           <v-container class="px-0 d-flex align-center" height="56px">
             <v-row no-gutters style="width: 100%;">
               <v-col cols="10" class="d-flex align-center">
@@ -21,7 +25,9 @@
                 </p>
               </v-col>
               <v-col class="d-flex align-center" cols="2">
-                <GroupMealPlanDayContextMenu v-if="day.recipes.length" :recipes="day.recipes" />
+                <span @click.stop>
+                  <GroupMealPlanDayContextMenu v-if="day.recipes.length" :recipes="day.recipes" />
+                </span>
               </v-col>
             </v-row>
           </v-container>
@@ -80,6 +86,8 @@ type Days = {
 };
 
 const i18n = useI18n();
+const route = useRoute();
+const router = useRouter();
 
 const plan = computed<Days[]>(() => {
   return props.mealplans.reduce((acc, day) => {
@@ -137,4 +145,30 @@ const plan = computed<Days[]>(() => {
 const isToday = (date: Date) => {
   return isSameDay(date, new Date());
 };
+
+function toggleTodayEdit(date: Date) {
+  if (!isToday(date)) {
+    return;
+  }
+
+  void router.push({
+    name: "household-mealplan-planner-edit",
+    query: route.query,
+  });
+}
 </script>
+
+<style scoped>
+.meal-plan-today-toggle {
+  cursor: pointer;
+  transition:
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+.meal-plan-today-toggle:hover,
+.meal-plan-today-toggle:focus-within {
+  box-shadow: 0 2px 10px rgba(var(--v-theme-primary), 0.18);
+  transform: translateY(-1px);
+}
+</style>

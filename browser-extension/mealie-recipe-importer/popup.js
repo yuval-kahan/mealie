@@ -5,6 +5,7 @@ const STORAGE_KEYS = {
   createShoppingList: "createShoppingList",
   organizeShoppingList: "organizeShoppingList",
   includeAiTips: "includeAiTips",
+  includeItemImages: "includeItemImages",
 };
 
 const DEFAULT_SETTINGS = {
@@ -14,6 +15,7 @@ const DEFAULT_SETTINGS = {
   createShoppingList: true,
   organizeShoppingList: true,
   includeAiTips: true,
+  includeItemImages: true,
 };
 
 const MAX_EXTRACTED_TEXT_LENGTH = 180000;
@@ -70,6 +72,7 @@ const elements = {
   createShoppingList: document.getElementById("createShoppingList"),
   organizeShoppingList: document.getElementById("organizeShoppingList"),
   includeAiTips: document.getElementById("includeAiTips"),
+  includeItemImages: document.getElementById("includeItemImages"),
   extractOnly: document.getElementById("extractOnly"),
   sendToMealie: document.getElementById("sendToMealie"),
   connectMealie: document.getElementById("connectMealie"),
@@ -99,6 +102,7 @@ async function init() {
     elements.createShoppingList,
     elements.organizeShoppingList,
     elements.includeAiTips,
+    elements.includeItemImages,
   ].forEach((element) => {
     element.addEventListener("change", saveSettingsFromForm);
     element.addEventListener("input", saveSettingsFromForm);
@@ -161,6 +165,7 @@ function applySettings(settings) {
   elements.createShoppingList.checked = settings.createShoppingList !== false;
   elements.organizeShoppingList.checked = settings.organizeShoppingList !== false;
   elements.includeAiTips.checked = settings.includeAiTips !== false;
+  elements.includeItemImages.checked = settings.includeItemImages !== false;
   updateModeText();
   updateActionState();
 }
@@ -177,6 +182,7 @@ function currentSettings() {
     createShoppingList: elements.createShoppingList.checked,
     organizeShoppingList: elements.organizeShoppingList.checked,
     includeAiTips: elements.includeAiTips.checked,
+    includeItemImages: elements.includeItemImages.checked,
   };
 }
 
@@ -519,6 +525,7 @@ async function createRecipeFromBrowserPage(settings, extraction) {
       image_url: extraction.imageUrl,
       translate_language: translateLanguage,
       include_ai_tips: settings.includeAiTips,
+      include_item_images: settings.includeItemImages !== false,
       create_shopping_list: settings.createShoppingList,
       organize_shopping_list_with_ai: settings.organizeShoppingList,
     }),
@@ -557,6 +564,7 @@ async function createArticleFromBrowserPage(settings, extraction) {
       create_shopping_list: settings.createShoppingList,
       organize_shopping_list_with_ai: settings.organizeShoppingList,
       include_ai_tips: settings.includeAiTips,
+      include_item_images: settings.includeItemImages !== false,
     }),
   });
 

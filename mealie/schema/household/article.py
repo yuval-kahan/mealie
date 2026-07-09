@@ -38,16 +38,17 @@ class ArticleAIRequest(MealieModel):
     text: str | None = Field(None, max_length=250000)
     url: str | None = Field(None, max_length=2000)
     translate_language: str | None = None
+    create_recipe_if_present: bool = True
+    create_shopping_list: bool = True
+    organize_shopping_list_with_ai: bool = True
+    include_ai_tips: bool = True
+    include_item_images: bool = True
 
 
 class ArticleBrowserPageRequest(ArticleAIRequest):
     source_url: str | None = Field(None, max_length=2000)
     source_title: str | None = Field(None, max_length=255)
     image_url: str | None = Field(None, max_length=4000)
-    create_recipe_if_present: bool = True
-    create_shopping_list: bool = True
-    organize_shopping_list_with_ai: bool = True
-    include_ai_tips: bool = True
 
 
 class ArticleBrowserPageResponse(MealieModel):

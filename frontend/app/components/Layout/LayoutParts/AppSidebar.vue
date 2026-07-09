@@ -57,8 +57,8 @@
     <!-- Primary Links -->
     <template v-if="topLink">
       <v-list v-model:selected="state.secondarySelected" nav density="comfortable" color="primary">
-        <template v-for="nav in topLink">
-          <div v-if="!nav.restricted || isOwnGroup" :key="nav.key || nav.title">
+        <template v-for="nav in topLink" :key="nav.key || nav.title">
+          <div>
             <!-- Multi Items -->
             <v-list-group
               v-if="nav.children"
@@ -76,10 +76,10 @@
                 v-for="child in nav.children"
                 :key="child.key || child.title"
                 exact
-                :href="child.href"
-                :rel="child.href ? 'noopener' : undefined"
-                :target="child.href ? '_blank' : undefined"
-                :to="child.href ? undefined : child.to"
+                :href="navigationHref(child)"
+                :rel="navigationHref(child) ? 'noopener' : undefined"
+                :target="navigationHref(child) ? '_blank' : undefined"
+                :to="navigationTo(child)"
                 :prepend-icon="child.icon"
                 :title="child.title"
                 class="ml-4"
@@ -93,10 +93,10 @@
                 :key="(nav.key || nav.title) + 'single-item'"
                 exact
                 link
-                :href="nav.href"
-                :rel="nav.href ? 'noopener' : undefined"
-                :target="nav.href ? '_blank' : undefined"
-                :to="nav.href ? undefined : nav.to"
+                :href="navigationHref(nav)"
+                :rel="navigationHref(nav) ? 'noopener' : undefined"
+                :target="navigationHref(nav) ? '_blank' : undefined"
+                :to="navigationTo(nav)"
                 :prepend-icon="nav.icon"
                 :title="nav.title"
                 @click="handleNavClick(nav)"
@@ -111,8 +111,8 @@
     <template v-if="secondaryLinks.length > 0">
       <v-divider class="mt-2" />
       <v-list v-model:selected="state.secondarySelected" nav density="compact" exact>
-        <template v-for="nav in secondaryLinks">
-          <div v-if="!nav.restricted || isOwnGroup" :key="nav.key || nav.title">
+        <template v-for="nav in secondaryLinks" :key="nav.key || nav.title">
+          <div>
             <!-- Multi Items -->
             <v-list-group
               v-if="nav.children"
@@ -130,10 +130,10 @@
                 v-for="child in nav.children"
                 :key="child.key || child.title"
                 exact
-                :href="child.href"
-                :rel="child.href ? 'noopener' : undefined"
-                :target="child.href ? '_blank' : undefined"
-                :to="child.href ? undefined : child.to"
+                :href="navigationHref(child)"
+                :rel="navigationHref(child) ? 'noopener' : undefined"
+                :target="navigationHref(child) ? '_blank' : undefined"
+                :to="navigationTo(child)"
                 class="ml-2"
                 :prepend-icon="child.icon"
                 :title="child.title"
@@ -147,10 +147,10 @@
               :key="(nav.key || nav.title) + 'single-item'"
               exact
               link
-              :href="nav.href"
-              :rel="nav.href ? 'noopener' : undefined"
-              :target="nav.href ? '_blank' : undefined"
-              :to="nav.href ? undefined : nav.to"
+              :href="navigationHref(nav)"
+              :rel="navigationHref(nav) ? 'noopener' : undefined"
+              :target="navigationHref(nav) ? '_blank' : undefined"
+              :to="navigationTo(nav)"
               @click="handleNavClick(nav)"
             >
               <template #prepend>
@@ -305,7 +305,27 @@ function openQuickApiDialog() {
   state.apiDialog = true;
 }
 
+function navigationHref(nav: SideBarLink) {
+  if (nav.restricted && !isOwnGroup.value) {
+    return undefined;
+  }
+
+  return nav.href;
+}
+
+function navigationTo(nav: SideBarLink) {
+  if (nav.restricted && !isOwnGroup.value) {
+    return "/login";
+  }
+
+  return nav.href ? undefined : nav.to;
+}
+
 function handleNavClick(nav: SideBarLink) {
+  if (nav.restricted && !isOwnGroup.value) {
+    return;
+  }
+
   nav.onClick?.();
 }
 

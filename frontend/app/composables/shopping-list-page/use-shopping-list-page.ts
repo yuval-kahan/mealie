@@ -182,6 +182,10 @@ export function useShoppingListPage(listId: string) {
       preserveItemOrder.value = false;
       shoppingList.value = data;
       updateListItemOrder();
+      const { error: itemImagesError } = await userApi.shopping.lists.ensureItemImages(data.id);
+      if (itemImagesError) {
+        console.error("Failed to ensure shopping list item images", itemImagesError);
+      }
       window.dispatchEvent(new CustomEvent("mealie:organizers-updated"));
       alert.success(i18n.t("shopping-list.ai-organize-complete"));
     }

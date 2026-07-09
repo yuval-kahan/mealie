@@ -31,6 +31,24 @@ export interface ArticleAIRequest {
   text?: string | null;
   url?: string | null;
   translateLanguage?: string | null;
+  createRecipeIfPresent?: boolean;
+  createShoppingList?: boolean;
+  organizeShoppingListWithAi?: boolean;
+  includeAiTips?: boolean;
+  includeItemImages?: boolean;
+}
+
+export interface ArticleBrowserPageResponse {
+  article?: Article | null;
+  contentKind: string;
+  containsRecipe: boolean;
+  recipeSlug?: string | null;
+  groupSlug?: string | null;
+  recipeError?: string | null;
+  shoppingListId?: string | null;
+  shoppingListName?: string | null;
+  shoppingListOrganized: boolean;
+  shoppingListError?: string | null;
 }
 
 export interface ArticleAISearchRequest {

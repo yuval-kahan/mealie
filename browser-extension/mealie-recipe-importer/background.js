@@ -84,6 +84,7 @@ async function importRecipePage(mealieUrl, authToken, payload, extraction) {
       image_url: extraction.imageUrl,
       translate_language: translateLanguage,
       include_ai_tips: payload.includeAiTips !== false,
+      include_item_images: payload.includeItemImages !== false,
       create_shopping_list: payload.createShoppingList !== false,
       organize_shopping_list_with_ai: payload.organizeShoppingListWithAi !== false,
     }),
@@ -124,6 +125,7 @@ async function importArticlePage(mealieUrl, authToken, payload, extraction) {
       create_shopping_list: payload.createShoppingList !== false,
       organize_shopping_list_with_ai: payload.organizeShoppingListWithAi !== false,
       include_ai_tips: payload.includeAiTips !== false,
+      include_item_images: payload.includeItemImages !== false,
     }),
   });
 

@@ -5,16 +5,27 @@ export const useLoggedInState = function () {
   const loggedIn = computed(() => auth.loggedIn.value);
   const routeGroupSlug = computed(() => normalizeRouteParam(route.params.groupSlug));
   const userGroupSlug = computed(() => normalizeRouteParam(auth.user.value?.groupSlug));
+  const isHomeRoute = computed(() => routeGroupSlug.value === "home");
+  const groupSlug = computed(() => {
+    if (isHomeRoute.value && userGroupSlug.value) {
+      return userGroupSlug.value;
+    }
+
+    return routeGroupSlug.value || userGroupSlug.value;
+  });
   const isOwnGroup = computed(() => {
-    if (!routeGroupSlug.value) {
-      return loggedIn.value;
+    if (!loggedIn.value) {
+      return false;
     }
-    else {
-      return loggedIn.value && userGroupSlug.value === routeGroupSlug.value;
+
+    if (!routeGroupSlug.value || isHomeRoute.value) {
+      return true;
     }
+
+    return userGroupSlug.value === routeGroupSlug.value;
   });
 
-  return { loggedIn, isOwnGroup };
+  return { loggedIn, isOwnGroup, groupSlug, isHomeRoute };
 };
 
 function normalizeRouteParam(value: unknown) {

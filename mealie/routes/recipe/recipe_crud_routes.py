@@ -1,7 +1,8 @@
 import asyncio
-from contextlib import suppress
 from collections import defaultdict
 from collections.abc import AsyncIterable
+from contextlib import suppress
+from datetime import UTC, datetime
 from pathlib import Path as FileSystemPath
 from shutil import copyfileobj, rmtree
 from tempfile import mkdtemp
@@ -36,6 +37,10 @@ from mealie.routes._base import controller
 from mealie.routes._base.routers import MealieCrudRoute, UserAPIRouter
 from mealie.schema._mealie import MealieModel
 from mealie.schema.cookbook.cookbook import ReadCookBook
+from mealie.schema.household.group_shopping_list import (
+    ShoppingListAddRecipeParamsBulk,
+    ShoppingListCreate,
+)
 from mealie.schema.make_dependable import make_dependable
 from mealie.schema.recipe import Recipe, ScrapeRecipe, ScrapeRecipeData
 from mealie.schema.recipe.recipe import (
@@ -43,10 +48,6 @@ from mealie.schema.recipe.recipe import (
     CreateRecipeByUrlBulk,
     RecipeLastMade,
     RecipeSummary,
-)
-from mealie.schema.household.group_shopping_list import (
-    ShoppingListAddRecipeParamsBulk,
-    ShoppingListCreate,
 )
 from mealie.schema.recipe.recipe_ai_search import RecipeAISearchRequest, RecipeAISearchResponse
 from mealie.schema.recipe.recipe_asset import RecipeAsset
@@ -74,6 +75,7 @@ from mealie.services.event_bus_service.event_types import (
     EventTypes,
 )
 from mealie.services.household_services.shopping_lists import ShoppingListService
+from mealie.services.item_image_service import ItemImageEnsureResult, ItemImageService
 from mealie.services.recipe.recipe_data_service import (
     InvalidDomainError,
     NotAnImageError,
@@ -90,7 +92,28 @@ from mealie.services.scraper.scraper_strategies import (
 
 from ._base import BaseRecipeController, JSONBytes
 
-ASSET_VIDEO_EXTENSIONS = {"mp4", "webm", "mov", "m4v", "ogv"}
+ASSET_VIDEO_EXTENSIONS = {
+    "3g2",
+    "3gp",
+    "avi",
+    "f4v",
+    "flv",
+    "m1v",
+    "m2ts",
+    "m2v",
+    "m4v",
+    "mkv",
+    "mov",
+    "mp4",
+    "mpe",
+    "mpeg",
+    "mpg",
+    "mts",
+    "ogv",
+    "ts",
+    "webm",
+    "wmv",
+}
 ASSET_ALLOWED_EXTENSIONS = {
     "pdf",
     "jpg",
@@ -115,6 +138,7 @@ class CreateRecipeFromText(MealieModel):
     translate_language: str | None = None
     include_ai_tips: bool = True
     auto_image: bool = True
+    include_item_images: bool = True
 
 
 class CreateRecipeFromBrowserPage(CreateRecipeFromText):
@@ -128,6 +152,7 @@ class CreateRecipeFromBrowserPage(CreateRecipeFromText):
 class CreateRecipeAIShoppingList(MealieModel):
     include_ai_tips: bool = True
     organize_shopping_list_with_ai: bool = True
+    include_item_images: bool = True
 
 
 class CreateRecipeFromBrowserPageResponse(MealieModel):
@@ -140,6 +165,12 @@ class CreateRecipeFromBrowserPageResponse(MealieModel):
     shopping_list_error: str | None = None
 
 
+class ItemImagesEnsureResponse(MealieModel):
+    existing: int = 0
+    created: int = 0
+    failed: int = 0
+
+
 class CreateRecipeFromBrowserPageStatus(MealieModel):
     ai_enabled: bool
     provider_count: int = 0
@@ -148,6 +179,45 @@ class CreateRecipeFromBrowserPageStatus(MealieModel):
 
 @controller(router)
 class RecipeController(BaseRecipeController):
+    def _item_image_service(self) -> ItemImageService:
+        return ItemImageService(self.group_id, self.repos)
+
+    @staticmethod
+    def _item_image_result_response(result: ItemImageEnsureResult) -> ItemImagesEnsureResponse:
+        return ItemImagesEnsureResponse(existing=result.existing, created=result.created, failed=result.failed)
+
+    def _mark_recipe_item_images_ensured(self, recipe: Recipe, result: ItemImageEnsureResult) -> None:
+        if result.failed != 0:
+            return
+
+        recipe.extras = {
+            **(recipe.extras or {}),
+            "itemImagesEnsured": True,
+            "itemImagesEnsuredAt": datetime.now(UTC).isoformat(),
+            "itemImagesResult": {
+                "existing": result.existing,
+                "created": result.created,
+                "failed": result.failed,
+            },
+        }
+        self.service.update_one(recipe.slug, recipe)
+
+    async def _ensure_recipe_item_images(self, recipe: Recipe) -> ItemImageEnsureResult:
+        try:
+            result = await self._item_image_service().ensure_recipe_images(recipe)
+            self._mark_recipe_item_images_ensured(recipe, result)
+            return result
+        except Exception:
+            self.logger.exception("Failed to ensure recipe item images")
+            return ItemImageEnsureResult(failed=1)
+
+    async def _ensure_shopping_list_item_images(self, shopping_list) -> ItemImageEnsureResult:
+        try:
+            return await self._item_image_service().ensure_shopping_list_images(shopping_list)
+        except Exception:
+            self.logger.exception("Failed to ensure shopping list item images")
+            return ItemImageEnsureResult(failed=1)
+
     def _raw_ai_provider_status(self) -> tuple[int, str | None, str | None, str | None]:
         settings = self.session.execute(
             sqlalchemy.text(
@@ -179,7 +249,9 @@ class RecipeController(BaseRecipeController):
             return False
 
         provider_exists = self.session.execute(
-            sqlalchemy.text("SELECT 1 FROM ai_providers WHERE id = :provider_id AND settings_id = :settings_id LIMIT 1"),
+            sqlalchemy.text(
+                "SELECT 1 FROM ai_providers WHERE id = :provider_id AND settings_id = :settings_id LIMIT 1"
+            ),
             {"provider_id": default_provider_id, "settings_id": settings_id},
         ).scalar()
         return bool(provider_exists)
@@ -191,7 +263,9 @@ class RecipeController(BaseRecipeController):
             return False
 
         provider_exists = self.session.execute(
-            sqlalchemy.text("SELECT 1 FROM ai_providers WHERE id = :provider_id AND settings_id = :settings_id LIMIT 1"),
+            sqlalchemy.text(
+                "SELECT 1 FROM ai_providers WHERE id = :provider_id AND settings_id = :settings_id LIMIT 1"
+            ),
             {"provider_id": provider_id, "settings_id": settings_id},
         ).scalar()
         return bool(provider_exists)
@@ -511,6 +585,7 @@ class RecipeController(BaseRecipeController):
         images: list[UploadFile] = File(...),
         translate_language: str | None = Query(None, alias="translateLanguage"),
         include_ai_tips: bool = Query(True, alias="includeAiTips"),
+        include_item_images: bool = Query(True, alias="includeItemImages"),
     ):
         """
         Create a recipe from an image using OpenAI.
@@ -524,6 +599,8 @@ class RecipeController(BaseRecipeController):
             )
 
         recipe = await self.service.create_from_images(images, translate_language, include_ai_tips)
+        if include_item_images:
+            await self._ensure_recipe_item_images(recipe)
         self.publish_event(
             event_type=EventTypes.recipe_created,
             document_data=EventRecipeData(operation=EventOperation.create, recipe_slug=recipe.slug),
@@ -557,6 +634,8 @@ class RecipeController(BaseRecipeController):
                 include_ai_tips=data.include_ai_tips,
                 auto_image=data.auto_image,
             )
+            if data.include_item_images:
+                await self._ensure_recipe_item_images(recipe)
         except exceptions.NotARecipe as e:
             raise HTTPException(
                 status_code=400,
@@ -610,6 +689,8 @@ class RecipeController(BaseRecipeController):
                 data.include_ai_tips,
                 auto_image=not data.image_url,
             )
+            if data.include_item_images:
+                await self._ensure_recipe_item_images(recipe)
         except exceptions.NotARecipe as e:
             raise HTTPException(
                 status_code=400,
@@ -691,6 +772,7 @@ class RecipeController(BaseRecipeController):
             response,
             include_ai_tips=data.include_ai_tips,
             organize_shopping_list_with_ai=data.organize_shopping_list_with_ai,
+            include_item_images=data.include_item_images,
             extras={
                 "aiCreatedFromBrowserExtension": True,
                 "sourceUrl": data.source_url,
@@ -703,6 +785,7 @@ class RecipeController(BaseRecipeController):
         response: CreateRecipeFromBrowserPageResponse,
         include_ai_tips: bool,
         organize_shopping_list_with_ai: bool,
+        include_item_images: bool = True,
         extras: dict[str, object | None] | None = None,
     ) -> CreateRecipeFromBrowserPageResponse:
         shopping_service = ShoppingListService(self.repos)
@@ -750,6 +833,9 @@ class RecipeController(BaseRecipeController):
                 except Exception as e:
                     self.logger.exception("Failed to organize browser-extension shopping list with AI")
                     response.shopping_list_error = str(e) or "AI shopping list organization failed"
+
+            if include_item_images:
+                await self._ensure_shopping_list_item_images(shopping_list)
         except Exception as e:
             self.logger.exception("Failed to create browser-extension shopping list")
             response.shopping_list_error = str(e) or "Shopping list creation failed"
@@ -785,10 +871,15 @@ class RecipeController(BaseRecipeController):
             response,
             include_ai_tips=data.include_ai_tips,
             organize_shopping_list_with_ai=data.organize_shopping_list_with_ai,
+            include_item_images=data.include_item_images,
             extras={"aiCreatedFromRecipeAction": True},
         )
 
-    @router.post("/{slug}/shopping-list/open-or-create", response_model=CreateRecipeFromBrowserPageResponse, status_code=201)
+    @router.post(
+        "/{slug}/shopping-list/open-or-create",
+        response_model=CreateRecipeFromBrowserPageResponse,
+        status_code=201,
+    )
     async def open_or_create_shopping_list_for_recipe(self, slug: str) -> CreateRecipeFromBrowserPageResponse:
         """Return an existing recipe-named shopping list, or create one and organize it with AI when available."""
 
@@ -819,8 +910,22 @@ class RecipeController(BaseRecipeController):
             response,
             include_ai_tips=True,
             organize_shopping_list_with_ai=self._ai_enabled(),
+            include_item_images=True,
             extras={"createdFromOpenOrCreateRecipeShoppingList": True},
         )
+
+    @router.post("/{slug}/item-images/ensure", response_model=ItemImagesEnsureResponse)
+    async def ensure_recipe_item_images(self, slug: str) -> ItemImagesEnsureResponse:
+        """Find and cache ingredient/tool images for a recipe."""
+
+        try:
+            recipe = self.service.get_one(slug)
+        except Exception as e:
+            self.handle_exceptions(e)
+            raise
+
+        result = await self._ensure_recipe_item_images(recipe)
+        return self._item_image_result_response(result)
 
     @router.post("/ai-search", response_model=RecipeAISearchResponse)
     async def search_recipes_with_ai(self, data: RecipeAISearchRequest) -> RecipeAISearchResponse:

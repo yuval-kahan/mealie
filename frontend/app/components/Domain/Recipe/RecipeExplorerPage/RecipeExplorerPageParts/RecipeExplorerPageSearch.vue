@@ -150,6 +150,7 @@
 
 <script setup lang="ts">
 import RecipeExplorerPageSearchFilters from "./RecipeExplorerPageSearchFilters.vue";
+import { useLoggedInState } from "~/composables/use-logged-in-state";
 import { useRecipeExplorerSearch, clearRecipeExplorerSearchState } from "~/composables/use-recipe-explorer-search";
 
 const props = withDefaults(defineProps<{
@@ -163,8 +164,6 @@ const emit = defineEmits<{
   "update:finderOpen": [value: boolean];
 }>();
 
-const auth = useMealieAuth();
-const route = useRoute();
 const { $globals } = useNuxtApp();
 const i18n = useI18n();
 const showRandomLoading = ref(false);
@@ -173,7 +172,7 @@ const finderOpenModel = computed({
   set: value => emit("update:finderOpen", value),
 });
 
-const groupSlug = computed(() => route.params.groupSlug as string || auth.user.value?.groupSlug || "");
+const { groupSlug } = useLoggedInState();
 
 const {
   state,
@@ -193,8 +192,15 @@ defineExpose({
 });
 
 onMounted(async () => {
-  await initialize();
-  emit("ready");
+  try {
+    await initialize();
+  }
+  catch (error) {
+    console.error("Failed to initialize recipe explorer search", error);
+  }
+  finally {
+    emit("ready");
+  }
 });
 
 onUnmounted(() => {

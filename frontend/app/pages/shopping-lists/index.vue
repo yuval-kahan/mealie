@@ -8,13 +8,32 @@
       :title="$t('shopping-list.create-shopping-list')"
       :icon="$globals.icons.formatListCheck"
       can-submit
+      keep-open
+      :loading="state.createLoading"
+      :submit-disabled="!canSubmitCreateShoppingList"
       @submit="createOne"
+      @close="closeCreateShoppingListDialog"
     >
       <v-card-text>
         <v-text-field
           v-model="state.createName"
           autofocus
           :label="$t('shopping-list.new-list')"
+          :placeholder="selectedCreateRecipe?.name || $t('shopping-list.new-list')"
+        />
+        <v-autocomplete
+          v-model="state.createRecipeSlug"
+          v-model:search="state.createRecipeSearch"
+          :items="createRecipeOptions"
+          item-title="name"
+          item-value="slug"
+          clearable
+          hide-no-data
+          :loading="state.createRecipeSearching"
+          :label="$t('shopping-list.link-recipe')"
+          :placeholder="$t('shopping-list.search-recipe')"
+          :prepend-inner-icon="$globals.icons.search"
+          @update:search="searchCreateRecipes"
         />
       </v-card-text>
     </BaseDialog>
@@ -84,6 +103,16 @@
     </BasePageTitle>
 
     <v-container class="d-flex align-center justify-end px-0 pt-0 pb-4">
+      <v-btn
+        size="small"
+        class="my-0 mr-4 shopping-list-image-toggle"
+        :color="preferences.showItemImages ? 'primary' : 'grey'"
+        :variant="preferences.showItemImages ? 'tonal' : 'outlined'"
+        :prepend-icon="$globals.icons.fileImage"
+        @click="preferences.showItemImages = !preferences.showItemImages"
+      >
+        {{ $t("recipe.toggle-item-images") }}
+      </v-btn>
       <v-switch
         v-model="preferences.openListsInline"
         hide-details
@@ -101,7 +130,7 @@
       <BaseButton
         create
         class="my-0"
-        @click="state.createDialog = true"
+        @click="openCreateShoppingListDialog"
       />
     </v-container>
 
@@ -317,6 +346,11 @@
                       </v-btn>
                     </template>
                     <template v-else>
+                      <ItemImageThumb
+                        v-if="preferences.showItemImages"
+                        :src="itemImage(item.groupId, 'food', inlineShoppingListItemImageName(item))"
+                        :alt="formatInlineShoppingListItem(item)"
+                      />
                       <span class="shopping-list-inline-item-text">{{ formatInlineShoppingListItem(item) }}</span>
                       <v-spacer />
                       <v-btn
@@ -357,6 +391,9 @@
 
 <script setup lang="ts">
 import type { ShoppingListItemOut, ShoppingListOut } from "~/lib/api/types/household";
+import type { Recipe } from "~/lib/api/types/recipe";
+import ItemImageThumb from "~/components/Domain/ItemImages/ItemImageThumb.vue";
+import { useStaticRoutes } from "~/composables/api";
 import { useUserApi } from "~/composables/api/api-client";
 import { useAsyncKey } from "~/composables/use-utils";
 import { useShoppingListPreferences } from "~/composables/use-users/preferences";
@@ -374,6 +411,8 @@ const i18n = useI18n();
 const ready = ref(false);
 const userApi = useUserApi();
 const route = useRoute();
+const router = useRouter();
+const { itemImage } = useStaticRoutes();
 const { copyShoppingList } = useShoppingListCopy();
 const copyingShoppingListIds = ref<Set<string>>(new Set());
 const organizingShoppingListIds = ref<Set<string>>(new Set());
@@ -396,6 +435,10 @@ const preferences = useShoppingListPreferences();
 
 const state = reactive({
   createName: "",
+  createRecipeSlug: null as string | null,
+  createRecipeSearch: "",
+  createRecipeSearching: false,
+  createLoading: false,
   createDialog: false,
   deleteDialog: false,
   deleteTarget: "",
@@ -404,6 +447,17 @@ const state = reactive({
   renameTarget: null as ShoppingListOut | null,
   ownerDialog: false,
   ownerTarget: ref<ShoppingListOut | null>(null),
+});
+const createRecipeOptions = ref<Recipe[]>([]);
+let createRecipeSearchTimer: ReturnType<typeof setTimeout> | null = null;
+let createRecipeSearchRequest = 0;
+
+const selectedCreateRecipe = computed(() => {
+  return createRecipeOptions.value.find(recipe => recipe.slug === state.createRecipeSlug) || null;
+});
+
+const canSubmitCreateShoppingList = computed(() => {
+  return Boolean(state.createName.trim() || selectedCreateRecipe.value);
 });
 
 const { data: shoppingLists } = useAsyncData(useAsyncKey(), async () => {
@@ -435,6 +489,32 @@ watch(
     }
   },
 );
+
+watch(
+  () => route.query.create,
+  () => {
+    openCreateDialogFromRoute();
+  },
+);
+
+watch(
+  () => state.createRecipeSlug,
+  () => {
+    if (!state.createName.trim() && selectedCreateRecipe.value?.name) {
+      state.createName = selectedCreateRecipe.value.name;
+    }
+  },
+);
+
+onMounted(() => {
+  openCreateDialogFromRoute();
+});
+
+onUnmounted(() => {
+  if (createRecipeSearchTimer) {
+    clearTimeout(createRecipeSearchTimer);
+  }
+});
 
 watch(
   () => shoppingListChoices,
@@ -714,6 +794,10 @@ function formatInlineShoppingListItem(item: ShoppingListItemOut) {
   return [amount, item.unit?.name, item.food?.name, item.note].filter(Boolean).join(" ");
 }
 
+function inlineShoppingListItemImageName(item: ShoppingListItemOut) {
+  return item.food?.name || item.display || item.note || "";
+}
+
 function replaceInlineShoppingListItem(listId: string, item: ShoppingListItemOut) {
   const list = expandedShoppingLists.value[listId];
   if (!list?.listItems) {
@@ -906,6 +990,10 @@ async function organizeShoppingListById(id: string) {
       return;
     }
 
+    const { error: itemImagesError } = await userApi.shopping.lists.ensureItemImages(id);
+    if (itemImagesError) {
+      console.error("Failed to ensure shopping list item images", itemImagesError);
+    }
     window.dispatchEvent(new CustomEvent("mealie:organizers-updated"));
     replaceShoppingList(data);
     alert.success(i18n.t("shopping-list.ai-organize-complete"));
@@ -918,23 +1006,130 @@ async function organizeShoppingListById(id: string) {
   }
 }
 
+function resetCreateShoppingListDialog() {
+  if (createRecipeSearchTimer) {
+    clearTimeout(createRecipeSearchTimer);
+    createRecipeSearchTimer = null;
+  }
+  createRecipeSearchRequest += 1;
+  state.createName = "";
+  state.createRecipeSlug = null;
+  state.createRecipeSearch = "";
+  state.createRecipeSearching = false;
+  createRecipeOptions.value = [];
+}
+
+function openCreateShoppingListDialog() {
+  resetCreateShoppingListDialog();
+  state.createDialog = true;
+  searchCreateRecipes("");
+}
+
+function closeCreateShoppingListDialog() {
+  resetCreateShoppingListDialog();
+  clearCreateQuery();
+}
+
+function openCreateDialogFromRoute() {
+  if (route.query.create === "1" || route.query.create === "true") {
+    openCreateShoppingListDialog();
+  }
+}
+
+function clearCreateQuery() {
+  if (!route.query.create) {
+    return;
+  }
+
+  const nextQuery = { ...route.query };
+  delete nextQuery.create;
+  void router.replace({ path: route.path, query: nextQuery });
+}
+
+function searchCreateRecipes(query: string | null) {
+  if (createRecipeSearchTimer) {
+    clearTimeout(createRecipeSearchTimer);
+  }
+
+  createRecipeSearchTimer = setTimeout(() => {
+    void loadCreateRecipeOptions(query || "");
+  }, 220);
+}
+
+async function loadCreateRecipeOptions(query: string) {
+  const requestId = ++createRecipeSearchRequest;
+  state.createRecipeSearching = true;
+  try {
+    const { data } = await userApi.recipes.search({
+      search: query.trim(),
+      page: 1,
+      perPage: 20,
+      orderBy: "name",
+      orderDirection: "asc",
+    });
+
+    if (requestId !== createRecipeSearchRequest) {
+      return;
+    }
+
+    createRecipeOptions.value = data?.items || [];
+  }
+  finally {
+    if (requestId === createRecipeSearchRequest) {
+      state.createRecipeSearching = false;
+    }
+  }
+}
+
+async function addSelectedRecipeToShoppingList(listId: string, recipeSlug: string) {
+  const { data: recipe, error } = await userApi.recipes.getOne(recipeSlug);
+  if (error || !recipe?.id) {
+    alert.error(i18n.t("events.something-went-wrong"));
+    return;
+  }
+
+  const { error: addError } = await userApi.shopping.lists.addRecipes(listId, [
+    {
+      recipeId: recipe.id,
+      recipeIncrementQuantity: 1,
+      recipeIngredients: recipe.recipeIngredient || null,
+    },
+  ]);
+
+  if (addError) {
+    alert.error(i18n.t("events.something-went-wrong"));
+  }
+}
+
 async function createOne() {
-  const name = state.createName.trim();
+  const recipeSlug = state.createRecipeSlug;
+  const name = state.createName.trim() || selectedCreateRecipe.value?.name?.trim() || "";
   if (!name) {
     return;
   }
 
-  const existingList = shoppingLists.value?.find(list => (list.name || "").trim().toLocaleLowerCase() === name.toLocaleLowerCase());
-  if (existingList) {
-    alert.error(i18n.t("shopping-list.list-name-already-exists"));
-    return;
+  state.createLoading = true;
+  try {
+    const existingList = shoppingLists.value?.find(list => (list.name || "").trim().toLocaleLowerCase() === name.toLocaleLowerCase());
+    if (existingList) {
+      alert.error(i18n.t("shopping-list.list-name-already-exists"));
+      return;
+    }
+
+    const { data } = await userApi.shopping.lists.createOne({ name });
+
+    if (data) {
+      if (recipeSlug) {
+        await addSelectedRecipeToShoppingList(data.id, recipeSlug);
+      }
+      state.createDialog = false;
+      closeCreateShoppingListDialog();
+      await refresh();
+      window.dispatchEvent(new CustomEvent("mealie:organizers-updated"));
+    }
   }
-
-  const { data } = await userApi.shopping.lists.createOne({ name });
-
-  if (data) {
-    refresh();
-    state.createName = "";
+  finally {
+    state.createLoading = false;
   }
 }
 
@@ -1093,6 +1288,19 @@ async function deleteOne() {
 .shopping-list-ready-action--reset:hover,
 .shopping-list-ready-action--reset:focus-visible {
   background-color: rgba(var(--v-theme-warning), 0.12) !important;
+}
+
+.shopping-list-image-toggle {
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+.shopping-list-image-toggle:hover,
+.shopping-list-image-toggle:focus-visible {
+  box-shadow: 0 2px 8px rgba(var(--v-theme-on-surface), 0.16);
+  transform: translateY(-1px);
 }
 
 .shopping-list-inline-group + .shopping-list-inline-group {

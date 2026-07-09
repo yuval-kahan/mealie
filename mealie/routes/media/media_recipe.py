@@ -10,11 +10,26 @@ from mealie.schema.recipe.recipe_timeline_events import RecipeTimelineEventOut
 router = APIRouter(prefix="/recipes")
 
 VIDEO_MEDIA_TYPES = {
+    ".3g2": "video/3gpp2",
+    ".3gp": "video/3gpp",
+    ".avi": "video/x-msvideo",
+    ".f4v": "video/x-f4v",
+    ".flv": "video/x-flv",
+    ".m1v": "video/mpeg",
+    ".m2ts": "video/mp2t",
+    ".m2v": "video/mpeg",
     ".m4v": "video/mp4",
+    ".mkv": "video/x-matroska",
     ".mov": "video/quicktime",
     ".mp4": "video/mp4",
+    ".mpe": "video/mpeg",
+    ".mpeg": "video/mpeg",
+    ".mpg": "video/mpeg",
+    ".mts": "video/mp2t",
     ".ogv": "video/ogg",
+    ".ts": "video/mp2t",
     ".webm": "video/webm",
+    ".wmv": "video/x-ms-wmv",
 }
 
 

@@ -93,6 +93,19 @@
           </v-list-item>
         </v-list>
       </v-menu>
+      <v-btn
+        variant="text"
+        :icon="$vuetify.display.xs"
+        :color="userExperiencePreferences.showRecipeItemImages ? 'primary' : undefined"
+        :title="$t('recipe.toggle-item-images')"
+        :aria-label="$t('recipe.toggle-item-images')"
+        @click="userExperiencePreferences.showRecipeItemImages = !userExperiencePreferences.showRecipeItemImages"
+      >
+        <v-icon :start="!$vuetify.display.xs">
+          {{ $globals.icons.fileImage }}
+        </v-icon>
+        {{ $vuetify.display.xs ? null : $t("recipe.item-images") }}
+      </v-btn>
       <ContextMenu
         v-if="!$vuetify.display.smAndDown"
         :items="[
@@ -124,6 +137,7 @@
               :image="recipe.image!"
               :tags="recipe.tags!"
               :recipe-id="recipe.id!"
+              :extras="recipe.extras"
               @delete="$emit('delete', $event)"
               @renamed="$emit('renamed', $event)"
             />
@@ -150,6 +164,7 @@
               :image="recipe.image!"
               :tags="recipe.tags!"
               :recipe-id="recipe.id!"
+              :extras="recipe.extras"
               @delete="$emit('delete', $event)"
               @renamed="$emit('renamed', $event)"
             />
@@ -175,7 +190,7 @@ import RecipeCardMobile from "./RecipeCardMobile.vue";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import { useLazyRecipes } from "~/composables/recipes";
 import type { Recipe } from "~/lib/api/types/recipe";
-import { useUserSortPreferences } from "~/composables/use-users/preferences";
+import { useUserExperiencePreferences, useUserSortPreferences } from "~/composables/use-users/preferences";
 import type { RecipeSearchQuery } from "~/lib/api/user/recipes/recipe";
 
 const REPLACE_RECIPES_EVENT = "replaceRecipes";
@@ -209,6 +224,7 @@ const emit = defineEmits<{
 
 const display = useDisplay();
 const preferences = useUserSortPreferences();
+const userExperiencePreferences = useUserExperiencePreferences();
 
 const EVENTS = {
   az: "az",
@@ -219,9 +235,8 @@ const EVENTS = {
   shuffle: "shuffle",
 };
 
-const auth = useMealieAuth();
 const { $globals } = useNuxtApp();
-const { isOwnGroup } = useLoggedInState();
+const { isOwnGroup, groupSlug } = useLoggedInState();
 const useMobileCards = computed(() => {
   return display.smAndDown.value || preferences.value.useMobileCards;
 });
@@ -234,8 +249,6 @@ const sortLoading = ref(false);
 const randomSeed = ref(Date.now().toString());
 
 const route = useRoute();
-const groupSlug = computed(() => route.params.groupSlug as string || auth.user.value?.groupSlug || "");
-
 const page = ref(1);
 const perPage = 32;
 const hasMore = ref(true);
@@ -285,28 +298,35 @@ async function fetchRecipes(pageCount = 1) {
 
 onMounted(async () => {
   loading.value = true;
-  const savedPage = getSavedPage(route.path);
+  try {
+    const savedPage = getSavedPage(route.path);
 
-  if (savedPage && savedPage > 2) {
-    page.value = 1;
-    hasMore.value = true;
-    const newRecipes = await fetchRecipes(savedPage);
-    if (newRecipes.length < perPage * savedPage) {
-      hasMore.value = false;
-    }
-    page.value = savedPage;
-    emit(REPLACE_RECIPES_EVENT, newRecipes);
-    ready.value = true;
-    restorePosition(route.path);
-  }
-  else {
-    await initRecipes();
-    ready.value = true;
-    if (savedPage) {
+    if (savedPage && savedPage > 2) {
+      page.value = 1;
+      hasMore.value = true;
+      const newRecipes = await fetchRecipes(savedPage);
+      if (newRecipes.length < perPage * savedPage) {
+        hasMore.value = false;
+      }
+      page.value = savedPage;
+      emit(REPLACE_RECIPES_EVENT, newRecipes);
       restorePosition(route.path);
     }
+    else {
+      await initRecipes();
+      if (savedPage) {
+        restorePosition(route.path);
+      }
+    }
   }
-  loading.value = false;
+  catch (error) {
+    console.error("Failed to load recipe cards", error);
+    emit(REPLACE_RECIPES_EVENT, []);
+  }
+  finally {
+    ready.value = true;
+    loading.value = false;
+  }
 });
 
 let lastQuery: string | undefined = JSON.stringify(props.query);
@@ -317,8 +337,16 @@ watch(
     if (lastQuery !== newValueString) {
       lastQuery = newValueString;
       ready.value = false;
-      await initRecipes();
-      ready.value = true;
+      try {
+        await initRecipes();
+      }
+      catch (error) {
+        console.error("Failed to refresh recipe cards", error);
+        emit(REPLACE_RECIPES_EVENT, []);
+      }
+      finally {
+        ready.value = true;
+      }
     }
   },
 );

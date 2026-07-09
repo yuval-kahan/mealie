@@ -620,16 +620,12 @@ const props = withDefaults(defineProps<{
 
 const display = useDisplay();
 const i18n = useI18n();
-const auth = useMealieAuth();
-const route = useRoute();
-
 const useMobile = computed(() => display.smAndDown.value);
 const resultsColumnStyle = computed(() => {
   return useMobile.value || !props.scrollResults ? "" : "max-height: 70vh; overflow-y: auto";
 });
 
-const groupSlug = computed(() => route.params.groupSlug as string || auth.user.value?.groupSlug || "");
-const { isOwnGroup } = useLoggedInState();
+const { isOwnGroup, groupSlug } = useLoggedInState();
 const userApi = useUserApi();
 const api = isOwnGroup.value ? userApi : usePublicExploreApi(groupSlug.value).explore;
 

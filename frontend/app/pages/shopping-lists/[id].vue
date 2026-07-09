@@ -110,6 +110,15 @@
               {{ $t("shopping-list.organize-with-ai") }}
             </v-btn>
             <v-btn
+              class="shopping-list-image-toggle"
+              :color="preferences.showItemImages ? 'primary' : 'grey'"
+              :variant="preferences.showItemImages ? 'tonal' : 'outlined'"
+              :prepend-icon="$globals.icons.fileImage"
+              @click="preferences.showItemImages = !preferences.showItemImages"
+            >
+              {{ $t("recipe.toggle-item-images") }}
+            </v-btn>
+            <v-btn
               class="shopping-list-ready-action"
               :class="{ 'shopping-list-ready-action--active': shoppingListGroceriesReady }"
               :color="shoppingListGroceriesReady ? 'success' : 'grey'"
@@ -273,6 +282,7 @@
                   :units="allUnits || []"
                   :foods="allFoods || []"
                   :recipes="recipeMap"
+                  :show-image="preferences.showItemImages"
                   @checked="(item) => {
                     saveListItem(item);
                     if (item.checked) {
@@ -390,6 +400,7 @@ import ShoppingListItemEditor from "~/components/Domain/ShoppingList/ShoppingLis
 import { useShoppingListPage } from "~/composables/shopping-list-page/use-shopping-list-page";
 import { useLabelStore, useUnitStore, useFoodStore } from "~/composables/store";
 import { alert } from "~/composables/use-toast";
+import { useShoppingListPreferences } from "~/composables/use-users/preferences";
 import type { ShoppingListItemOut } from "~/lib/api/types/household";
 
 const { mdAndUp } = useDisplay();
@@ -406,6 +417,7 @@ const shoppingListPage = useShoppingListPage(id);
 const { store: allLabels } = useLabelStore();
 const { store: allUnits } = useUnitStore();
 const { store: allFoods } = useFoodStore();
+const preferences = useShoppingListPreferences();
 
 function itemCheckedToast(item: ShoppingListItemOut) {
   setTimeout(() => {
@@ -561,6 +573,19 @@ const hasShoppingListItems = computed(() => {
 .shopping-list-ready-action--reset:hover,
 .shopping-list-ready-action--reset:focus-visible {
   background-color: rgba(var(--v-theme-warning), 0.12) !important;
+}
+
+.shopping-list-image-toggle {
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+.shopping-list-image-toggle:hover,
+.shopping-list-image-toggle:focus-visible {
+  box-shadow: 0 2px 8px rgba(var(--v-theme-on-surface), 0.16);
+  transform: translateY(-1px);
 }
 
 @media (max-width: 600px) {

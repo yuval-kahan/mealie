@@ -22,19 +22,36 @@ export function buildShoppingListReadyExtras(list: Pick<ShoppingListOut, "extras
 }
 
 export function useShoppingListAvailability() {
+  const auth = useMealieAuth();
+  const { loggedIn, isOwnGroup } = useLoggedInState();
   const userApi = useUserApi();
   const readyRecipeNames = useState<Record<string, true>>("shopping-list-ready-recipe-names", () => ({}));
   const loaded = useState("shopping-list-ready-recipe-names-loaded", () => false);
+  const loadedForUserId = useState<string | null>("shopping-list-ready-recipe-names-user", () => null);
   const loading = useState("shopping-list-ready-recipe-names-loading", () => false);
 
   async function refreshAvailability() {
+    const userId = auth.user.value?.id || null;
+    if (!loggedIn.value || !isOwnGroup.value || !userId) {
+      readyRecipeNames.value = {};
+      loadedForUserId.value = null;
+      loaded.value = true;
+      return;
+    }
+
     if (loading.value) {
       return;
     }
 
     loading.value = true;
     try {
-      const { data } = await userApi.shopping.lists.getAll(1, -1, { orderBy: "name", orderDirection: "asc" });
+      const { data, error } = await userApi.shopping.lists.getAll(1, -1, { orderBy: "name", orderDirection: "asc" });
+      if (error) {
+        readyRecipeNames.value = {};
+        loaded.value = false;
+        return;
+      }
+
       const next: Record<string, true> = {};
 
       data?.items?.forEach((list) => {
@@ -45,6 +62,7 @@ export function useShoppingListAvailability() {
       });
 
       readyRecipeNames.value = next;
+      loadedForUserId.value = userId;
       loaded.value = true;
     }
     finally {
@@ -53,7 +71,15 @@ export function useShoppingListAvailability() {
   }
 
   async function ensureAvailability() {
-    if (!loaded.value) {
+    const userId = auth.user.value?.id || null;
+    if (!loggedIn.value || !isOwnGroup.value || !userId) {
+      if (!loaded.value || loadedForUserId.value) {
+        await refreshAvailability();
+      }
+      return;
+    }
+
+    if (!loaded.value || loadedForUserId.value !== userId) {
       await refreshAvailability();
     }
   }

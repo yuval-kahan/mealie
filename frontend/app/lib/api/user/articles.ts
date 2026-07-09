@@ -5,6 +5,7 @@ import type {
   ArticleAIRequest,
   ArticleAISearchRequest,
   ArticleAISearchResponse,
+  ArticleBrowserPageResponse,
   ArticleCreate,
   ArticleUpdate,
 } from "~/lib/api/types/article";
@@ -38,7 +39,7 @@ export class ArticlesAPI extends BaseAPI {
   }
 
   async createWithAI(payload: ArticleAIRequest) {
-    return await this.requests.post<Article, ArticleAIRequest>(routes.aiCreate, payload);
+    return await this.requests.post<ArticleBrowserPageResponse, ArticleAIRequest>(routes.aiCreate, payload);
   }
 
   async updateOne(id: string, payload: ArticleUpdate) {

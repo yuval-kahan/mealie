@@ -11,12 +11,19 @@ import type {
   ShoppingListUpdate,
 } from "~/lib/api/types/household";
 
+export interface ShoppingListItemImagesEnsureResponse {
+  existing: number;
+  created: number;
+  failed: number;
+}
+
 const prefix = "/api";
 
 const routes = {
   shoppingLists: `${prefix}/households/shopping/lists`,
   shoppingListsId: (id: string) => `${prefix}/households/shopping/lists/${id}`,
   shoppingListIdOrganizeAi: (id: string) => `${prefix}/households/shopping/lists/${id}/organize-ai`,
+  shoppingListIdItemImagesEnsure: (id: string) => `${prefix}/households/shopping/lists/${id}/item-images/ensure`,
   shoppingListIdAddRecipe: (id: string) => `${prefix}/households/shopping/lists/${id}/recipe`,
   shoppingListIdRemoveRecipe: (id: string, recipeId: string) => `${prefix}/households/shopping/lists/${id}/recipe/${recipeId}/delete`,
   shoppingListIdUpdateLabelSettings: (id: string) => `${prefix}/households/shopping/lists/${id}/label-settings`,
@@ -44,6 +51,14 @@ export class ShoppingListsApi extends BaseCRUDAPI<ShoppingListCreate, ShoppingLi
 
   async organizeWithAi(itemId: string, includeAiTips = false) {
     return await this.requests.post<ShoppingListOut>(routes.shoppingListIdOrganizeAi(itemId), { includeAiTips });
+  }
+
+  async ensureItemImages(itemId: string) {
+    return await this.requests.post<ShoppingListItemImagesEnsureResponse>(
+      routes.shoppingListIdItemImagesEnsure(itemId),
+      {},
+      { suppressAlert: true },
+    );
   }
 }
 

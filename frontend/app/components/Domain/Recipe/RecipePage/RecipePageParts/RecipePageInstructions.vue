@@ -366,6 +366,7 @@
                             })"
                             :scale="scale"
                             :is-cook-mode="isCookMode"
+                            :group-id="recipe.groupId"
                           />
                         </div>
                       </v-col>

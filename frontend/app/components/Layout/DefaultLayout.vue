@@ -153,6 +153,50 @@
               />
             </v-window-item>
           </v-window>
+          <div
+            v-if="quickArticleCreateMode !== 'manual'"
+            class="quick-article-ai-options mt-2"
+          >
+            <v-checkbox
+              v-model="quickArticleExtractRecipeIfPresent"
+              hide-details
+              color="primary"
+              density="compact"
+              :label="$t('article.extract-recipe-if-present')"
+            />
+            <v-checkbox
+              v-model="quickArticleCreateShoppingList"
+              hide-details
+              color="primary"
+              density="compact"
+              :disabled="!quickArticleExtractRecipeIfPresent"
+              :label="$t('article.create-shopping-list-for-recipes')"
+            />
+            <v-checkbox
+              v-model="quickArticleOrganizeShoppingList"
+              hide-details
+              color="primary"
+              density="compact"
+              :disabled="!quickArticleExtractRecipeIfPresent || !quickArticleCreateShoppingList"
+              :label="$t('article.organize-shopping-list-with-ai')"
+            />
+            <v-checkbox
+              v-model="quickArticleIncludeAiTips"
+              hide-details
+              color="primary"
+              density="compact"
+              :disabled="!quickArticleExtractRecipeIfPresent"
+              :label="$t('recipe.include-ai-tips-description')"
+            />
+            <v-checkbox
+              v-model="quickArticleIncludeItemImages"
+              hide-details
+              color="primary"
+              density="compact"
+              :disabled="!quickArticleExtractRecipeIfPresent"
+              :label="$t('recipe.include-item-images-description')"
+            />
+          </div>
         </v-card-text>
       </BaseDialog>
       <BaseDialog
@@ -782,13 +826,12 @@ const i18n = useI18n();
 const { $globals } = useNuxtApp();
 const display = useDisplay();
 const auth = useMealieAuth();
-const { isOwnGroup } = useLoggedInState();
+const { loggedIn, isOwnGroup, groupSlug, isHomeRoute } = useLoggedInState();
 const { group } = useGroupSelf();
 const api = useUserApi(i18n);
 const { copyShoppingList } = useShoppingListCopy();
 
 const route = useRoute();
-const groupSlug = computed(() => route.params.groupSlug as string || auth.user.value?.groupSlug || "");
 
 const cookbookPreferences = useCookbookPreferences();
 const organizerSidebarPreferences = useOrganizerSidebarPreferences();
@@ -850,7 +893,7 @@ const cookbooks = computed(() => {
   if (ownCookbookStore.value) {
     return ownCookbookStore.value.store.value;
   }
-  else if (groupSlug.value) {
+  else if (groupSlug.value && !isHomeRoute.value) {
     const publicStore = getPublicCookbookStore(groupSlug.value);
     return unref(publicStore.store);
   }
@@ -861,7 +904,7 @@ const categories = computed(() => {
   if (ownCategoryStore.value) {
     return ownCategoryStore.value.store.value;
   }
-  else if (groupSlug.value) {
+  else if (groupSlug.value && !isHomeRoute.value) {
     const publicStore = getPublicCategoryStore(groupSlug.value);
     return unref(publicStore.store);
   }
@@ -872,7 +915,7 @@ const tags = computed(() => {
   if (ownTagStore.value) {
     return ownTagStore.value.store.value;
   }
-  else if (groupSlug.value) {
+  else if (groupSlug.value && !isHomeRoute.value) {
     const publicStore = getPublicTagStore(groupSlug.value);
     return unref(publicStore.store);
   }
@@ -888,6 +931,11 @@ const quickArticleSaving = ref(false);
 const quickArticleCreateMode = ref<"manual" | "ai-text" | "ai-link">("manual");
 const quickArticleAiText = ref("");
 const quickArticleAiUrl = ref("");
+const quickArticleExtractRecipeIfPresent = ref(true);
+const quickArticleCreateShoppingList = ref(true);
+const quickArticleOrganizeShoppingList = ref(true);
+const quickArticleIncludeAiTips = ref(true);
+const quickArticleIncludeItemImages = ref(true);
 const quickArticleCategoryOptions = ref<string[]>([]);
 const quickArticleTagOptions = ref<string[]>([]);
 const quickArticleForm = reactive<ArticleCreate>({
@@ -1246,7 +1294,15 @@ const regularUploadedBooks = computed(() => uploadedBooks.value.filter(book => !
 const translatedUploadedBooks = computed(() => uploadedBooks.value.filter(book => book.isTranslatedBook));
 
 const shoppingListLinks = computed<SideBarLink[]>(() => {
-  return shoppingLists.value.map(list => ({
+  const createLink: SideBarLink = {
+    key: "new-shopping-list",
+    icon: $globals.icons.createAlt,
+    title: i18n.t("shopping-list.new-list"),
+    to: "/shopping-lists?create=true&disableRedirect=true",
+    restricted: true,
+  };
+
+  return [createLink, ...shoppingLists.value.map(list => ({
     key: list.id,
     icon: $globals.icons.formatListCheck,
     title: list.name || i18n.t("shopping-list.shopping-list"),
@@ -1261,7 +1317,7 @@ const shoppingListLinks = computed<SideBarLink[]>(() => {
       },
     ],
     restricted: true,
-  }));
+  }))];
 });
 
 const currentUserHouseholdId = computed(() => auth.user.value?.householdId);
@@ -1366,7 +1422,7 @@ async function refreshUploadedBooks() {
     return;
   }
 
-  if (!isOwnGroup.value || !auth.user.value) {
+  if (!loggedIn.value || !isOwnGroup.value || !auth.user.value) {
     uploadedBooks.value = [];
     clearUploadedBookRefreshTimer();
     return;
@@ -1387,7 +1443,7 @@ async function refreshUploadedBooks() {
 }
 
 async function refreshShoppingLists() {
-  if (!isOwnGroup.value || !auth.user.value) {
+  if (!loggedIn.value || !isOwnGroup.value || !auth.user.value) {
     shoppingLists.value = [];
     return;
   }
@@ -1970,6 +2026,11 @@ function resetQuickArticleForm() {
   quickArticleCreateMode.value = "manual";
   quickArticleAiText.value = "";
   quickArticleAiUrl.value = "";
+  quickArticleExtractRecipeIfPresent.value = true;
+  quickArticleCreateShoppingList.value = true;
+  quickArticleOrganizeShoppingList.value = true;
+  quickArticleIncludeAiTips.value = true;
+  quickArticleIncludeItemImages.value = true;
   quickArticleForm.title = "";
   quickArticleForm.summary = "";
   quickArticleForm.content = "";
@@ -2006,6 +2067,13 @@ async function submitQuickArticle() {
       text: quickArticleCreateMode.value === "ai-text" ? quickArticleAiText.value : null,
       url: quickArticleCreateMode.value === "ai-link" ? quickArticleAiUrl.value : null,
       translateLanguage: quickArticleTargetLanguage.value,
+      createRecipeIfPresent: quickArticleExtractRecipeIfPresent.value,
+      createShoppingList: quickArticleExtractRecipeIfPresent.value && quickArticleCreateShoppingList.value,
+      organizeShoppingListWithAi: quickArticleExtractRecipeIfPresent.value
+        && quickArticleCreateShoppingList.value
+        && quickArticleOrganizeShoppingList.value,
+      includeAiTips: quickArticleIncludeAiTips.value,
+      includeItemImages: quickArticleIncludeItemImages.value,
     });
   })().finally(() => {
     quickArticleSaving.value = false;
@@ -2183,6 +2251,12 @@ const topLinks = computed<SideBarLink[]>(() => [
 
 .quick-create-shortcut-btn :deep(.v-btn__prepend) {
   margin-inline-start: 0;
+}
+
+.quick-article-ai-options {
+  display: grid;
+  gap: 2px 12px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
 
 .background-job-inline-count {

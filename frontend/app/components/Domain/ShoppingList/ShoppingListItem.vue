@@ -31,7 +31,11 @@
               :class="listItem.checked ? 'strike-through' : ''"
               style="min-width: 0;"
             >
-              <RecipeIngredientListItem :ingredient="listItem" />
+              <RecipeIngredientListItem
+                :ingredient="listItem"
+                :show-image="showImage"
+                :image-url="itemImage(listItem.groupId, 'food', itemImageName)"
+              />
             </div>
           </div>
         </v-col>
@@ -154,6 +158,7 @@
 import { useOnline } from "@vueuse/core";
 import RecipeIngredientListItem from "../Recipe/RecipeIngredientListItem.vue";
 import ShoppingListItemEditor from "./ShoppingListItemEditor.vue";
+import { useStaticRoutes } from "~/composables/api";
 import RecipeList from "~/components/Domain/Recipe/RecipeList.vue";
 import type { ShoppingListItemOut } from "~/lib/api/types/household";
 import type { MultiPurposeLabelOut } from "~/lib/api/types/labels";
@@ -177,6 +182,10 @@ const props = defineProps({
   recipes: {
     type: Map as unknown as () => Map<string, RecipeSummary>,
     default: undefined,
+  },
+  showImage: {
+    type: Boolean,
+    default: false,
   },
 });
 
@@ -208,6 +217,7 @@ const displayRecipeRefs = ref(false);
 const itemLabelCols = computed<string>(() => "6");
 const online = useOnline();
 const isOffline = computed(() => online.value === false);
+const { itemImage } = useStaticRoutes();
 
 type actions = { text: string; event: string };
 const contextMenu = ref<actions[]>([
@@ -225,6 +235,7 @@ const listItem = computed<ShoppingListItemOut>({
     model.value = val;
   },
 });
+const itemImageName = computed(() => listItem.value.food?.name || listItem.value.display || listItem.value.note || "");
 
 const edit = ref(false);
 function toggleEdit(val = !edit.value) {

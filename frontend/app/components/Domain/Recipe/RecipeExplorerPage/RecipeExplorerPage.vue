@@ -4,13 +4,14 @@
     class="px-0"
   >
     <RecipeExplorerPageSearch
+      v-if="canLoadRecipes"
       ref="searchComponent"
       v-model:finder-open="finderOpen"
       @ready="onSearchReady"
     />
     <v-expand-transition>
       <v-container
-        v-if="finderOpen"
+        v-if="canLoadRecipes && finderOpen"
         class="recipe-explorer-finder-panel px-md-6 pb-5"
       >
         <v-sheet
@@ -22,8 +23,8 @@
         </v-sheet>
       </v-container>
     </v-expand-transition>
-    <v-divider />
-    <v-container class="mt-6 px-md-6">
+    <v-divider v-if="canLoadRecipes" />
+    <v-container v-if="canLoadRecipes" class="mt-6 px-md-6">
       <RecipeCardSection
         v-if="ready"
         class="mt-n5"
@@ -39,6 +40,14 @@
         @renamed="renameRecipe"
       />
     </v-container>
+    <v-container v-else class="py-12 text-center">
+      <v-btn
+        color="primary"
+        to="/login"
+      >
+        {{ $t("user.login") }}
+      </v-btn>
+    </v-container>
   </v-container>
 </template>
 
@@ -49,11 +58,10 @@ import RecipeFinderPanel from "~/components/Domain/Recipe/RecipeFinderPanel.vue"
 import RecipeCardSection from "~/components/Domain/Recipe/RecipeCardSection.vue";
 import { useLazyRecipes } from "~/composables/recipes";
 
-const auth = useMealieAuth();
 const route = useRoute();
 
-const { isOwnGroup } = useLoggedInState();
-const groupSlug = computed(() => route.params.groupSlug as string || auth.user.value?.groupSlug || "");
+const { loggedIn, isOwnGroup, groupSlug, isHomeRoute } = useLoggedInState();
+const canLoadRecipes = computed(() => loggedIn.value || (!isHomeRoute.value && Boolean(groupSlug.value)));
 
 const { recipes, appendRecipes, removeRecipe, renameRecipe, replaceRecipes } = useLazyRecipes(isOwnGroup.value ? null : groupSlug.value);
 

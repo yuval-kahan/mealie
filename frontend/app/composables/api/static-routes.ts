@@ -39,6 +39,15 @@ export const useStaticRoutes = () => {
     return `${prefix}/media/recipes/${recipeId}/assets/${assetName}`;
   }
 
+  function itemImage(groupId: string | null | undefined, kind: "food" | "tool", name: string | null | undefined, size: "tiny" | "small" | "original" = "tiny") {
+    if (!groupId || !name?.trim()) {
+      return "";
+    }
+
+    const fileName = size === "original" ? "original.webp" : size === "small" ? "min-original.webp" : "tiny-original.webp";
+    return `${prefix}/media/item-images/${groupId}/${kind}/${fileName}?name=${encodeURIComponent(name.trim())}`;
+  }
+
   return {
     recipeImage,
     recipeSmallImage,
@@ -47,5 +56,6 @@ export const useStaticRoutes = () => {
     recipeTimelineEventSmallImage,
     recipeTimelineEventTinyImage,
     recipeAssetPath,
+    itemImage,
   };
 };
