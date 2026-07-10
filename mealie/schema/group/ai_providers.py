@@ -68,6 +68,8 @@ class AIProviderOut(AIProviderCreate):
 class AIProviderSummary(MealieModel):
     id: UUID4
     name: str
+    model: str = ""
+    base_url: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -34,6 +34,10 @@ class UploadedBook(SqlAlchemyBase, BaseMixins):
     extension: FilterableColumn[str] = mapped_column(String, nullable=False)
     content_type: FilterableColumn[str | None] = mapped_column(String, nullable=True)
     size: FilterableColumn[int] = mapped_column(Integer, nullable=False, default=0)
+    book_metadata_json: FilterableColumn[str] = mapped_column(Text, nullable=False, default="{}")
+    classification_status: FilterableColumn[str] = mapped_column(String, nullable=False, default="not_started")
+    classification_error: FilterableColumn[str | None] = mapped_column(Text, nullable=True)
+    classification_updated_at: FilterableColumn[datetime | None] = mapped_column(NaiveDateTime, nullable=True)
     is_translated_book: FilterableColumn[bool] = mapped_column(Boolean, nullable=False, default=False)
     translated_from_book_id: FilterableColumn[guid.GUID | None] = mapped_column(
         guid.GUID, ForeignKey("uploaded_books.id"), nullable=True, index=True

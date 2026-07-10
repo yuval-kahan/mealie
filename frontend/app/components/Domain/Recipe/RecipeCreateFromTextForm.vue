@@ -61,22 +61,35 @@
           :hint="$t('new-recipe.url-form-hint')"
           persistent-hint
         />
-        <v-file-input
-          v-else
-          v-model="uploadedImages"
-          accept="image/*"
-          variant="solo-filled"
-          rounded
-          clearable
-          multiple
-          chips
-          show-size
-          :prepend-inner-icon="$globals.icons.fileImage"
-          prepend-icon=""
-          :label="$t('recipe.upload-images')"
-          :rules="[uploadedImagesRule]"
-          :disabled="state.loading"
-        />
+        <template v-else>
+          <v-file-input
+            v-model="uploadedImages"
+            accept="image/*"
+            variant="solo-filled"
+            rounded
+            clearable
+            multiple
+            chips
+            show-size
+            :prepend-inner-icon="$globals.icons.fileImage"
+            prepend-icon=""
+            :label="$t('recipe.upload-images')"
+            :rules="[uploadedImagesRule]"
+            :disabled="state.loading"
+          />
+          <v-textarea
+            v-model="imageNotes"
+            variant="outlined"
+            auto-grow
+            rows="2"
+            maxlength="5000"
+            counter
+            :label="$t('recipe.image-import-notes')"
+            :hint="$t('recipe.image-import-notes-description')"
+            persistent-hint
+            :disabled="state.loading"
+          />
+        </template>
         <v-checkbox
           v-if="createMode !== 'url'"
           v-model="shouldTranslate"
@@ -252,6 +265,7 @@ const createMode = ref<CreateMode>(sharedUrl ? "url" : "text");
 const recipeText = ref<string | null>(sharedText);
 const recipeUrl = ref<string | null>(sharedUrl);
 const uploadedImages = ref<File[]>([]);
+const imageNotes = ref("");
 
 const {
   importKeywordsAsTags,
@@ -418,6 +432,7 @@ async function createRecipeFromImages() {
     translateLanguage,
     includeAiTips.value,
     includeItemImages.value,
+    imageNotes.value.trim() || null,
   );
 
   if (error || !data) {

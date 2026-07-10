@@ -1,6 +1,5 @@
 import asyncio
 import hashlib
-import json
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -8,6 +7,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 import httpx
+import orjson
 from PIL import Image
 from pydantic import UUID4
 from slugify import slugify
@@ -15,7 +15,7 @@ from slugify import slugify
 from mealie.pkgs import img, safehttp
 from mealie.repos.repository_factory import AllRepositories
 from mealie.schema.household.group_shopping_list import ShoppingListItemOut, ShoppingListOut
-from mealie.schema.openai.general import OpenAIText
+from mealie.schema.openai.general import OpenAIImageSearchQueries
 from mealie.schema.recipe.recipe import Recipe
 from mealie.services._base_service import BaseService
 from mealie.services.openai import OpenAIService
@@ -23,7 +23,7 @@ from mealie.services.openai import OpenAIService
 ITEM_IMAGE_MAX_BYTES = 8 * 1024 * 1024
 ITEM_IMAGE_MAX_PIXELS = 25_000_000
 ITEM_IMAGE_SEARCH_URL = "https://api.openverse.org/v1/images/"
-ITEM_IMAGE_MAX_CANDIDATES = 5
+ITEM_IMAGE_MAX_CANDIDATES = 8
 ITEM_IMAGE_CONCURRENCY = 4
 ITEM_IMAGE_BATCH_SIZE = 40
 
@@ -216,23 +216,28 @@ class ItemImageService(BaseService):
         ]
         prompt = (
             "Create concise English public image-search phrases for ingredients and kitchen tools. "
-            "Return JSON only: an object where each key is the provided key and each value is one short search phrase. "
+            "Return one entry for every supplied item. Copy each provided key exactly into the matching entry. "
             "For food, prefer isolated ingredient/product photos. For tools, prefer clear kitchen equipment photos. "
+            "Remove quantities, measurements, recipe names, and preparation instructions from the search phrase. "
             "Do not use brand names unless they are part of the item itself."
         )
-        message = json.dumps(payload, ensure_ascii=False)
+        message = orjson.dumps(payload).decode("utf-8")
 
         try:
-            response = await openai_service.get_response(prompt, message, response_schema=OpenAIText)
-            parsed = json.loads(response.text or "{}")
+            response = await openai_service.get_response(prompt, message, response_schema=OpenAIImageSearchQueries)
         except Exception:
             self.logger.exception("Failed to build item image AI search queries")
             return {}
 
-        if not isinstance(parsed, dict):
+        if not response:
             return {}
 
-        return {str(key): str(value).strip() for key, value in parsed.items() if str(value).strip()}
+        valid_keys = {item["key"] for item in payload}
+        return {
+            item.key: item.query.strip()
+            for item in response.queries
+            if item.key in valid_keys and item.query.strip()
+        }
 
     async def _ensure_one(
         self,
@@ -290,12 +295,17 @@ class ItemImageService(BaseService):
 
         urls: list[str] = []
         for result in payload.get("results", []):
-            candidate = (result.get("url") or result.get("thumbnail") or "").strip()
-            if not candidate.lower().startswith(("http://", "https://")):
-                continue
-            if candidate.lower().split("?", 1)[0].endswith(".svg"):
-                continue
-            urls.append(candidate)
+            # Openverse thumbnails are proxied and considerably more reliable
+            # than hot-linking arbitrary origin servers. Keep the original as
+            # a fallback when the thumbnail is unavailable.
+            for value in (result.get("thumbnail"), result.get("url")):
+                candidate = str(value or "").strip()
+                if not candidate.lower().startswith(("http://", "https://")):
+                    continue
+                if candidate.lower().split("?", 1)[0].endswith(".svg"):
+                    continue
+                if candidate not in urls:
+                    urls.append(candidate)
         return urls
 
     async def _download_image(

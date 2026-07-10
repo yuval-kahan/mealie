@@ -27,13 +27,18 @@ class GroupAIProviderSettingsController(BaseUserController):
     def get_ai_provider_settings(self) -> AIProviderSettingsOut:
         self.checks.can_manage()
 
+        self.repos.group_ai_providers.ensure_default_provider()
         return self.repos.group_ai_provider_settings.get_one(self.group_id)
 
     @settings_router.put("", response_model=AIProviderSettingsOut)
     def update_ai_provider_settings(self, settings: AIProviderSettingsUpdate) -> AIProviderSettingsOut:
         self.checks.can_manage()
 
-        return self.repos.group_ai_provider_settings.update(self.group_id, settings)
+        updated = self.repos.group_ai_provider_settings.update(self.group_id, settings)
+        if not updated.default_provider_id:
+            self.repos.group_ai_providers.ensure_default_provider()
+            updated = self.repos.group_ai_provider_settings.get_one(self.group_id)
+        return updated
 
 
 @controller(providers_router)

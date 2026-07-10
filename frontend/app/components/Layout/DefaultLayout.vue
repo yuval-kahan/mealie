@@ -267,6 +267,13 @@
               {{ $t("cookbook.selected-book-files", { count: uploadedBookFiles.length }) }}
             </v-chip>
           </div>
+          <v-checkbox
+            v-model="uploadedBookClassifyWithAi"
+            color="primary"
+            hide-details
+            :label="$t('cookbook.classify-book-with-ai')"
+            :disabled="uploadedBookUploading"
+          />
           <v-alert
             v-if="hasMultipleUploadedBookFiles"
             density="compact"
@@ -346,6 +353,14 @@
             density="comfortable"
             :label="$t('cookbook.pages-per-ai-chunk')"
           />
+          <v-alert
+            v-if="uploadedBookAction !== 'none'"
+            density="compact"
+            variant="tonal"
+            type="info"
+          >
+            {{ $t("cookbook.gemini-multi-key-recommendation") }}
+          </v-alert>
         </v-card-text>
       </BaseDialog>
       <BaseDialog
@@ -418,6 +433,14 @@
             density="comfortable"
             :label="$t('cookbook.pages-per-ai-chunk')"
           />
+          <v-alert
+            density="compact"
+            variant="tonal"
+            type="info"
+            class="mb-3"
+          >
+            {{ $t("cookbook.gemini-multi-key-recommendation") }}
+          </v-alert>
           <v-alert
             v-if="selectedUploadedBook"
             density="compact"
@@ -532,6 +555,14 @@
             density="comfortable"
             :label="$t('cookbook.pages-per-ai-chunk')"
           />
+          <v-alert
+            density="compact"
+            variant="tonal"
+            type="info"
+            class="mb-3"
+          >
+            {{ $t("cookbook.gemini-multi-key-recommendation") }}
+          </v-alert>
           <v-alert
             v-if="selectedUploadedBook"
             density="compact"
@@ -954,6 +985,7 @@ const uploadedBookFiles = ref<File[]>([]);
 const uploadedBookFolderInput = ref<HTMLInputElement | null>(null);
 const uploadedBookName = ref("");
 const uploadedBookUploading = ref(false);
+const uploadedBookClassifyWithAi = ref(true);
 const uploadedBooks = ref<UploadedBook[]>([]);
 const uploadedBookAction = ref<"none" | "extract" | "translate">("none");
 const uploadedBookPagesPerChunk = ref(10);
@@ -1410,6 +1442,7 @@ function resetUploadBookForm() {
     uploadedBookFolderInput.value.value = "";
   }
   uploadedBookName.value = "";
+  uploadedBookClassifyWithAi.value = true;
   uploadedBookAction.value = "none";
   uploadedBookPagesPerChunk.value = 10;
   uploadedBookPageStart.value = null;
@@ -1504,7 +1537,11 @@ async function uploadBook() {
 
   try {
     for (const file of files) {
-      const { data, error } = await api.uploadedBooks.upload(file, hasMultipleUploadedBookFiles.value ? null : uploadedBookName.value);
+      const { data, error } = await api.uploadedBooks.upload(
+        file,
+        hasMultipleUploadedBookFiles.value ? null : uploadedBookName.value,
+        uploadedBookClassifyWithAi.value,
+      );
       if (data) {
         uploaded.push(data);
       }

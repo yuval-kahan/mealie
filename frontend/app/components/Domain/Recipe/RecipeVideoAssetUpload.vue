@@ -4,7 +4,7 @@
       :post="false"
       :text="$t('recipe.upload-video')"
       :icon="$globals.icons.play"
-      accept="video/*,.mp4,.webm,.mov,.m4v,.ogv,.avi,.mkv,.flv,.f4v,.wmv,.mpg,.mpeg,.mpe,.m1v,.m2v,.3gp,.3g2,.ts,.mts,.m2ts"
+      :accept="RECIPE_VIDEO_ACCEPT"
       :disabled="disabled"
       @uploaded="setVideoFile"
     />
@@ -21,6 +21,8 @@
 </template>
 
 <script setup lang="ts">
+import { RECIPE_VIDEO_ACCEPT } from "~/utils/recipe-video";
+
 defineProps<{
   disabled?: boolean;
 }>();

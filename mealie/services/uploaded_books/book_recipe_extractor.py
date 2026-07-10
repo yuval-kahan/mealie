@@ -240,7 +240,7 @@ class UploadedBookRecipeExtractor(BaseService):
 
         return pages
 
-    def _extract_pdf_pages(self, path: Path) -> list[BookTextPage]:
+    def _extract_pdf_pages(self, path: Path, max_pages: int | None = None) -> list[BookTextPage]:
         try:
             from pypdf import PdfReader
         except ImportError as e:
@@ -249,13 +249,15 @@ class UploadedBookRecipeExtractor(BaseService):
         reader = PdfReader(str(path))
         pages: list[BookTextPage] = []
         for index, page in enumerate(reader.pages, start=1):
+            if max_pages is not None and index > max_pages:
+                break
             text = self._normalize_text(page.extract_text() or "")
             if text:
                 pages.append(BookTextPage(number=index, text=text))
 
         return pages
 
-    def _extract_epub_pages(self, path: Path) -> list[BookTextPage]:
+    def _extract_epub_pages(self, path: Path, max_pages: int | None = None) -> list[BookTextPage]:
         with ZipFile(path) as archive:
             html_files = sorted(
                 name
@@ -264,6 +266,8 @@ class UploadedBookRecipeExtractor(BaseService):
             )
             pages: list[BookTextPage] = []
             for name in html_files:
+                if max_pages is not None and len(pages) >= max_pages:
+                    break
                 html = archive.read(name).decode("utf-8", errors="ignore")
                 text = self._normalize_text(BeautifulSoup(html, "lxml").get_text("\n"))
                 if text:
@@ -308,24 +312,39 @@ class UploadedBookRecipeExtractor(BaseService):
         text = text.replace("{", " ").replace("}", " ")
         return self._text_to_pseudo_pages(text)
 
-    def _extract_pages(self, path: Path, extension: str) -> list[BookTextPage]:
+    def _extract_pages(
+        self,
+        path: Path,
+        extension: str,
+        max_pages: int | None = None,
+    ) -> list[BookTextPage]:
         if extension not in SUPPORTED_TEXT_EXTRACTION_EXTENSIONS:
             raise ValueError(f"AI extraction is not supported for {extension} files yet")
 
         if extension == ".pdf":
-            return self._extract_pdf_pages(path)
+            return self._extract_pdf_pages(path, max_pages=max_pages)
         if extension == ".epub":
-            return self._extract_epub_pages(path)
+            return self._extract_epub_pages(path, max_pages=max_pages)
         if extension == ".docx":
-            return self._extract_docx_pages(path)
+            pages = self._extract_docx_pages(path)
+            return pages[:max_pages] if max_pages is not None else pages
         if extension == ".odt":
-            return self._extract_odt_pages(path)
+            pages = self._extract_odt_pages(path)
+            return pages[:max_pages] if max_pages is not None else pages
         if extension in {".fb2", ".fb2.zip"}:
-            return self._extract_fb2_pages(path)
+            pages = self._extract_fb2_pages(path)
+            return pages[:max_pages] if max_pages is not None else pages
         if extension in {".html", ".htm", ".mhtml", ".mht"}:
-            return self._extract_html_pages(path)
+            pages = self._extract_html_pages(path)
+            return pages[:max_pages] if max_pages is not None else pages
         if extension == ".rtf":
-            return self._extract_rtf_pages(path)
+            pages = self._extract_rtf_pages(path)
+            return pages[:max_pages] if max_pages is not None else pages
+
+        if max_pages is not None:
+            with path.open("r", encoding="utf-8", errors="ignore") as source:
+                text = source.read(self.PSEUDO_PAGE_CHAR_LIMIT * max_pages)
+            return self._text_to_pseudo_pages(text)[:max_pages]
 
         return self._text_to_pseudo_pages(path.read_text(encoding="utf-8", errors="ignore"))
 

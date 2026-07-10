@@ -9,6 +9,39 @@ from .repository_generic import GroupRepositoryGeneric
 
 
 class GroupRepositoryAIProvider(GroupRepositoryGeneric[AIProviderOut, AIProvider]):
+    def ensure_default_provider(self) -> None:
+        """Choose a deterministic default without replacing an explicit choice."""
+
+        settings = self.session.execute(
+            sa.select(AIProviderSettings).where(AIProviderSettings.group_id == self.group_id)
+        ).scalar_one_or_none()
+        if not settings or settings.default_provider_id:
+            return
+
+        normalized_base_url = sa.func.lower(sa.func.coalesce(AIProvider.base_url, ""))
+        normalized_name = sa.func.lower(AIProvider.name)
+        normalized_model = sa.func.lower(AIProvider.model)
+        gemini_priority = sa.case(
+            (
+                sa.or_(
+                    normalized_model.like("gemini-%"),
+                    normalized_base_url.like("%generativelanguage.googleapis.com%"),
+                    normalized_name.like("%gemini%"),
+                ),
+                0,
+            ),
+            else_=1,
+        )
+        provider_id = self.session.execute(
+            sa.select(AIProvider.id)
+            .where(AIProvider.settings_id == settings.id)
+            .order_by(gemini_priority, normalized_name, AIProvider.id)
+            .limit(1)
+        ).scalar_one_or_none()
+        if provider_id:
+            settings.default_provider_id = provider_id
+            self.session.commit()
+
     @staticmethod
     def _split_api_keys(api_key: str) -> list[str]:
         keys = [key.strip() for key in api_key.replace(",", "\n").splitlines() if key.strip()]
@@ -47,7 +80,9 @@ class GroupRepositoryAIProvider(GroupRepositoryGeneric[AIProviderOut, AIProvider
                 sa.select(AIProviderSettings.id).where(AIProviderSettings.group_id == self.group_id)
             ).scalar_one()
 
-        return super().create(data)
+        created = super().create(data)
+        self.ensure_default_provider()
+        return created
 
     def update(self, match_value: str | int | UUID4, new_data: AIProviderCreate | dict):
         if isinstance(new_data, AIProviderCreate):
@@ -84,8 +119,9 @@ class GroupRepositoryAIProvider(GroupRepositoryGeneric[AIProviderOut, AIProvider
             .values(image_provider_id=None)
         )
 
-        # Delete
-        return super().delete(value, match_key)
+        deleted = super().delete(value, match_key)
+        self.ensure_default_provider()
+        return deleted
 
     def update_many(self, data):
         raise NotImplementedError

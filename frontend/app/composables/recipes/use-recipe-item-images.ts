@@ -19,7 +19,7 @@ export function markRecipeItemImagesEnsured(recipeLike: { extras?: Record<string
 }
 
 export function itemImagesEnsureSucceeded(result?: ItemImagesEnsureResponse | null) {
-  return !!result && result.failed === 0;
+  return !!result && (result.created > 0 || result.existing > 0) && result.failed === 0;
 }
 
 export function useRecipeItemImages() {
@@ -28,12 +28,17 @@ export function useRecipeItemImages() {
 
   async function ensureRecipeItemImages(recipeSlug: string) {
     const { data, error } = await api.recipes.ensureItemImages(recipeSlug);
-    if (error || !itemImagesEnsureSucceeded(data)) {
+    if (error || !data || (data.created === 0 && data.existing === 0)) {
       alert.error(i18n.t("recipe.item-images-create-failed"));
       return null;
     }
 
-    alert.success(i18n.t("recipe.item-images-created"));
+    if (data.failed > 0) {
+      alert.warning(i18n.t("recipe.item-images-created-partially", { created: data.created, failed: data.failed }));
+    }
+    else {
+      alert.success(i18n.t("recipe.item-images-created"));
+    }
     return data;
   }
 

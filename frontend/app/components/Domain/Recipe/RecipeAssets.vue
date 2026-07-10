@@ -12,7 +12,7 @@
               :post="false"
               :text="$t('recipe.upload-video')"
               :icon="$globals.icons.play"
-              accept="video/mp4,video/webm,video/quicktime,video/x-m4v,video/ogg,.mp4,.webm,.mov,.m4v,.ogv"
+              :accept="RECIPE_VIDEO_ACCEPT"
               @uploaded="addVideoAsset"
             />
             <v-btn
@@ -154,7 +154,7 @@
               >
                 <source
                   :src="assetURL(item.fileName ?? '')"
-                  :type="videoMimeType(item.fileName)"
+                  :type="recipeVideoMimeType(item.fileName)"
                 >
               </video>
             </div>
@@ -217,6 +217,11 @@ import { useStaticRoutes, useUserApi } from "~/composables/api";
 import { alert } from "~/composables/use-toast";
 import type { RecipeAsset } from "~/lib/api/types/recipe";
 import { useCopy } from "~/composables/use-copy";
+import {
+  isRecipeVideoFile,
+  RECIPE_VIDEO_ACCEPT,
+  recipeVideoMimeType,
+} from "~/utils/recipe-video";
 
 const props = defineProps({
   slug: {
@@ -320,8 +325,7 @@ function isImage(fileName?: string | null) {
 }
 
 function isVideo(fileName?: string | null) {
-  if (!fileName) return false;
-  return /\.(mp4|webm|mov|m4v|ogv)$/i.test(fileName);
+  return isRecipeVideoFile(fileName);
 }
 
 function isMediaAsset(asset: RecipeAsset) {
@@ -331,14 +335,6 @@ function isMediaAsset(asset: RecipeAsset) {
     || asset.icon === "mdi-file-image"
     || asset.icon === "mdi-play"
   );
-}
-
-function videoMimeType(fileName?: string | null) {
-  const extension = fileName?.split(".").pop()?.toLowerCase();
-  if (extension === "webm") return "video/webm";
-  if (extension === "mov") return "video/quicktime";
-  if (extension === "ogv") return "video/ogg";
-  return "video/mp4";
 }
 
 function videoSizeKey(fileName?: string | null) {

@@ -289,12 +289,16 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
     translateLanguage: string | null = null,
     includeAiTips = true,
     includeItemImages = true,
+    notes: string | null = null,
   ) {
     const formData = new FormData();
 
     fileObjects.forEach((file) => {
       formData.append("images", file);
     });
+    if (notes?.trim()) {
+      formData.append("notes", notes.trim());
+    }
 
     let apiRoute = routes.recipesCreateFromImage;
     const query = new URLSearchParams();

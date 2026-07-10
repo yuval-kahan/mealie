@@ -9,6 +9,19 @@ export interface UploadedBook {
   extension: string;
   contentType?: string | null;
   size: number;
+  bookMetadata?: {
+    generated_by_ai?: boolean;
+    series_id?: string;
+    volume_number?: number;
+    volume_count?: number;
+    included_recipe_slugs?: string[];
+    generation_config?: AICookbookGenerateRequest;
+    classification?: UploadedBookClassification;
+    [key: string]: unknown;
+  };
+  classificationStatus?: "not_started" | "processing" | "completed" | "failed" | string;
+  classificationError?: string | null;
+  classificationUpdatedAt?: string | null;
   isTranslatedBook: boolean;
   translatedFromBookId?: string | null;
   translatedBookId?: string | null;
@@ -56,4 +69,28 @@ export interface UploadedBookTranslateRequest {
   targetLanguage: string;
   pageStart?: number | null;
   pageEnd?: number | null;
+}
+
+export interface UploadedBookClassification {
+  summary?: string;
+  cuisines?: string[];
+  difficulty?: string;
+  book_type?: string;
+  teaching_level?: string;
+  author_or_chef?: string;
+  restaurant?: string;
+  michelin_related?: boolean;
+  techniques?: string[];
+  categories?: string[];
+  tags?: string[];
+  language?: string;
+}
+
+export interface AICookbookGenerateRequest {
+  mode: "preset" | "prompt";
+  preset?: string | null;
+  prompt?: string | null;
+  title?: string | null;
+  maxRecipesPerVolume?: number;
+  maxEstimatedPagesPerVolume?: number;
 }

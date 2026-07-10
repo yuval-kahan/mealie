@@ -14,6 +14,18 @@
       <span class="text-headline-small">{{ title }}</span>
       <v-spacer />
       <v-btn
+        v-if="isOwnGroup"
+        variant="text"
+        :icon="$vuetify.display.xs"
+        :to="aiCookbookRoute"
+        :title="$t('cookbook.create-book-with-ai')"
+      >
+        <v-icon :start="!$vuetify.display.xs">
+          {{ $globals.icons.book }}
+        </v-icon>
+        {{ $vuetify.display.xs ? null : $t("cookbook.create-book-with-ai") }}
+      </v-btn>
+      <v-btn
         :icon="$vuetify.display.xs"
         variant="text"
         :disabled="recipes.length === 0"
@@ -237,6 +249,7 @@ const EVENTS = {
 
 const { $globals } = useNuxtApp();
 const { isOwnGroup, groupSlug } = useLoggedInState();
+const aiCookbookRoute = computed(() => `/g/${groupSlug.value}/cookbooks?generate=true`);
 const useMobileCards = computed(() => {
   return display.smAndDown.value || preferences.value.useMobileCards;
 });

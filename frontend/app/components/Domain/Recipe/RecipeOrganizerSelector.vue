@@ -1,8 +1,8 @@
 <template>
   <v-autocomplete
-    v-model="selected"
     v-bind="inputAttrs"
     v-model:search="searchInput"
+    :model-value="selected"
     :items="items"
     :custom-filter="normalizeFilter"
     :label="label"
@@ -17,7 +17,7 @@
     return-object
     auto-select-first
     class="pa-0 ma-0"
-    @update:model-value="resetSearchInput"
+    @update:model-value="handleSelectionUpdate"
     @click:append="dialog = true"
     @keyup.enter="handleEnter"
   >
@@ -74,6 +74,7 @@ import { useCategoryStore, useFoodStore, useHouseholdStore, useTagStore, useTool
 import { useUserStore } from "~/composables/store/use-user-store";
 import { normalizeFilter } from "~/composables/use-utils";
 import type { UserSummary } from "~/lib/api/types/user";
+import { organizerSuggestions, type OrganizerSuggestion } from "~/utils/organizer-suggestions";
 
 interface Props {
   selectorType: RecipeOrganizer;
@@ -181,8 +182,41 @@ const activeStore = computed(() => {
 
 const items = computed<any[]>(() => {
   const list = (activeStore.value as unknown as any[]) ?? [];
-  return list;
+  if (![Organizer.Category, Organizer.Tag, Organizer.Tool].includes(props.selectorType as Organizer)) {
+    return list;
+  }
+
+  const existingNames = new Set(list.map(item => String(item?.name || "").trim().toLocaleLowerCase()).filter(Boolean));
+  const presets = organizerSuggestions(props.selectorType, i18n.locale.value)
+    .filter(item => !existingNames.has(item.name.toLocaleLowerCase()));
+  return [...list, ...presets];
 });
+
+let selectionUpdateSequence = 0;
+
+async function handleSelectionUpdate(values: any[] | undefined) {
+  const sequence = ++selectionUpdateSequence;
+  const resolved: any[] = [];
+  const actions = storeMap[props.selectorType].actions;
+
+  for (const value of values || []) {
+    if (!(value as OrganizerSuggestion).__presetSuggestion) {
+      resolved.push(value);
+      continue;
+    }
+
+    // @ts-expect-error organizer create payloads vary by organizer type
+    const created = await actions.createOne({ name: value.name });
+    if (created) {
+      resolved.push(created);
+    }
+  }
+
+  if (sequence === selectionUpdateSequence) {
+    selected.value = resolved;
+    resetSearchInput();
+  }
+}
 
 function removeByIndex(index: number) {
   if (selected.value === undefined) {

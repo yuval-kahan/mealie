@@ -1,5 +1,32 @@
 <template>
   <div v-if="value && value.length > 0">
+    <BaseDialog
+      v-model="quantityScaleDialog"
+      :title="$t('recipe.scale-from-ingredient')"
+      :icon="$globals.icons.edit"
+      width="460"
+      max-width="96vw"
+      can-submit
+      :submit-disabled="!validTargetQuantity"
+      @submit="applyQuantityScale"
+    >
+      <v-card-text class="pt-4">
+        <div class="text-subtitle-1 font-weight-medium mb-3">
+          {{ quantityScaleIngredientName }}
+        </div>
+        <v-text-field
+          v-model.number="targetQuantity"
+          type="number"
+          min="0.001"
+          step="any"
+          variant="outlined"
+          autofocus
+          :label="$t('recipe.new-ingredient-quantity')"
+          :hint="$t('recipe.scale-from-ingredient-description')"
+          persistent-hint
+        />
+      </v-card-text>
+    </BaseDialog>
     <div
       v-if="!isCookMode"
       class="d-flex justify-start"
@@ -74,6 +101,18 @@
               :image-url="ingredientImageUrl(ingredient)"
             />
           </v-list-item-title>
+          <template v-if="scalableQuantity(ingredient)" #append>
+            <v-btn
+              icon
+              size="x-small"
+              variant="text"
+              :title="$t('recipe.scale-from-this-ingredient')"
+              :aria-label="$t('recipe.scale-from-this-ingredient')"
+              @click.stop="openQuantityScale(ingredient)"
+            >
+              <v-icon :icon="$globals.icons.edit" />
+            </v-btn>
+          </template>
         </v-list-item>
       </div>
     </div>
@@ -106,7 +145,8 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const emit = defineEmits<{
-  itemImagesEnsured: [];
+  "itemImagesEnsured": [];
+  "update:scale": [scale: number];
 }>();
 
 const { parseIngredientText } = useIngredientTextParser();
@@ -115,6 +155,15 @@ const { ensureRecipeItemImages } = useRecipeItemImages();
 const { itemImage } = useStaticRoutes();
 const itemImagesLoading = ref(false);
 const localItemImagesEnsured = ref(props.itemImagesEnsured);
+const quantityScaleDialog = ref(false);
+const quantityScaleIngredient = ref<RecipeIngredient | null>(null);
+const targetQuantity = ref<number | null>(null);
+
+const validTargetQuantity = computed(() => Number.isFinite(Number(targetQuantity.value)) && Number(targetQuantity.value) > 0);
+const quantityScaleIngredientName = computed(() => {
+  const ingredient = quantityScaleIngredient.value;
+  return ingredient?.food?.name || ingredient?.display || ingredient?.note || "";
+});
 
 function validateTitle(title?: string | null) {
   return !(title === undefined || title === "" || title === null);
@@ -188,6 +237,32 @@ function toggleChecked(index: number) {
   // TODO Find a better way to do this - $set is not available, and
   // direct array modifications are not propagated for some reason
   checked.value.splice(index, 1, !checked.value[index]);
+}
+
+function scalableQuantity(ingredient: RecipeIngredient) {
+  const quantity = Number(ingredient.quantity);
+  return Number.isFinite(quantity) && quantity > 0 && !ingredient.title;
+}
+
+function openQuantityScale(ingredient: RecipeIngredient) {
+  if (!scalableQuantity(ingredient)) {
+    return;
+  }
+
+  quantityScaleIngredient.value = ingredient;
+  targetQuantity.value = Number(ingredient.quantity) * props.scale;
+  quantityScaleDialog.value = true;
+}
+
+function applyQuantityScale() {
+  const baseQuantity = Number(quantityScaleIngredient.value?.quantity);
+  const desiredQuantity = Number(targetQuantity.value);
+  if (!Number.isFinite(baseQuantity) || baseQuantity <= 0 || !Number.isFinite(desiredQuantity) || desiredQuantity <= 0) {
+    return;
+  }
+
+  emit("update:scale", desiredQuantity / baseQuantity);
+  quantityScaleDialog.value = false;
 }
 </script>
 

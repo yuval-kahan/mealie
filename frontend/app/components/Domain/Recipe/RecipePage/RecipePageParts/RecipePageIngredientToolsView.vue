@@ -8,6 +8,7 @@
       :recipe-slug="recipe.slug"
       :item-images-ensured="recipeItemImagesEnsured(recipe.extras)"
       @item-images-ensured="markItemImagesEnsured"
+      @update:scale="$emit('update:scale', $event)"
     />
     <div v-if="!isEditMode && recipe.tools && recipe.tools.length > 0">
       <h2 class="mt-4 text-h5 font-weight-medium opacity-80">
@@ -68,6 +69,10 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   isCookMode: false,
 });
+
+defineEmits<{
+  "update:scale": [scale: number];
+}>();
 
 const { isOwnGroup } = useLoggedInState();
 

@@ -22,7 +22,7 @@
           v-model="local.defaultProviderId"
           :label="$t('group.ai-provider-settings.default-provider')"
           :items="local.providers"
-          item-title="name"
+          :item-title="providerDisplayName"
           item-value="id"
           clearable
           hide-details
@@ -38,7 +38,7 @@
           v-model="local.audioProviderId"
           :label="$t('group.ai-provider-settings.audio-provider')"
           :items="local.providers"
-          item-title="name"
+          :item-title="providerDisplayName"
           item-value="id"
           clearable
           hide-details
@@ -54,7 +54,7 @@
           v-model="local.imageProviderId"
           :label="$t('group.ai-provider-settings.image-provider')"
           :items="local.providers"
-          item-title="name"
+          :item-title="providerDisplayName"
           item-value="id"
           clearable
           hide-details
@@ -98,13 +98,31 @@
       class="pa-0 mb-4"
     >
       <v-row no-gutters>
-        <v-col :cols="10">
-          <v-card-text>
-            {{ provider.name }}
+        <v-col :cols="9">
+          <v-card-text class="d-flex align-center ga-3 py-3">
+            <v-avatar size="36" color="surface-variant">
+              <v-icon :icon="providerPresentation(provider).icon" />
+            </v-avatar>
+            <div class="min-width-0">
+              <div class="d-flex align-center flex-wrap ga-2">
+                <strong class="text-body-1">{{ provider.name }}</strong>
+                <v-chip
+                  v-if="provider.id === local.defaultProviderId"
+                  size="x-small"
+                  color="primary"
+                  variant="tonal"
+                >
+                  {{ $t("group.ai-provider-settings.default-badge") }}
+                </v-chip>
+              </div>
+              <div class="text-caption text-medium-emphasis provider-model-line">
+                {{ providerPresentation(provider).label }} · {{ provider.model || $t("group.ai-provider-settings.model-unknown") }}
+              </div>
+            </div>
           </v-card-text>
         </v-col>
 
-        <v-col :cols="2">
+        <v-col :cols="3" class="d-flex align-center justify-end">
           <BaseButtonGroup
             :buttons="[
               {
@@ -129,7 +147,7 @@
 
 <script setup lang="ts">
 import type { AIProviderCreate, AIProviderUpdate } from "~/lib/api/types/group";
-import type { AIProviderSettingsOut } from "~/lib/api/types/user";
+import type { AIProviderSettingsOut, AIProviderSummary } from "~/lib/api/types/user";
 
 const providerSettings = defineModel<AIProviderSettingsOut>({ required: true });
 
@@ -168,4 +186,32 @@ function openEdit(id: string) {
   editingProviderId.value = id;
   dialogOpen.value = true;
 }
+
+function providerDisplayName(provider: AIProviderSummary) {
+  return provider.model ? `${provider.name} · ${provider.model}` : provider.name;
+}
+
+function providerPresentation(provider: AIProviderSummary) {
+  const value = `${provider.name} ${provider.model ?? ""} ${provider.baseUrl ?? ""}`.toLowerCase();
+  if (value.includes("gemini") || value.includes("generativelanguage.googleapis.com")) {
+    return { label: "Google Gemini", icon: "mdi-google" };
+  }
+  if (value.includes("anthropic") || value.includes("claude")) {
+    return { label: "Anthropic Claude", icon: "mdi-head-snowflake" };
+  }
+  if (value.includes("openai") || value.includes("gpt")) {
+    return { label: "OpenAI", icon: "mdi-creation" };
+  }
+  return { label: i18n.t("group.ai-provider-settings.custom-provider"), icon: "mdi-robot-outline" };
+}
 </script>
+
+<style scoped>
+.min-width-0 {
+  min-width: 0;
+}
+
+.provider-model-line {
+  overflow-wrap: anywhere;
+}
+</style>

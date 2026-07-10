@@ -1,5 +1,4 @@
 import hashlib
-import httpx
 import json
 import math
 import os
@@ -17,6 +16,7 @@ from urllib.parse import urljoin
 from uuid import UUID, uuid4
 from zipfile import ZipFile
 
+import httpx
 import sqlalchemy as sa
 from fastapi import UploadFile
 from slugify import slugify
@@ -35,9 +35,9 @@ from mealie.schema.household.household import HouseholdInDB, HouseholdRecipeUpda
 from mealie.schema.openai.general import OpenAIText
 from mealie.schema.openai.recipe import OpenAIRecipe, OpenAIRecipeTextParse
 from mealie.schema.openai.recipe_search import OpenAIRecipeSearchResponse
-from mealie.schema.recipe.recipe_category import CategorySave, TagSave
 from mealie.schema.recipe.recipe import CreateRecipe, Recipe, RecipeSummary, create_recipe_slug
 from mealie.schema.recipe.recipe_ai_search import RecipeAISearchResponse, RecipeAISearchResult
+from mealie.schema.recipe.recipe_category import CategorySave, TagSave
 from mealie.schema.recipe.recipe_ingredient import RecipeIngredient
 from mealie.schema.recipe.recipe_notes import RecipeNote
 from mealie.schema.recipe.recipe_settings import RecipeSettings
@@ -379,6 +379,7 @@ class RecipeService(RecipeServiceBase):
         images: list[UploadFile],
         translate_language: str | None = None,
         include_ai_tips: bool = True,
+        notes: str | None = None,
     ) -> Recipe:
         openai_recipe_service = OpenAIRecipeService(self.repos, self.user, self.household, self.translator)
         with get_temporary_path() as temp_path:
@@ -391,7 +392,10 @@ class RecipeService(RecipeServiceBase):
                 local_images.append(image_path)
 
             recipe_data = await openai_recipe_service.build_recipe_from_images(
-                local_images, translate_language=translate_language, include_ai_tips=include_ai_tips
+                local_images,
+                translate_language=translate_language,
+                include_ai_tips=include_ai_tips,
+                notes=notes,
             )
 
             recipe = self.create_one(recipe_data)
@@ -1027,6 +1031,7 @@ class OpenAIRecipeService(RecipeServiceBase):
     _MIN_AI_SEARCH_CANDIDATES = 80
     _MAX_AI_SEARCH_CANDIDATES = 400
     _AI_SEARCH_INDEX_TTL = timedelta(hours=24)
+    _AI_COLLECTION_BATCH_SIZE = 60
 
     @staticmethod
     def _compact_text(value: Any, max_length: int = 240) -> str:
@@ -1247,7 +1252,12 @@ class OpenAIRecipeService(RecipeServiceBase):
             .order_by(RecipeAISearchIndex.recipe_name.asc())
         ).scalars().all()
 
-    def _score_ai_search_index(self, query: str, query_vector: dict[str, float], index_row: RecipeAISearchIndex) -> float:
+    def _score_ai_search_index(
+        self,
+        query: str,
+        query_vector: dict[str, float],
+        index_row: RecipeAISearchIndex,
+    ) -> float:
         try:
             recipe_vector = json.loads(index_row.search_vector or "{}")
         except ValueError:
@@ -1388,6 +1398,74 @@ class OpenAIRecipeService(RecipeServiceBase):
 
         return RecipeAISearchResponse(query=query, items=items, recipe_count=recipe_count)
 
+    async def select_recipe_slugs_for_ai_collection(self, query: str) -> list[str]:
+        """Select every matching recipe in bounded AI batches for generated collections."""
+
+        openai_service = OpenAIService(self.repos)
+        if not (openai_service.provider_settings and openai_service.provider_settings.ai_enabled):
+            raise ValueError("OpenAI services are not available")
+
+        query = query.strip()
+        if not query:
+            raise ValueError("Collection query cannot be empty")
+
+        index_rows = self._ensure_ai_recipe_search_index()
+        query_vector = self._search_vector(query)
+        scored_rows = [
+            (self._score_ai_search_index(query, query_vector, index_row), index_row) for index_row in index_rows
+        ]
+        scored_rows.sort(key=lambda item: (-item[0], item[1].recipe_name or ""))
+
+        prompt = (
+            f"{openai_service.get_prompt('recipes.search-recipes')}\n\n"
+            "This request builds a cookbook. Include every recipe in each supplied batch that clearly matches, "
+            "rather than returning only a representative variety."
+        )
+        selected: list[str] = []
+        seen: set[str] = set()
+        for batch_number, offset in enumerate(range(0, len(scored_rows), self._AI_COLLECTION_BATCH_SIZE), start=1):
+            batch_rows = [row for _, row in scored_rows[offset : offset + self._AI_COLLECTION_BATCH_SIZE]]
+            catalog: list[dict[str, Any]] = []
+            valid_slugs: set[str] = set()
+            for index_row in batch_rows:
+                try:
+                    item = json.loads(index_row.catalog_json)
+                except ValueError:
+                    continue
+                if slug := item.get("slug"):
+                    valid_slugs.add(slug)
+                    catalog.append(item)
+
+            if not catalog:
+                continue
+
+            message = dedent(
+                f"""
+                Cookbook definition:
+                {query}
+
+                Batch {batch_number} of {math.ceil(len(scored_rows) / self._AI_COLLECTION_BATCH_SIZE)}.
+                Return every recipe in this batch that clearly belongs in the cookbook.
+
+                Recipe batch JSON:
+                {json.dumps(catalog, ensure_ascii=False)}
+                """
+            ).strip()
+            response = await openai_service.get_response(
+                prompt,
+                message,
+                response_schema=OpenAIRecipeSearchResponse,
+            )
+            if not response:
+                raise RuntimeError(f"AI returned an empty response for cookbook batch {batch_number}")
+
+            for result in response.results:
+                if result.slug in valid_slugs and result.slug not in seen:
+                    seen.add(result.slug)
+                    selected.append(result.slug)
+
+        return selected
+
     def _clean_organizer_names(self, names: list[str], max_items: int = 10) -> list[str]:
         cleaned_names: list[str] = []
         seen_slugs: set[str] = set()
@@ -1492,6 +1570,7 @@ class OpenAIRecipeService(RecipeServiceBase):
         images: list[Path],
         translate_language: str | None,
         include_ai_tips: bool = True,
+        notes: str | None = None,
     ) -> Recipe:
         openai_service = OpenAIService(self.repos)
         if not (openai_service.provider_settings and openai_service.provider_settings.image_provider_enabled):
@@ -1509,6 +1588,11 @@ class OpenAIRecipeService(RecipeServiceBase):
             message += f" Please translate the recipe to {translate_language}."
         if include_ai_tips:
             message += " Add concise AI cooking tips and practical recommended ingredient varieties when useful."
+        if notes and notes.strip():
+            message += (
+                " The user supplied the following corrections or context. Treat explicit corrections as authoritative "
+                f"when they conflict with the image: {notes.strip()}"
+            )
 
         try:
             response = await openai_service.get_response(
@@ -1566,7 +1650,8 @@ class OpenAIRecipeService(RecipeServiceBase):
             openai_recipe = response.recipe
             if not self._has_minimum_recipe_data(openai_recipe):
                 raise exceptions.NotARecipe(
-                    "The pasted text does not contain enough recipe data. Include a name, ingredients, and instructions."
+                    "The pasted text does not contain enough recipe data. "
+                    "Include a name, ingredients, and instructions."
                 )
 
         except Exception as e:

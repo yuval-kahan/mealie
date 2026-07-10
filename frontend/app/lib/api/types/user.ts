@@ -102,6 +102,8 @@ export interface AIProviderSettingsOut {
 export interface AIProviderSummary {
   id: string;
   name: string;
+  model?: string;
+  baseUrl?: string | null;
 }
 export interface GroupSummary {
   name: string;

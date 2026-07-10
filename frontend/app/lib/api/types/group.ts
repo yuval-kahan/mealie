@@ -72,6 +72,8 @@ export interface AIProviderSettingsOut {
 export interface AIProviderSummary {
   id: string;
   name: string;
+  model?: string;
+  baseUrl?: string | null;
 }
 export interface AIProviderSettingsUpdate {
   defaultProviderId: string | null;

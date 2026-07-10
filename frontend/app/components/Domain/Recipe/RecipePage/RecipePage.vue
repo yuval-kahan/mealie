@@ -66,56 +66,69 @@
             <div>
               <RecipePageInfoEditor v-if="isEditMode" v-model="recipe" />
             </div>
-            <div>
-              <RecipePageEditorToolbar v-if="isEditForm" v-model="recipe" />
-            </div>
-            <div>
-              <RecipePageIngredientEditor v-if="isEditForm" v-model="recipe" />
-            </div>
-            <div>
-              <RecipePageScale v-model="scale" :recipe="recipe" />
-            </div>
+            <RecipeManualContent
+              v-if="isFreeTextRecipe || (isEditForm && showManualContentControls)"
+              v-model="recipe"
+              :edit="isEditForm"
+              :show-mode-selector="showManualContentControls"
+            />
 
-            <!--
-              This section contains the 2 column layout for the recipe steps and other content.
-            -->
-            <v-row>
+            <template v-if="!isFreeTextRecipe">
+              <div>
+                <RecipePageEditorToolbar v-if="isEditForm" v-model="recipe" />
+              </div>
+              <div>
+                <RecipePageIngredientEditor v-if="isEditForm" v-model="recipe" />
+              </div>
+              <div>
+                <RecipePageScale v-model="scale" :recipe="recipe" />
+              </div>
+
               <!--
+                This section contains the 2 column layout for the recipe steps and other content.
+              -->
+              <v-row>
+                <!--
                 The left column is conditionally rendered based on cook mode.
               -->
-              <v-col
-                v-if="!isCookMode || isEditForm"
-                cols="12"
-                sm="12"
-                md="4"
-                :class="$vuetify.display.mdAndUp ? 'border-e-thin' : null"
-              >
-                <RecipePageIngredientToolsView v-if="!isEditForm" :recipe="recipe" :scale="scale" class="pr-2" />
-                <RecipePageOrganizers v-if="$vuetify.display.mdAndUp" v-model="recipe" class="pr-2" @item-selected="chipClicked" />
-              </v-col>
-              <!--
+                <v-col
+                  v-if="!isCookMode || isEditForm"
+                  cols="12"
+                  sm="12"
+                  md="4"
+                  :class="$vuetify.display.mdAndUp ? 'border-e-thin' : null"
+                >
+                  <RecipePageIngredientToolsView v-if="!isEditForm" v-model:scale="scale" :recipe="recipe" class="pr-2" />
+                  <RecipePageOrganizers v-if="$vuetify.display.mdAndUp" v-model="recipe" class="pr-2" @item-selected="chipClicked" />
+                </v-col>
+                <!--
                 the right column is always rendered, but it's layout width is determined by where the left column is
                 rendered.
               -->
-              <v-col cols="12" sm="12" :md="8 + (isCookMode ? 1 : 0) * 4">
-                <RecipePageInstructions
-                  v-model="recipe.recipeInstructions"
-                  v-model:assets="recipe.assets"
-                  :recipe="recipe"
-                  :scale="scale"
-                />
-                <div v-if="isEditForm" class="d-flex">
-                  <RecipeDialogBulkAdd class="ml-auto my-2 mr-1" @bulk-data="addStep" />
-                  <BaseButton class="my-2" @click="addStep()">
-                    {{ $t("general.add") }}
-                  </BaseButton>
-                </div>
-                <div v-if="!$vuetify.display.mdAndUp">
-                  <RecipePageOrganizers v-model="recipe" />
-                </div>
-                <RecipeNotes v-model="recipe.notes" :edit="isEditForm" />
-              </v-col>
-            </v-row>
+                <v-col cols="12" sm="12" :md="8 + (isCookMode ? 1 : 0) * 4">
+                  <RecipePageInstructions
+                    v-model="recipe.recipeInstructions"
+                    v-model:assets="recipe.assets"
+                    :recipe="recipe"
+                    :scale="scale"
+                  />
+                  <div v-if="isEditForm" class="d-flex">
+                    <RecipeDialogBulkAdd class="ml-auto my-2 mr-1" @bulk-data="addStep" />
+                    <BaseButton class="my-2" @click="addStep()">
+                      {{ $t("general.add") }}
+                    </BaseButton>
+                  </div>
+                  <div v-if="!$vuetify.display.mdAndUp">
+                    <RecipePageOrganizers v-model="recipe" />
+                  </div>
+                  <RecipeNotes v-model="recipe.notes" :edit="isEditForm" />
+                </v-col>
+              </v-row>
+            </template>
+            <div v-else>
+              <RecipePageOrganizers v-model="recipe" @item-selected="chipClicked" />
+              <RecipeNotes v-model="recipe.notes" :edit="isEditForm" />
+            </div>
             <RecipePageFooter v-model="recipe" />
           </v-card-text>
         </div>
@@ -146,8 +159,8 @@
           </div>
           <RecipePageIngredientToolsView
             v-if="!isEditForm"
+            v-model:scale="scale"
             :recipe="recipe"
-            :scale="scale"
             :is-cook-mode="isCookMode"
           />
           <v-divider />
@@ -193,6 +206,7 @@
             :scale="scale"
             :is-cook-mode="isCookMode"
             :group-id="recipe.groupId"
+            @update:scale="scale = $event"
           />
         </v-card>
       </div>
@@ -224,6 +238,7 @@ import RecipePageOrganizers from "./RecipePageParts/RecipePageOrganizers.vue";
 import RecipePageParseDialog from "./RecipePageParts/RecipePageParseDialog.vue";
 import RecipePageScale from "./RecipePageParts/RecipePageScale.vue";
 import RecipePageInfoEditor from "./RecipePageParts/RecipePageInfoEditor.vue";
+import RecipeManualContent from "./RecipePageParts/RecipeManualContent.vue";
 import RecipePageComments from "./RecipePageParts/RecipePageComments.vue";
 import RecipePrintContainer from "~/components/Domain/Recipe/RecipePrintContainer.vue";
 import {
@@ -355,11 +370,23 @@ const paramsParse = useRouteQuery<BooleanString>("parse", "");
 const paramsManualDraft = useRouteQuery<BooleanString>("manualDraft", "");
 const MANUAL_DRAFT_RECIPE_PREFIX = "__mealie_manual_draft__";
 
+const manualContentMode = computed(() => recipe.value.extras?.manualContentMode || "structured");
+const isFreeTextRecipe = computed(() => ["plain", "rich"].includes(String(manualContentMode.value)));
+const showManualContentControls = computed(
+  () => paramsManualDraft.value === "true" || recipe.value.extras?.manualCreation === true || isFreeTextRecipe.value,
+);
+
 onMounted(() => {
   if (paramsManualDraft.value === "true" && recipe.value.name?.startsWith(MANUAL_DRAFT_RECIPE_PREFIX)) {
     recipe.value.name = "";
+    recipe.value.extras = {
+      ...(recipe.value.extras || {}),
+      manualCreation: true,
+      manualContentMode: recipe.value.extras?.manualContentMode || "structured",
+    };
     if (originalRecipe.value) {
       originalRecipe.value.name = "";
+      originalRecipe.value.extras = deepCopy(recipe.value.extras);
     }
   }
 

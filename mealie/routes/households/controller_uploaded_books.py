@@ -1,3 +1,4 @@
+import asyncio
 import shutil
 from pathlib import Path
 from uuid import uuid4
@@ -13,13 +14,19 @@ from mealie.db.models.household.uploaded_book import UploadedBook
 from mealie.routes._base import controller
 from mealie.routes._base.base_controllers import BasePublicController
 from mealie.schema.cookbook.uploaded_book import (
+    AICookbookGenerateRequest,
     UploadedBookExtractRequest,
     UploadedBookOut,
     UploadedBookTranslateRequest,
 )
 from mealie.schema.household.household import HouseholdInDB
 from mealie.schema.user import PrivateUser
-from mealie.services.uploaded_books import UploadedBookRecipeExtractor, UploadedBookTranslator
+from mealie.services.uploaded_books import (
+    AICookbookBuilder,
+    UploadedBookClassifier,
+    UploadedBookRecipeExtractor,
+    UploadedBookTranslator,
+)
 from mealie.services.uploaded_books.book_recipe_extractor import EXTRACTION_CANCELLED, TRANSLATION_CANCELLED
 
 router = APIRouter(prefix="/households/uploaded-books", tags=["Households: Uploaded Books"])
@@ -56,7 +63,7 @@ BOOK_MEDIA_TYPES = {
     ".txt": "text/plain",
     ".zip": "application/zip",
 }
-INLINE_BOOK_EXTENSIONS = {".pdf", ".txt"}
+INLINE_BOOK_EXTENSIONS = {".htm", ".html", ".pdf", ".txt"}
 SUPPORTED_BOOK_FORMATS = ", ".join(sorted(extension.removeprefix(".").upper() for extension in BOOK_MEDIA_TYPES))
 
 
@@ -234,6 +241,38 @@ class UploadedBooksController(BasePublicController):
 
         return [UploadedBookOut.model_validate(book) for book in books]
 
+    @router.post("/generate", response_model=list[UploadedBookOut], status_code=status.HTTP_201_CREATED)
+    async def generate_ai_cookbook(self, data: AICookbookGenerateRequest) -> list[UploadedBookOut]:
+        builder = AICookbookBuilder(self.repos, self.user, self.household, self.translator)
+        try:
+            return await builder.generate(data, self.folders.DATA_DIR.joinpath("uploaded-books"))
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    @router.post("/{book_id}/refresh-ai", response_model=list[UploadedBookOut])
+    async def refresh_ai_cookbook(self, book_id: UUID4) -> list[UploadedBookOut]:
+        book = self._get_book_or_404(book_id)
+        builder = AICookbookBuilder(self.repos, self.user, self.household, self.translator)
+        try:
+            return await builder.refresh(book, self.folders.DATA_DIR.joinpath("uploaded-books"))
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    @router.post("/{book_id}/classify", response_model=UploadedBookOut, status_code=status.HTTP_202_ACCEPTED)
+    def classify_book(self, book_id: UUID4, bg_tasks: BackgroundTasks) -> UploadedBookOut:
+        book = self._get_book_or_404(book_id)
+        if book.classification_status == "processing":
+            raise HTTPException(status.HTTP_409_CONFLICT, detail="Book classification is already running")
+        book.classification_status = "processing"
+        book.classification_error = None
+        self.session.add(book)
+        self.session.commit()
+        self.session.refresh(book)
+
+        classifier = UploadedBookClassifier(self.repos, self.user, self.household, self.translator)
+        bg_tasks.add_task(classifier.classify, book.id, self.folders.DATA_DIR.joinpath("uploaded-books"))
+        return UploadedBookOut.model_validate(book)
+
     @router.post("/{book_id}/extract-recipes", response_model=UploadedBookOut, status_code=status.HTTP_202_ACCEPTED)
     def extract_recipes(
         self,
@@ -386,8 +425,10 @@ class UploadedBooksController(BasePublicController):
     @router.post("", response_model=UploadedBookOut, status_code=status.HTTP_201_CREATED)
     async def upload_book(
         self,
+        bg_tasks: BackgroundTasks,
         file: UploadFile = File(...),
         name: str | None = Form(None),
+        classify_with_ai: bool = Form(True),
     ) -> UploadedBookOut:
         original_file_name = file.filename or ""
         extension = get_book_extension(original_file_name)
@@ -406,12 +447,16 @@ class UploadedBooksController(BasePublicController):
         if not target_path.is_relative_to(self._books_root().resolve()):
             raise HTTPException(status.HTTP_400_BAD_REQUEST)
 
-        size = 0
-        try:
+        def copy_upload() -> int:
+            copied_size = 0
             with target_path.open("wb") as buffer:
                 while chunk := file.file.read(1024 * 1024):
-                    size += len(chunk)
+                    copied_size += len(chunk)
                     buffer.write(chunk)
+            return copied_size
+
+        try:
+            size = await asyncio.to_thread(copy_upload)
         except Exception:
             target_path.unlink(missing_ok=True)
             raise
@@ -448,6 +493,10 @@ class UploadedBooksController(BasePublicController):
             self.session.rollback()
             target_path.unlink(missing_ok=True)
             raise
+
+        if classify_with_ai:
+            classifier = UploadedBookClassifier(self.repos, self.user, self.household, self.translator)
+            bg_tasks.add_task(classifier.classify, book.id, self.folders.DATA_DIR.joinpath("uploaded-books"))
 
         return UploadedBookOut.model_validate(book)
 

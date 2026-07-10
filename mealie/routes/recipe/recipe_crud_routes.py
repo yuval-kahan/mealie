@@ -81,6 +81,11 @@ from mealie.services.recipe.recipe_data_service import (
     NotAnImageError,
     RecipeDataService,
 )
+from mealie.services.recipe.video_asset_service import (
+    VIDEO_ASSET_EXTENSIONS,
+    VideoTranscodeError,
+    normalize_video_asset,
+)
 from mealie.services.scraper.recipe_bulk_scraper import BulkImportVideo, RecipeBulkScraperService
 from mealie.services.scraper.scraped_extras import ScraperContext
 from mealie.services.scraper.scraper import create_from_html
@@ -92,28 +97,6 @@ from mealie.services.scraper.scraper_strategies import (
 
 from ._base import BaseRecipeController, JSONBytes
 
-ASSET_VIDEO_EXTENSIONS = {
-    "3g2",
-    "3gp",
-    "avi",
-    "f4v",
-    "flv",
-    "m1v",
-    "m2ts",
-    "m2v",
-    "m4v",
-    "mkv",
-    "mov",
-    "mp4",
-    "mpe",
-    "mpeg",
-    "mpg",
-    "mts",
-    "ogv",
-    "ts",
-    "webm",
-    "wmv",
-}
 ASSET_ALLOWED_EXTENSIONS = {
     "pdf",
     "jpg",
@@ -127,7 +110,7 @@ ASSET_ALLOWED_EXTENSIONS = {
     "md",
     "csv",
     "json",
-    *ASSET_VIDEO_EXTENSIONS,
+    *VIDEO_ASSET_EXTENSIONS,
 }
 
 router = UserAPIRouter(prefix="/recipes", route_class=MealieCrudRoute)
@@ -516,7 +499,7 @@ class RecipeController(BaseRecipeController):
             for position, (index, video) in enumerate(zip(video_indexes, videos, strict=True)):
                 original_name = video.filename or f"video-{index + 1}"
                 extension = original_name.split(".")[-1].lower()
-                if extension not in ASSET_VIDEO_EXTENSIONS:
+                if extension not in VIDEO_ASSET_EXTENSIONS:
                     raise HTTPException(status_code=400, detail="Unsupported video extension")
 
                 dest = temp_dir / f"{position}.{extension}"
@@ -583,6 +566,7 @@ class RecipeController(BaseRecipeController):
     async def create_recipe_from_image(
         self,
         images: list[UploadFile] = File(...),
+        notes: str | None = Form(None, max_length=5000),
         translate_language: str | None = Query(None, alias="translateLanguage"),
         include_ai_tips: bool = Query(True, alias="includeAiTips"),
         include_item_images: bool = Query(True, alias="includeItemImages"),
@@ -598,7 +582,7 @@ class RecipeController(BaseRecipeController):
                 detail=ErrorResponse.respond("OpenAI image services are not enabled"),
             )
 
-        recipe = await self.service.create_from_images(images, translate_language, include_ai_tips)
+        recipe = await self.service.create_from_images(images, translate_language, include_ai_tips, notes)
         if include_item_images:
             await self._ensure_recipe_item_images(recipe)
         self.publish_event(
@@ -1309,7 +1293,7 @@ class RecipeController(BaseRecipeController):
             return None
 
     @router.post("/{slug}/assets", response_model=RecipeAsset, tags=["Recipe: Images and Assets"])
-    def upload_recipe_asset(
+    async def upload_recipe_asset(
         self,
         slug: str,
         name: str = Form(...),
@@ -1330,7 +1314,6 @@ class RecipeController(BaseRecipeController):
             raise HTTPException(status_code=400, detail="Missing required fields")
 
         file_name = f"{file_slug}.{extension}"
-        asset_in = RecipeAsset(name=name, icon=icon, file_name=file_name)
 
         recipe = self.service.get_one(slug)
 
@@ -1343,16 +1326,39 @@ class RecipeController(BaseRecipeController):
                 detail=f"File name {file_name} or extension {extension} not valid",
             )
 
-        with dest.open("wb") as buffer:
-            copyfileobj(file.file, buffer)
+        def copy_upload() -> None:
+            with dest.open("wb") as buffer:
+                copyfileobj(file.file, buffer)
+
+        try:
+            await asyncio.to_thread(copy_upload)
+        except Exception:
+            dest.unlink(missing_ok=True)
+            raise
+        finally:
+            await file.close()
 
         if not dest.is_file():
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+        if extension in VIDEO_ASSET_EXTENSIONS:
+            try:
+                dest = await normalize_video_asset(dest)
+            except VideoTranscodeError as exc:
+                dest.unlink(missing_ok=True)
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Video conversion failed: {exc}",
+                ) from exc
+            extension = "mp4"
+            file_name = dest.name
+
+        asset_in = RecipeAsset(name=name, icon=icon, file_name=file_name)
+
         if recipe.assets is not None:
             recipe.assets.append(asset_in)
 
-        if extension in ASSET_VIDEO_EXTENSIONS and recipe.settings is not None:
+        if extension in VIDEO_ASSET_EXTENSIONS and recipe.settings is not None:
             recipe.settings.show_assets = True
 
         self.service.update_one(slug, recipe)
