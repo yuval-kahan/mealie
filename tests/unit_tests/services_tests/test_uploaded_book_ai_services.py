@@ -8,7 +8,7 @@ import pytest
 from mealie.schema.group.ai_providers import AIProviderOut
 from mealie.schema.openai.general import OpenAICookbookChapter, OpenAICookbookPlan
 from mealie.services.uploaded_books.ai_cookbook_builder import AICookbookBuilder
-from mealie.services.uploaded_books.book_recipe_extractor import UploadedBookRecipeExtractor
+from mealie.services.uploaded_books.book_recipe_extractor import BookTextPage, UploadedBookRecipeExtractor
 
 
 def test_gemini_provider_creates_one_worker_slot_per_unique_key():
@@ -74,6 +74,19 @@ def test_pdf_classification_sample_stops_reading_at_the_requested_page_limit(mon
     assert len(pages) == 40
     assert extraction_counts["pages"] == 40
     assert pages[-1].number == 40
+
+
+def test_extraction_chunks_include_forward_context_without_changing_primary_ranges():
+    extractor = object.__new__(UploadedBookRecipeExtractor)
+    pages = [BookTextPage(number=index, text=f"Page {index} text") for index in range(1, 6)]
+
+    chunks = extractor._build_chunks(pages, pages_per_chunk=2, forward_overlap_pages=1)
+
+    assert [(chunk.start_page, chunk.end_page) for chunk in chunks] == [(1, 2), (3, 4), (5, 5)]
+    assert chunks[0].page_numbers == [1, 2]
+    assert "[Page 3]" in chunks[0].text
+    assert "[Page 4]" not in chunks[0].text
+    assert "[Page 5]" in chunks[1].text
 
 
 @pytest.mark.asyncio

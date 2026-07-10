@@ -4,6 +4,9 @@ Rules:
 - Return only complete, usable recipes found in the chunk.
 - Ignore table of contents, index pages, introductions, essays, acknowledgements, ingredient glossaries, and general cooking explanations unless they contain a complete recipe.
 - A complete recipe must have a useful name, ingredients, and preparation instructions.
+- Extract every titled, actionable preparation, not only main dishes. Stocks, sauces, jus, doughs, pasta shapes, clarified or compound butters, garnishes, fillings, and other base preparations are recipes when the text gives enough information to make them.
+- Do not omit a short or one-ingredient preparation merely because it is simple or refers to another base recipe. Preserve the ingredients and method that are explicitly present without inventing the referenced recipe.
+- Before returning, scan the chunk page by page and verify that every titled preparation with ingredients and a method is represented exactly once in the response.
 - If a recipe starts in this chunk but is clearly incomplete because important ingredients or instructions are missing, skip it. Do not invent missing content.
 - Translate all returned recipe content to Hebrew.
 - Preserve useful details such as yield, prep time, cook time, notes, serving suggestions, and equipment.

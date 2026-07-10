@@ -363,7 +363,12 @@ class UploadedBookRecipeExtractor(BaseService):
             if (page_start is None or page.number >= page_start) and (page_end is None or page.number <= page_end)
         ]
 
-    def _build_chunks(self, pages: list[BookTextPage], pages_per_chunk: int) -> list[BookTextChunk]:
+    def _build_chunks(
+        self,
+        pages: list[BookTextPage],
+        pages_per_chunk: int,
+        forward_overlap_pages: int = 0,
+    ) -> list[BookTextChunk]:
         chunks: list[BookTextChunk] = []
         current_pages: list[BookTextPage] = []
         current_chars = 0
@@ -397,6 +402,20 @@ class UploadedBookRecipeExtractor(BaseService):
             current_chars += page_len
 
         flush()
+
+        if forward_overlap_pages > 0:
+            page_positions = {page.number: index for index, page in enumerate(pages)}
+            for chunk in chunks:
+                last_position = page_positions[chunk.page_numbers[-1]]
+                overlap = pages[last_position + 1 : last_position + 1 + forward_overlap_pages]
+                chunk_chars = len(chunk.text)
+                for page in overlap:
+                    page_text = f"\n\n[Page {page.number}]\n{page.text}"
+                    if chunk_chars + len(page_text) > self.MAX_AI_CHARS:
+                        break
+                    chunk.text += page_text
+                    chunk_chars += len(page_text)
+
         return chunks
 
     def _provider_slots(self, openai_service: OpenAIService) -> list[ProviderSlot]:
@@ -420,8 +439,11 @@ class UploadedBookRecipeExtractor(BaseService):
         return (
             f"Cookbook title: {book.name}\n"
             f"Original file name: {book.original_file_name}\n"
-            f"Page range: {chunk.start_page}-{chunk.end_page}\n"
+            f"Primary page range: {chunk.start_page}-{chunk.end_page}\n"
             f"Translate recipes to: {translate_language}\n\n"
+            "The text may include up to two following pages as overlap context. "
+            "Return a recipe only when its title or ingredient list begins inside the primary page range. "
+            "Use overlap pages only to complete a recipe that began in the primary range.\n\n"
             "Cookbook chunk text:\n"
             f"{chunk.text}"
         )
@@ -775,14 +797,19 @@ class UploadedBookRecipeExtractor(BaseService):
 
         return ChunkWorkResult(chunk=chunk, recipes=response.recipes if response else [], provider_label=slot.label)
 
-    def _existing_recipe_for_book_chunk(self, recipe: Recipe) -> RecipeModel | None:
+    def _existing_recipe_for_book_chunk(self, recipe: Recipe, book: UploadedBook) -> RecipeModel | None:
         source = recipe.source or ""
         query = (
             sa.select(RecipeModel)
             .where(
                 RecipeModel.group_id == self.user.group_id,
                 sa.func.lower(RecipeModel.name) == recipe.name.lower(),
-                sa.func.lower(sa.func.coalesce(RecipeModel.source, "")) == source.lower(),
+                sa.or_(
+                    sa.func.lower(sa.func.coalesce(RecipeModel.source, "")) == source.lower(),
+                    sa.func.lower(sa.func.coalesce(RecipeModel.source, "")).startswith(
+                        book.name.lower(), autoescape=True
+                    ),
+                ),
             )
             .limit(1)
         )
@@ -799,7 +826,7 @@ class UploadedBookRecipeExtractor(BaseService):
 
         recipe = self.openai_recipe_service._convert_recipe(self._recipe_with_book_source(openai_recipe, book, chunk))
 
-        if self._existing_recipe_for_book_chunk(recipe):
+        if self._existing_recipe_for_book_chunk(recipe, book):
             return None
 
         try:
@@ -864,7 +891,7 @@ class UploadedBookRecipeExtractor(BaseService):
             if not pages:
                 raise ValueError("No extractable text was found in the selected page range")
 
-            chunks = self._build_chunks(pages, pages_per_chunk)
+            chunks = self._build_chunks(pages, pages_per_chunk, forward_overlap_pages=2)
             if not chunks:
                 raise ValueError("No chunks could be created from this book")
             del pages
