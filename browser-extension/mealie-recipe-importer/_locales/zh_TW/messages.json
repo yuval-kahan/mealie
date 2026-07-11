@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "Mealie AI 食譜匯入工具"
+  },
+  "extensionDescription": {
+    "message": "擷取目前瀏覽器頁面並將其作為食譜或文章發送至 Mealie AI。"
+  },
+  "actionTitle": {
+    "message": "發送至 Mealie AI"
+  }
+}

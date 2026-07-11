@@ -1,0 +1,100 @@
+{
+  "extraction": {
+    "keywords": "Sleutelwoorde",
+    "image": "Prent",
+    "ingredients": "Bestanddele",
+    "instructions": "Instruksies",
+    "content-truncated": "Inhoud verkort deur die Mealie-uitbreiding",
+    "recipe-page": "Resepbladsy",
+    "source-url": "Bron-URL",
+    "source-image": "Bronbeeld",
+    "structured-data": "Gestruktureerde resepdata",
+    "visible-text": "Sigbare bladsyteks",
+    "name": "Naam",
+    "description": "Beskrywing",
+    "author": "Outeur",
+    "yield": "Opbrengs",
+    "prep-time": "Voorbereidingstyd",
+    "cook-time": "Kooktyd",
+    "total-time": "Totale tyd",
+    "category": "Kategorie",
+    "cuisine": "Kookkuns"
+  },
+  "extension": {
+    "name": "Mealie AI",
+    "description": "Onttrek die huidige blaaierbladsy en stuur dit na Mealie AI as 'n resep of artikel.",
+    "action-title": "Stuur na Mealie AI",
+    "manifest-name": "Mealie AI Resep-invoerder"
+  },
+  "header": {
+    "subtitle": "Onttrek die huidige bladsy en stuur dit om 'n resep of artikel te skep."
+  },
+  "settings": {
+    "mealie-url": "Mealie-adres",
+    "extract-mode": "Wat om te onttrek",
+    "interface-language": "Koppelvlaktaal",
+    "automatic-language": "Outomaties (blaaier-taal)",
+    "translation-language": "Vertaaltaal"
+  },
+  "mode": {
+    "auto": "Outomatiese opsporing",
+    "recipe": "Onttrek resep",
+    "article": "Onttrek artikel"
+  },
+  "options": {
+    "create-shopping-list": "Skep ook 'n outomatiese inkopielys",
+    "organize-shopping-list": "Organiseer die inkopielys met AI",
+    "include-ai-tips": "Voeg AI-notas, wenke en aanbevelings vir bestanddeelvariasies by",
+    "include-item-images": "Soek en stoor beelde vir bestanddele, gereedskap en inkopielysitems"
+  },
+  "actions": {
+    "extract-only": "Onttrek slegs",
+    "send-auto": "Bespeur en stuur na AI",
+    "send-recipe": "Stuur resep na AI",
+    "send-article": "Stuur artikel na AI",
+    "connect-mealie": "Maak Mealie oop / koppel"
+  },
+  "preview": {
+    "title": "Voorskou"
+  },
+  "links": {
+    "open-recipe": "Maak resep in Mealie oop",
+    "open-article": "Maak artikel in Mealie oop"
+  },
+  "status": {
+    "open-and-login": "Maak Mealie oop in 'n oortjie in hierdie blaaier en meld aan voordat jy die uitbreiding gebruik.",
+    "login-required": "Meld aan by Mealie in hierdie blaaier voordat jy die uitbreiding gebruik.",
+    "check-failed": "Kon nie Mealie nagaan nie ({status}). Maak seker die webwerf is oop by die korrekte adres.",
+    "provider-no-default": "AI-verskaffers is gestoor, maar geen verstekverskaffer is gekies nie. Kies 'n verstekverskaffer in Mealie se API-instellings.",
+    "provider-required": "Konfigureer 'n API/AI-verskaffer in Mealie voordat jy die uitbreiding gebruik.",
+    "connection-failed": "Kon nie aan Mealie koppel nie. Gaan die adres na en maak seker die webwerf is oop.",
+    "mealie-opened": "Mealie is oopgemaak. Meld daar aan indien nodig, en maak dan die uitbreiding weer oop.",
+    "extracting": "Onttrek inhoud vanaf die bladsy...",
+    "extracted": "Bladsy-inhoud onttrek: {title}",
+    "untitled": "Naamloos",
+    "extracting-and-sending": "Onttrek inhoud en stuur dit na Mealie...",
+    "processing-article": "Onttrek die artikel en stuur dit na Mealie...",
+    "processing-recipe": "Onttrek die resep en stuur dit na Mealie...",
+    "processing-auto": "Onttrek die bladsy, bespeur die inhoudstipe daarvan, en stuur dit na Mealie...",
+    "article-created": "Artikel geskep: {title}",
+    "recipe-created": "Resep geskep: {name}",
+    "recipe-created-too": "'n Resep is ook geskep: {name}",
+    "shopping-list": "Inkopielys: {name}",
+    "attention": "Aandag: {message}",
+    "extraction-finished": "Onttrekking voltooi"
+  },
+  "errors": {
+    "invalid-mealie-url": "Die Mealie-adres is ongeldig.",
+    "invalid-recipe-url": "Die resepskakel is ongeldig.",
+    "active-tab-missing": "Geen aktiewe oortjie is gevind nie.",
+    "unsupported-page": "Hierdie bladsy kan nie onttrek word nie. Maak 'n gewone resepskakel oop en probeer weer.",
+    "text-extraction-failed": "Kon nie teks vanaf die bladsy onttrek nie.",
+    "open-link-failed": "Kon nie die skakel in die blaaier oopmaak nie.",
+    "page-load-timeout": "Die bladsy het te lank geneem om te laai.",
+    "request-unauthorized": "Die versoek het misluk omdat daar geen aktiewe Mealie-sessie is nie. Maak Mealie in hierdie blaaier oop, meld aan en probeer weer.",
+    "request-failed": "Die versoek het misluk ({status}). Maak seker Mealie is oop en dat jy aangemeld is in hierdie blaaier.",
+    "bridge-failed": "Die Mealie-uitbreidingsbrug het misluk.",
+    "import-failed": "Die Mealie-uitbreidingsinvoer het misluk.",
+    "unexpected": "Iets het skeefgeloop."
+  }
+}

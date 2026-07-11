@@ -1,0 +1,100 @@
+{
+  "extraction": {
+    "keywords": "Nyckelord",
+    "image": "Bild",
+    "ingredients": "Ingredienser",
+    "instructions": "Instruktioner",
+    "content-truncated": "Innehåll trunkerat av Mealie-tillägget",
+    "recipe-page": "Receptsida",
+    "source-url": "Käll-URL",
+    "source-image": "Källbild",
+    "structured-data": "Strukturerad receptdata",
+    "visible-text": "Synlig sidtext",
+    "name": "Namn",
+    "description": "Beskrivning",
+    "author": "Författare",
+    "yield": "Antal portioner",
+    "prep-time": "Förberedelsetid",
+    "cook-time": "Tillagningstid",
+    "total-time": "Total tid",
+    "category": "Kategori",
+    "cuisine": "Kök"
+  },
+  "extension": {
+    "name": "Mealie AI",
+    "description": "Extrahera den aktuella webbsidan och skicka den till Mealie AI som ett recept eller en artikel.",
+    "action-title": "Skicka till Mealie AI",
+    "manifest-name": "Mealie AI Receptimportör"
+  },
+  "header": {
+    "subtitle": "Extrahera den aktuella sidan och skicka den för att skapa ett recept eller en artikel."
+  },
+  "settings": {
+    "mealie-url": "Mealie-adress",
+    "extract-mode": "Vad som ska extraheras",
+    "interface-language": "Gränssnittsspråk",
+    "automatic-language": "Automatiskt (webbläsarspråk)",
+    "translation-language": "Översättningsspråk"
+  },
+  "mode": {
+    "auto": "Automatisk identifiering",
+    "recipe": "Extrahera recept",
+    "article": "Extrahera artikel"
+  },
+  "options": {
+    "create-shopping-list": "Skapa även en automatisk inköpslista",
+    "organize-shopping-list": "Organisera inköpslistan med AI",
+    "include-ai-tips": "Lägg till AI-anteckningar, tips och rekommendationer för ingrediensvariationer",
+    "include-item-images": "Hitta och spara bilder för ingredienser, verktyg och inköpslisteartiklar"
+  },
+  "actions": {
+    "extract-only": "Extrahera endast",
+    "send-auto": "Identifiera och skicka till AI",
+    "send-recipe": "Skicka recept till AI",
+    "send-article": "Skicka artikel till AI",
+    "connect-mealie": "Öppna / anslut Mealie"
+  },
+  "preview": {
+    "title": "Förhandsgranskning"
+  },
+  "links": {
+    "open-recipe": "Öppna recept i Mealie",
+    "open-article": "Öppna artikel i Mealie"
+  },
+  "status": {
+    "open-and-login": "Öppna Mealie i en flik i denna webbläsare och logga in innan du använder tillägget.",
+    "login-required": "Logga in på Mealie i denna webbläsare innan du använder tillägget.",
+    "check-failed": "Kunde inte kontrollera Mealie ({status}). Se till att webbplatsen är öppen på rätt adress.",
+    "provider-no-default": "AI-leverantörer är sparade, men ingen standardleverantör är vald. Välj en standardleverantör i Mealies API-inställningar.",
+    "provider-required": "Konfigurera en API/AI-leverantör i Mealie innan du använder tillägget.",
+    "connection-failed": "Kunde inte ansluta till Mealie. Kontrollera adressen och se till att webbplatsen är öppen.",
+    "mealie-opened": "Mealie öppnades. Logga in där vid behov och öppna sedan tillägget igen.",
+    "extracting": "Extraherar innehåll från sidan...",
+    "extracted": "Sidans innehåll extraherat: {title}",
+    "untitled": "Namnlös",
+    "extracting-and-sending": "Extraherar innehåll och skickar det till Mealie...",
+    "processing-article": "Extraherar artikeln och skickar den till Mealie...",
+    "processing-recipe": "Extraherar receptet och skickar det till Mealie...",
+    "processing-auto": "Extraherar sidan, identifierar innehållstyp och skickar till Mealie...",
+    "article-created": "Artikel skapad: {title}",
+    "recipe-created": "Recept skapat: {name}",
+    "recipe-created-too": "Ett recept skapades också: {name}",
+    "shopping-list": "Inköpslista: {name}",
+    "attention": "Observera: {message}",
+    "extraction-finished": "Extrahering slutförd"
+  },
+  "errors": {
+    "invalid-mealie-url": "Mealie-adressen är ogiltig.",
+    "invalid-recipe-url": "Receptlänken är ogiltig.",
+    "active-tab-missing": "Ingen aktiv flik hittades.",
+    "unsupported-page": "Denna sida kan inte extraheras. Öppna en vanlig receptsida och försök igen.",
+    "text-extraction-failed": "Kunde inte extrahera text från sidan.",
+    "open-link-failed": "Kunde inte öppna länken i webbläsaren.",
+    "page-load-timeout": "Sidan tog för lång tid att läsa in.",
+    "request-unauthorized": "Begäran misslyckades eftersom det inte finns någon aktiv Mealie-session. Öppna Mealie i denna webbläsare, logga in och försök igen.",
+    "request-failed": "Begäran misslyckades ({status}). Se till att Mealie är öppet och att du är inloggad i denna webbläsare.",
+    "bridge-failed": "Mealie-tilläggets brygga misslyckades.",
+    "import-failed": "Mealie-tilläggets import misslyckades.",
+    "unexpected": "Något gick fel."
+  }
+}

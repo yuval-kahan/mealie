@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="he" dir="rtl">
+<html lang="en" dir="ltr">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -11,28 +11,33 @@
       <header class="popup-header">
         <img class="popup-logo" src="icons/icon-48.png" alt="" aria-hidden="true">
         <div>
-          <h1>Mealie AI</h1>
-          <p>חלץ את העמוד הנוכחי ושלח אותו ליצירת מתכון או מאמר.</p>
+          <h1 data-i18n="extension.name">Mealie AI</h1>
+          <p data-i18n="header.subtitle">Extract the current page and send it to create a recipe or article.</p>
         </div>
       </header>
 
       <section class="settings">
         <label>
-          כתובת Mealie
+          <span data-i18n="settings.mealie-url">Mealie address</span>
           <input id="mealieUrl" type="url" placeholder="http://localhost:3000">
         </label>
 
         <label>
-          מה לחלץ
+          <span data-i18n="settings.extract-mode">What to extract</span>
           <select id="extractMode">
-            <option value="auto">זיהוי אוטומטי</option>
-            <option value="recipe">חילוץ מתכון</option>
-            <option value="article">חילוץ מאמר</option>
+            <option value="auto" data-i18n="mode.auto">Automatic detection</option>
+            <option value="recipe" data-i18n="mode.recipe">Extract recipe</option>
+            <option value="article" data-i18n="mode.article">Extract article</option>
           </select>
         </label>
 
         <label>
-          שפת תרגום
+          <span data-i18n="settings.interface-language">Interface language</span>
+          <select id="interfaceLanguage"></select>
+        </label>
+
+        <label>
+          <span data-i18n="settings.translation-language">Translation language</span>
           <select id="translateLanguage"></select>
         </label>
       </section>
@@ -40,39 +45,40 @@
       <section class="options">
         <label class="checkbox-row">
           <input id="createShoppingList" type="checkbox">
-          <span>צור גם רשימת קניות אוטומטית</span>
+          <span data-i18n="options.create-shopping-list">Also create an automatic shopping list</span>
         </label>
 
         <label class="checkbox-row">
           <input id="organizeShoppingList" type="checkbox">
-          <span>סדר את רשימת הקניות עם AI</span>
+          <span data-i18n="options.organize-shopping-list">Organize the shopping list with AI</span>
         </label>
 
         <label class="checkbox-row">
           <input id="includeAiTips" type="checkbox">
-          <span>הוסף הערות, טיפים והמלצות סוגי רכיבים עם AI</span>
+          <span data-i18n="options.include-ai-tips">Add AI notes, tips, and ingredient-variety recommendations</span>
         </label>
 
         <label class="checkbox-row">
           <input id="includeItemImages" type="checkbox">
-          <span>מצא ושמור גם תמונות לרכיבים, כלים ופריטי רשימת קניות</span>
+          <span data-i18n="options.include-item-images">Find and save images for ingredients, tools, and shopping-list items</span>
         </label>
       </section>
 
       <section class="actions">
-        <button id="extractOnly" class="secondary" type="button">רק חלץ</button>
-        <button id="sendToMealie" class="primary" type="button">חלץ ושלח ל-AI</button>
+        <button id="extractOnly" class="secondary" type="button" data-i18n="actions.extract-only">Extract only</button>
+        <button id="sendToMealie" class="primary" type="button">Detect and send to AI</button>
       </section>
-      <button id="connectMealie" class="connect-button" type="button" hidden>פתח/חבר את Mealie</button>
+      <button id="connectMealie" class="connect-button" type="button" data-i18n="actions.connect-mealie" hidden>Open / connect Mealie</button>
 
       <section id="previewPanel" class="preview-panel" hidden>
-        <div class="preview-title">תצוגה מקדימה</div>
+        <div class="preview-title" data-i18n="preview.title">Preview</div>
         <textarea id="previewText" readonly></textarea>
       </section>
 
       <section id="status" class="status" aria-live="polite"></section>
-      <a id="recipeLink" class="recipe-link" href="#" target="_blank" rel="noopener" hidden>פתח את המתכון ב-Mealie</a>
+      <a id="recipeLink" class="recipe-link" href="#" target="_blank" rel="noopener" data-i18n="links.open-recipe" hidden>Open recipe in Mealie</a>
     </main>
+    <script src="i18n.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

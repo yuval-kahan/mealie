@@ -1,0 +1,100 @@
+{
+  "extraction": {
+    "keywords": "Nøgleord",
+    "image": "Billede",
+    "ingredients": "Ingredienser",
+    "instructions": "Instruktioner",
+    "content-truncated": "Indhold afkortet af Mealie-udvidelsen",
+    "recipe-page": "Opskriftsside",
+    "source-url": "Kilde-URL",
+    "source-image": "Kildebillede",
+    "structured-data": "Struktureret opskriftsdata",
+    "visible-text": "Synlig sidetekst",
+    "name": "Navn",
+    "description": "Beskrivelse",
+    "author": "Forfatter",
+    "yield": "Udbytte",
+    "prep-time": "Forberedelsestid",
+    "cook-time": "Tilberedningstid",
+    "total-time": "Samlet tid",
+    "category": "Kategori",
+    "cuisine": "Køkken"
+  },
+  "extension": {
+    "name": "Mealie AI",
+    "description": "Udtræk den aktuelle browserside og send den til Mealie AI som en opskrift eller artikel.",
+    "action-title": "Send til Mealie AI",
+    "manifest-name": "Mealie AI Opskriftsimportør"
+  },
+  "header": {
+    "subtitle": "Udtræk den aktuelle side og send den for at oprette en opskrift eller artikel."
+  },
+  "settings": {
+    "mealie-url": "Mealie-adresse",
+    "extract-mode": "Hvad skal udtrækkes",
+    "interface-language": "Grænsefladesprog",
+    "automatic-language": "Automatisk (browser-sprog)",
+    "translation-language": "Oversættelsessprog"
+  },
+  "mode": {
+    "auto": "Automatisk registrering",
+    "recipe": "Udtræk opskrift",
+    "article": "Udtræk artikel"
+  },
+  "options": {
+    "create-shopping-list": "Opret også en automatisk indkøbsliste",
+    "organize-shopping-list": "Organiser indkøbslisten med AI",
+    "include-ai-tips": "Tilføj AI-noter, tips og anbefalinger til ingrediensvariationer",
+    "include-item-images": "Find og gem billeder til ingredienser, redskaber og indkøbsliste-elementer"
+  },
+  "actions": {
+    "extract-only": "Udtræk kun",
+    "send-auto": "Registrer og send til AI",
+    "send-recipe": "Send opskrift til AI",
+    "send-article": "Send artikel til AI",
+    "connect-mealie": "Åbn / forbind Mealie"
+  },
+  "preview": {
+    "title": "Forhåndsvisning"
+  },
+  "links": {
+    "open-recipe": "Åbn opskrift i Mealie",
+    "open-article": "Åbn artikel i Mealie"
+  },
+  "status": {
+    "open-and-login": "Åbn Mealie i en fane i denne browser og log ind, før du bruger udvidelsen.",
+    "login-required": "Log ind på Mealie i denne browser, før du bruger udvidelsen.",
+    "check-failed": "Kunne ikke tjekke Mealie ({status}). Sørg for, at siden er åben på den korrekte adresse.",
+    "provider-no-default": "AI-udbydere er gemt, men ingen standardudbyder er valgt. Vælg en standardudbyder i Mealies API-indstillinger.",
+    "provider-required": "Konfigurer en API/AI-udbyder i Mealie, før du bruger udvidelsen.",
+    "connection-failed": "Kunne ikke forbinde til Mealie. Tjek adressen og sørg for, at siden er åben.",
+    "mealie-opened": "Mealie blev åbnet. Log ind der hvis nødvendigt, og åbn derefter udvidelsen igen.",
+    "extracting": "Udtrækker indhold fra siden...",
+    "extracted": "Sideindhold udtrukket: {title}",
+    "untitled": "Uden titel",
+    "extracting-and-sending": "Udtrækker indhold og sender det til Mealie...",
+    "processing-article": "Udtrækker artiklen og sender den til Mealie...",
+    "processing-recipe": "Udtrækker opskriften og sender den til Mealie...",
+    "processing-auto": "Udtrækker siden, registrerer indholdstypen og sender den til Mealie...",
+    "article-created": "Artikel oprettet: {title}",
+    "recipe-created": "Opskrift oprettet: {name}",
+    "recipe-created-too": "En opskrift blev også oprettet: {name}",
+    "shopping-list": "Indkøbsliste: {name}",
+    "attention": "Bemærk: {message}",
+    "extraction-finished": "Udtrækning fuldført"
+  },
+  "errors": {
+    "invalid-mealie-url": "Mealie-adressen er ugyldig.",
+    "invalid-recipe-url": "Opskriftslinket er ugyldigt.",
+    "active-tab-missing": "Ingen aktiv fane blev fundet.",
+    "unsupported-page": "Denne side kan ikke udtrækkes. Åbn en almindelig opskriftsside og prøv igen.",
+    "text-extraction-failed": "Kunne ikke udtrække tekst fra siden.",
+    "open-link-failed": "Kunne ikke åbne linket i browseren.",
+    "page-load-timeout": "Siden tog for lang tid om at indlæse.",
+    "request-unauthorized": "Anmodningen fejlede, fordi der ikke er en aktiv Mealie-session. Åbn Mealie i denne browser, log ind og prøv igen.",
+    "request-failed": "Anmodningen fejlede ({status}). Sørg for, at Mealie er åben, og at du er logget ind i denne browser.",
+    "bridge-failed": "Mealie-udvidelsesbroen fejlede.",
+    "import-failed": "Mealie-udvidelsesimporten fejlede.",
+    "unexpected": "Noget gik galt."
+  }
+}

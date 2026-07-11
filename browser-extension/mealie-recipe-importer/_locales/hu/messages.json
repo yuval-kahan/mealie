@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "Mealie AI receptimportáló"
+  },
+  "extensionDescription": {
+    "message": "Nyissa meg az aktuális böngészőoldalt, és küldje el a Mealie AI-nak receptként vagy cikként."
+  },
+  "actionTitle": {
+    "message": "Küldés a Mealie AI-nak"
+  }
+}

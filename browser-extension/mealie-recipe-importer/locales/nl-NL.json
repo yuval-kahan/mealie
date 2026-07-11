@@ -1,0 +1,100 @@
+{
+  "extraction": {
+    "keywords": "Trefwoorden",
+    "image": "Afbeelding",
+    "ingredients": "Ingrediënten",
+    "instructions": "Instructies",
+    "content-truncated": "Inhoud ingekort door de Mealie-extensie",
+    "recipe-page": "Receptpagina",
+    "source-url": "Bron-URL",
+    "source-image": "Bronafbeelding",
+    "structured-data": "Gestructureerde receptgegevens",
+    "visible-text": "Zichtbare paginatekst",
+    "name": "Naam",
+    "description": "Beschrijving",
+    "author": "Auteur",
+    "yield": "Opbrengst",
+    "prep-time": "Voorbereidingstijd",
+    "cook-time": "Bereidingstijd",
+    "total-time": "Totale tijd",
+    "category": "Categorie",
+    "cuisine": "Keuken"
+  },
+  "extension": {
+    "name": "Mealie AI",
+    "description": "Extraheer de huidige browserpagina en stuur deze naar Mealie AI als recept of artikel.",
+    "action-title": "Verstuur naar Mealie AI",
+    "manifest-name": "Mealie AI Receptimporteur"
+  },
+  "header": {
+    "subtitle": "Extraheer de huidige pagina en verstuur deze om een recept of artikel aan te maken."
+  },
+  "settings": {
+    "mealie-url": "Mealie-adres",
+    "extract-mode": "Wat moet er worden geëxtraheerd",
+    "interface-language": "Interfacetaal",
+    "automatic-language": "Automatisch (browsertaal)",
+    "translation-language": "Vertaaltaal"
+  },
+  "mode": {
+    "auto": "Automatische detectie",
+    "recipe": "Recept extraheren",
+    "article": "Artikel extraheren"
+  },
+  "options": {
+    "create-shopping-list": "Maak ook automatisch een boodschappenlijst aan",
+    "organize-shopping-list": "Organiseer de boodschappenlijst met AI",
+    "include-ai-tips": "Voeg AI-notities, tips en aanbevelingen voor ingrediëntvariaties toe",
+    "include-item-images": "Zoek en bewaar afbeeldingen voor ingrediënten, hulpmiddelen en boodschappenlijstitems"
+  },
+  "actions": {
+    "extract-only": "Alleen extraheren",
+    "send-auto": "Detecteren en naar AI sturen",
+    "send-recipe": "Recept naar AI sturen",
+    "send-article": "Artikel naar AI sturen",
+    "connect-mealie": "Open / verbind Mealie"
+  },
+  "preview": {
+    "title": "Voorbeeld"
+  },
+  "links": {
+    "open-recipe": "Open recept in Mealie",
+    "open-article": "Open artikel in Mealie"
+  },
+  "status": {
+    "open-and-login": "Open Mealie in een tabblad in deze browser en log in voordat je de extensie gebruikt.",
+    "login-required": "Log in op Mealie in deze browser voordat je de extensie gebruikt.",
+    "check-failed": "Kon Mealie niet controleren ({status}). Zorg ervoor dat de site geopend is op het juiste adres.",
+    "provider-no-default": "AI-providers zijn opgeslagen, maar er is geen standaardprovider geselecteerd. Selecteer een standaardprovider in de API-instellingen van Mealie.",
+    "provider-required": "Configureer een API/AI-provider in Mealie voordat je de extensie gebruikt.",
+    "connection-failed": "Kon geen verbinding maken met Mealie. Controleer het adres en zorg ervoor dat de site geopend is.",
+    "mealie-opened": "Mealie is geopend. Log daar indien nodig in en open daarna de extensie opnieuw.",
+    "extracting": "Inhoud van de pagina extraheren...",
+    "extracted": "Pagina-inhoud geëxtraheerd: {title}",
+    "untitled": "Naamloos",
+    "extracting-and-sending": "Inhoud extraheren en naar Mealie sturen...",
+    "processing-article": "Artikel extraheren en naar Mealie sturen...",
+    "processing-recipe": "Recept extraheren en naar Mealie sturen...",
+    "processing-auto": "Pagina extraheren, inhoudstype detecteren en naar Mealie sturen...",
+    "article-created": "Artikel aangemaakt: {title}",
+    "recipe-created": "Recept aangemaakt: {name}",
+    "recipe-created-too": "Er is ook een recept aangemaakt: {name}",
+    "shopping-list": "Boodschappenlijst: {name}",
+    "attention": "Let op: {message}",
+    "extraction-finished": "Extractie voltooid"
+  },
+  "errors": {
+    "invalid-mealie-url": "Het Mealie-adres is ongeldig.",
+    "invalid-recipe-url": "De receptlink is ongeldig.",
+    "active-tab-missing": "Geen actief tabblad gevonden.",
+    "unsupported-page": "Deze pagina kan niet worden geëxtraheerd. Open een normale receptpagina en probeer het opnieuw.",
+    "text-extraction-failed": "Kon geen tekst van de pagina extraheren.",
+    "open-link-failed": "Kon de link niet openen in de browser.",
+    "page-load-timeout": "Het laden van de pagina duurde te lang.",
+    "request-unauthorized": "Het verzoek is mislukt omdat er geen actieve Mealie-sessie is. Open Mealie in deze browser, log in en probeer het opnieuw.",
+    "request-failed": "Het verzoek is mislukt ({status}). Zorg ervoor dat Mealie geopend is en dat je bent ingelogd in deze browser.",
+    "bridge-failed": "De Mealie-extensiebridge is mislukt.",
+    "import-failed": "De Mealie-extensie-import is mislukt.",
+    "unexpected": "Er is iets misgegaan."
+  }
+}

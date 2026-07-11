@@ -1,0 +1,100 @@
+{
+  "extraction": {
+    "keywords": "Từ khóa",
+    "image": "Hình ảnh",
+    "ingredients": "Nguyên liệu",
+    "instructions": "Hướng dẫn",
+    "content-truncated": "Nội dung bị cắt bớt bởi tiện ích mở rộng Mealie",
+    "recipe-page": "Trang công thức",
+    "source-url": "URL nguồn",
+    "source-image": "Hình ảnh nguồn",
+    "structured-data": "Dữ liệu công thức có cấu trúc",
+    "visible-text": "Văn bản hiển thị trên trang",
+    "name": "Tên",
+    "description": "Mô tả",
+    "author": "Tác giả",
+    "yield": "Khẩu phần",
+    "prep-time": "Thời gian chuẩn bị",
+    "cook-time": "Thời gian nấu",
+    "total-time": "Tổng thời gian",
+    "category": "Danh mục",
+    "cuisine": "Ẩm thực"
+  },
+  "extension": {
+    "name": "Mealie AI",
+    "description": "Trích xuất trang web hiện tại và gửi đến Mealie AI dưới dạng công thức hoặc bài viết.",
+    "action-title": "Gửi đến Mealie AI",
+    "manifest-name": "Trình nhập công thức AI Mealie"
+  },
+  "header": {
+    "subtitle": "Trích xuất trang hiện tại và gửi đi để tạo công thức hoặc bài viết."
+  },
+  "settings": {
+    "mealie-url": "Địa chỉ Mealie",
+    "extract-mode": "Nội dung cần trích xuất",
+    "interface-language": "Ngôn ngữ giao diện",
+    "automatic-language": "Tự động (ngôn ngữ trình duyệt)",
+    "translation-language": "Ngôn ngữ dịch"
+  },
+  "mode": {
+    "auto": "Tự động phát hiện",
+    "recipe": "Trích xuất công thức",
+    "article": "Trích xuất bài viết"
+  },
+  "options": {
+    "create-shopping-list": "Đồng thời tạo danh sách mua sắm tự động",
+    "organize-shopping-list": "Sắp xếp danh sách mua sắm bằng AI",
+    "include-ai-tips": "Thêm ghi chú, mẹo và gợi ý biến tấu nguyên liệu từ AI",
+    "include-item-images": "Tìm và lưu hình ảnh cho nguyên liệu, dụng cụ và các mục trong danh sách mua sắm"
+  },
+  "actions": {
+    "extract-only": "Chỉ trích xuất",
+    "send-auto": "Phát hiện và gửi đến AI",
+    "send-recipe": "Gửi công thức đến AI",
+    "send-article": "Gửi bài viết đến AI",
+    "connect-mealie": "Mở / kết nối Mealie"
+  },
+  "preview": {
+    "title": "Xem trước"
+  },
+  "links": {
+    "open-recipe": "Mở công thức trong Mealie",
+    "open-article": "Mở bài viết trong Mealie"
+  },
+  "status": {
+    "open-and-login": "Mở Mealie trong một tab của trình duyệt này và đăng nhập trước khi sử dụng tiện ích.",
+    "login-required": "Vui lòng đăng nhập vào Mealie trong trình duyệt này trước khi sử dụng tiện ích.",
+    "check-failed": "Không thể kiểm tra Mealie ({status}). Hãy đảm bảo trang web đang mở tại đúng địa chỉ.",
+    "provider-no-default": "Các nhà cung cấp AI đã được lưu, nhưng chưa chọn nhà cung cấp mặc định. Hãy chọn nhà cung cấp mặc định trong cài đặt API của Mealie.",
+    "provider-required": "Vui lòng cấu hình nhà cung cấp API/AI trong Mealie trước khi sử dụng tiện ích.",
+    "connection-failed": "Không thể kết nối với Mealie. Kiểm tra địa chỉ và đảm bảo trang web đang mở.",
+    "mealie-opened": "Mealie đã được mở. Hãy đăng nhập nếu cần, sau đó mở lại tiện ích.",
+    "extracting": "Đang trích xuất nội dung từ trang...",
+    "extracted": "Đã trích xuất nội dung trang: {title}",
+    "untitled": "Không có tiêu đề",
+    "extracting-and-sending": "Đang trích xuất nội dung và gửi đến Mealie...",
+    "processing-article": "Đang trích xuất bài viết và gửi đến Mealie...",
+    "processing-recipe": "Đang trích xuất công thức và gửi đến Mealie...",
+    "processing-auto": "Đang trích xuất trang, phát hiện loại nội dung và gửi đến Mealie...",
+    "article-created": "Đã tạo bài viết: {title}",
+    "recipe-created": "Đã tạo công thức: {name}",
+    "recipe-created-too": "Một công thức cũng đã được tạo: {name}",
+    "shopping-list": "Danh sách mua sắm: {name}",
+    "attention": "Chú ý: {message}",
+    "extraction-finished": "Hoàn tất trích xuất"
+  },
+  "errors": {
+    "invalid-mealie-url": "Địa chỉ Mealie không hợp lệ.",
+    "invalid-recipe-url": "Liên kết công thức không hợp lệ.",
+    "active-tab-missing": "Không tìm thấy tab đang hoạt động.",
+    "unsupported-page": "Không thể trích xuất trang này. Hãy mở một trang công thức thông thường và thử lại.",
+    "text-extraction-failed": "Không thể trích xuất văn bản từ trang.",
+    "open-link-failed": "Không thể mở liên kết trong trình duyệt.",
+    "page-load-timeout": "Trang mất quá nhiều thời gian để tải.",
+    "request-unauthorized": "Yêu cầu thất bại vì không có phiên làm việc Mealie nào đang hoạt động. Hãy mở Mealie trong trình duyệt này, đăng nhập và thử lại.",
+    "request-failed": "Yêu cầu thất bại ({status}). Hãy đảm bảo Mealie đang mở và bạn đã đăng nhập trong trình duyệt này.",
+    "bridge-failed": "Cầu nối tiện ích Mealie bị lỗi.",
+    "import-failed": "Nhập dữ liệu tiện ích Mealie bị lỗi.",
+    "unexpected": "Đã xảy ra lỗi không mong muốn."
+  }
+}

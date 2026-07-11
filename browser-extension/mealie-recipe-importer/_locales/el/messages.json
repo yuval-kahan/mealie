@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "Εισαγωγέας συνταγών Mealie AI"
+  },
+  "extensionDescription": {
+    "message": "Εξάγετε την τρέχουσα σελίδα του προγράμματος περιήγησης και στείλτε την στο Mealie AI ως συνταγή ή άρθρο."
+  },
+  "actionTitle": {
+    "message": "Αποστολή στο Mealie AI"
+  }
+}

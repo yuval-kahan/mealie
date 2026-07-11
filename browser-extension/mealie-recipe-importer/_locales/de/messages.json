@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "Mealie AI Rezept-Importeur"
+  },
+  "extensionDescription": {
+    "message": "Extrahiere die aktuelle Browserseite und sende sie als Rezept oder Artikel an Mealie AI."
+  },
+  "actionTitle": {
+    "message": "An Mealie AI senden"
+  }
+}

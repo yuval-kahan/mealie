@@ -1,0 +1,100 @@
+{
+  "extraction": {
+    "keywords": "키워드",
+    "image": "이미지",
+    "ingredients": "재료",
+    "instructions": "조리 방법",
+    "content-truncated": "Mealie 확장 프로그램에 의해 콘텐츠가 잘렸습니다",
+    "recipe-page": "레시피 페이지",
+    "source-url": "소스 URL",
+    "source-image": "소스 이미지",
+    "structured-data": "구조화된 레시피 데이터",
+    "visible-text": "표시된 페이지 텍스트",
+    "name": "이름",
+    "description": "설명",
+    "author": "작성자",
+    "yield": "분량",
+    "prep-time": "준비 시간",
+    "cook-time": "조리 시간",
+    "total-time": "총 시간",
+    "category": "카테고리",
+    "cuisine": "요리 종류"
+  },
+  "extension": {
+    "name": "Mealie AI",
+    "description": "현재 브라우저 페이지를 추출하여 레시피나 아티클로 Mealie AI에 전송합니다.",
+    "action-title": "Mealie AI로 전송",
+    "manifest-name": "Mealie AI 레시피 가져오기"
+  },
+  "header": {
+    "subtitle": "현재 페이지를 추출하여 레시피나 아티클을 생성합니다."
+  },
+  "settings": {
+    "mealie-url": "Mealie 주소",
+    "extract-mode": "추출 대상",
+    "interface-language": "인터페이스 언어",
+    "automatic-language": "자동 (브라우저 언어)",
+    "translation-language": "번역 언어"
+  },
+  "mode": {
+    "auto": "자동 감지",
+    "recipe": "레시피 추출",
+    "article": "아티클 추출"
+  },
+  "options": {
+    "create-shopping-list": "자동 쇼핑 목록도 생성",
+    "organize-shopping-list": "AI로 쇼핑 목록 정리",
+    "include-ai-tips": "AI 메모, 팁 및 재료 대체 추천 추가",
+    "include-item-images": "재료, 도구 및 쇼핑 목록 항목의 이미지 검색 및 저장"
+  },
+  "actions": {
+    "extract-only": "추출만 하기",
+    "send-auto": "감지 후 AI로 전송",
+    "send-recipe": "레시피를 AI로 전송",
+    "send-article": "아티클을 AI로 전송",
+    "connect-mealie": "Mealie 열기 / 연결"
+  },
+  "preview": {
+    "title": "미리보기"
+  },
+  "links": {
+    "open-recipe": "Mealie에서 레시피 열기",
+    "open-article": "Mealie에서 아티클 열기"
+  },
+  "status": {
+    "open-and-login": "확장 프로그램을 사용하기 전에 이 브라우저의 탭에서 Mealie를 열고 로그인하세요.",
+    "login-required": "확장 프로그램을 사용하기 전에 이 브라우저에서 Mealie에 로그인하세요.",
+    "check-failed": "Mealie를 확인할 수 없습니다 ({status}). 올바른 주소로 사이트가 열려 있는지 확인하세요.",
+    "provider-no-default": "AI 제공업체가 저장되어 있지만 기본 제공업체가 선택되지 않았습니다. Mealie의 API 설정에서 기본 제공업체를 선택하세요.",
+    "provider-required": "확장 프로그램을 사용하기 전에 Mealie에서 API/AI 제공업체를 구성하세요.",
+    "connection-failed": "Mealie에 연결할 수 없습니다. 주소를 확인하고 사이트가 열려 있는지 확인하세요.",
+    "mealie-opened": "Mealie가 열렸습니다. 필요한 경우 로그인한 후 확장 프로그램을 다시 여세요.",
+    "extracting": "페이지에서 콘텐츠를 추출하는 중...",
+    "extracted": "페이지 콘텐츠 추출 완료: {title}",
+    "untitled": "제목 없음",
+    "extracting-and-sending": "콘텐츠를 추출하여 Mealie로 전송하는 중...",
+    "processing-article": "아티클을 추출하여 Mealie로 전송하는 중...",
+    "processing-recipe": "레시피를 추출하여 Mealie로 전송하는 중...",
+    "processing-auto": "페이지를 추출하고 콘텐츠 유형을 감지하여 Mealie로 전송하는 중...",
+    "article-created": "아티클 생성 완료: {title}",
+    "recipe-created": "레시피 생성 완료: {name}",
+    "recipe-created-too": "레시피도 함께 생성되었습니다: {name}",
+    "shopping-list": "쇼핑 목록: {name}",
+    "attention": "주의: {message}",
+    "extraction-finished": "추출 완료"
+  },
+  "errors": {
+    "invalid-mealie-url": "Mealie 주소가 올바르지 않습니다.",
+    "invalid-recipe-url": "레시피 링크가 올바르지 않습니다.",
+    "active-tab-missing": "활성 탭을 찾을 수 없습니다.",
+    "unsupported-page": "이 페이지는 추출할 수 없습니다. 일반 레시피 페이지를 열고 다시 시도하세요.",
+    "text-extraction-failed": "페이지에서 텍스트를 추출할 수 없습니다.",
+    "open-link-failed": "브라우저에서 링크를 열 수 없습니다.",
+    "page-load-timeout": "페이지 로드 시간이 너무 오래 걸립니다.",
+    "request-unauthorized": "활성 Mealie 세션이 없어 요청에 실패했습니다. 이 브라우저에서 Mealie를 열고 로그인한 후 다시 시도하세요.",
+    "request-failed": "요청 실패 ({status}). Mealie가 열려 있고 이 브라우저에 로그인되어 있는지 확인하세요.",
+    "bridge-failed": "Mealie 확장 프로그램 브리지에 실패했습니다.",
+    "import-failed": "Mealie 확장 프로그램 가져오기에 실패했습니다.",
+    "unexpected": "오류가 발생했습니다."
+  }
+}

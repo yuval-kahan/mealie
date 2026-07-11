@@ -1,6 +1,7 @@
 const STORAGE_KEYS = {
   mealieUrl: "mealieUrl",
   extractMode: "extractMode",
+  interfaceLanguage: "interfaceLanguage",
   translateLanguage: "translateLanguage",
   createShoppingList: "createShoppingList",
   organizeShoppingList: "organizeShoppingList",
@@ -11,6 +12,7 @@ const STORAGE_KEYS = {
 const DEFAULT_SETTINGS = {
   mealieUrl: "http://localhost:3000",
   extractMode: "auto",
+  interfaceLanguage: "auto",
   translateLanguage: "he-IL",
   createShoppingList: true,
   organizeShoppingList: true,
@@ -20,54 +22,12 @@ const DEFAULT_SETTINGS = {
 
 const MAX_EXTRACTED_TEXT_LENGTH = 180000;
 const AUTH_COOKIE_NAME = "mealie.access_token";
-const LOCALE_CODES = [
-  "af-ZA",
-  "ar-SA",
-  "bg-BG",
-  "ca-ES",
-  "cs-CZ",
-  "da-DK",
-  "de-DE",
-  "el-GR",
-  "en-GB",
-  "en-US",
-  "es-ES",
-  "et-EE",
-  "fi-FI",
-  "fr-BE",
-  "fr-CA",
-  "fr-FR",
-  "gl-ES",
-  "he-IL",
-  "hr-HR",
-  "hu-HU",
-  "is-IS",
-  "it-IT",
-  "ja-JP",
-  "ko-KR",
-  "lt-LT",
-  "lv-LV",
-  "nl-NL",
-  "no-NO",
-  "pl-PL",
-  "pt-BR",
-  "pt-PT",
-  "ro-RO",
-  "ru-RU",
-  "sk-SK",
-  "sl-SI",
-  "sr-SP",
-  "sv-SE",
-  "tr-TR",
-  "uk-UA",
-  "vi-VN",
-  "zh-CN",
-  "zh-TW",
-];
+const extensionI18n = globalThis.MealieExtensionI18n;
 
 const elements = {
   mealieUrl: document.getElementById("mealieUrl"),
   extractMode: document.getElementById("extractMode"),
+  interfaceLanguage: document.getElementById("interfaceLanguage"),
   translateLanguage: document.getElementById("translateLanguage"),
   createShoppingList: document.getElementById("createShoppingList"),
   organizeShoppingList: document.getElementById("organizeShoppingList"),
@@ -86,18 +46,22 @@ let lastExtraction = null;
 let isBusy = false;
 let mealieSiteReady = false;
 let statusCheckTimer = null;
+let translator = null;
 
 init();
 
 async function init() {
-  populateLanguageOptions();
   const settings = await loadSettings();
+  await applyInterfaceLanguage(settings.interfaceLanguage);
+  populateInterfaceLanguageOptions();
+  populateLanguageOptions();
   applySettings(settings);
   await chrome.storage.sync.remove("apiToken");
 
   [
     elements.mealieUrl,
     elements.extractMode,
+    elements.interfaceLanguage,
     elements.translateLanguage,
     elements.createShoppingList,
     elements.organizeShoppingList,
@@ -112,6 +76,7 @@ async function init() {
   elements.sendToMealie.addEventListener("click", handleSendToMealie);
   elements.connectMealie.addEventListener("click", handleConnectMealie);
   elements.extractMode.addEventListener("change", updateModeText);
+  elements.interfaceLanguage.addEventListener("change", handleInterfaceLanguageChange);
   elements.mealieUrl.addEventListener("input", scheduleMealieStatusCheck);
   elements.mealieUrl.addEventListener("change", checkMealieStatus);
 
@@ -128,17 +93,35 @@ async function loadSettings() {
 
 function populateLanguageOptions() {
   const displayNames = typeof Intl !== "undefined" && Intl.DisplayNames
-    ? new Intl.DisplayNames([navigator.language || "he-IL"], { type: "language" })
+    ? new Intl.DisplayNames([translator?.locale || extensionI18n.DEFAULT_LOCALE], { type: "language" })
     : null;
 
   elements.translateLanguage.replaceChildren(
-    ...LOCALE_CODES.map((code) => {
+    ...extensionI18n.LOCALE_CODES.map((code) => {
       const option = document.createElement("option");
       option.value = code;
       option.textContent = `${languageDisplayName(code, displayNames)} - ${code}`;
       return option;
     }),
   );
+}
+
+function populateInterfaceLanguageOptions() {
+  const selected = elements.interfaceLanguage.value || DEFAULT_SETTINGS.interfaceLanguage;
+  const displayNames = typeof Intl !== "undefined" && Intl.DisplayNames
+    ? new Intl.DisplayNames([translator?.locale || extensionI18n.DEFAULT_LOCALE], { type: "language" })
+    : null;
+  const automatic = document.createElement("option");
+  automatic.value = extensionI18n.AUTOMATIC_LOCALE;
+  automatic.textContent = translator.t("settings.automatic-language");
+  const options = extensionI18n.LOCALE_CODES.map((code) => {
+    const option = document.createElement("option");
+    option.value = code;
+    option.textContent = `${languageDisplayName(code, displayNames)} - ${code}`;
+    return option;
+  });
+  elements.interfaceLanguage.replaceChildren(automatic, ...options);
+  elements.interfaceLanguage.value = selected;
 }
 
 function languageDisplayName(code, displayNames) {
@@ -158,6 +141,7 @@ function languageDisplayName(code, displayNames) {
 function applySettings(settings) {
   elements.mealieUrl.value = settings.mealieUrl || DEFAULT_SETTINGS.mealieUrl;
   elements.extractMode.value = settings.extractMode || DEFAULT_SETTINGS.extractMode;
+  elements.interfaceLanguage.value = settings.interfaceLanguage || DEFAULT_SETTINGS.interfaceLanguage;
   elements.translateLanguage.value = settings.translateLanguage || DEFAULT_SETTINGS.translateLanguage;
   if (!elements.translateLanguage.value) {
     elements.translateLanguage.value = DEFAULT_SETTINGS.translateLanguage;
@@ -174,10 +158,28 @@ async function saveSettingsFromForm() {
   await chrome.storage.sync.set(currentSettings());
 }
 
+async function applyInterfaceLanguage(preferred) {
+  translator = await extensionI18n.create(preferred || DEFAULT_SETTINGS.interfaceLanguage);
+  extensionI18n.localizeDocument(translator);
+  await chrome.action?.setTitle?.({ title: translator.t("extension.action-title") });
+}
+
+async function handleInterfaceLanguageChange() {
+  const targetLanguage = elements.translateLanguage.value;
+  await saveSettingsFromForm();
+  await applyInterfaceLanguage(elements.interfaceLanguage.value);
+  populateInterfaceLanguageOptions();
+  populateLanguageOptions();
+  elements.translateLanguage.value = targetLanguage || DEFAULT_SETTINGS.translateLanguage;
+  updateModeText();
+  setStatus("");
+}
+
 function currentSettings() {
   return {
     mealieUrl: normalizeBaseUrl(elements.mealieUrl.value || DEFAULT_SETTINGS.mealieUrl),
     extractMode: elements.extractMode.value || DEFAULT_SETTINGS.extractMode,
+    interfaceLanguage: elements.interfaceLanguage.value || DEFAULT_SETTINGS.interfaceLanguage,
     translateLanguage: elements.translateLanguage.value,
     createShoppingList: elements.createShoppingList.checked,
     organizeShoppingList: elements.organizeShoppingList.checked,
@@ -189,14 +191,14 @@ function currentSettings() {
 function updateModeText() {
   const mode = elements.extractMode.value;
   if (mode === "article") {
-    elements.sendToMealie.textContent = "חלץ מאמר ל-AI";
+    elements.sendToMealie.textContent = translator.t("actions.send-article");
     return;
   }
   if (mode === "recipe") {
-    elements.sendToMealie.textContent = "חלץ מתכון ל-AI";
+    elements.sendToMealie.textContent = translator.t("actions.send-recipe");
     return;
   }
-  elements.sendToMealie.textContent = "זהה ושלח ל-AI";
+  elements.sendToMealie.textContent = translator.t("actions.send-auto");
 }
 
 function normalizeBaseUrl(value) {
@@ -281,7 +283,7 @@ async function checkMealieStatus() {
   try {
     const authToken = await findMealieAuthToken(settings.mealieUrl);
     if (!authToken) {
-      setStatus("צריך לפתוח את Mealie בטאב באותו דפדפן ולהתחבר לפני שימוש בתוסף.", "error");
+      setStatus(translator.t("status.open-and-login"), "error");
       elements.connectMealie.hidden = false;
       return false;
     }
@@ -293,13 +295,13 @@ async function checkMealieStatus() {
     const payload = await safeJson(response);
 
     if (response.status === 401 || response.status === 403) {
-      setStatus("צריך להתחבר ל-Mealie באותו דפדפן לפני שימוש בתוסף.", "error");
+      setStatus(translator.t("status.login-required"), "error");
       elements.connectMealie.hidden = false;
       return false;
     }
 
     if (!response.ok) {
-      setStatus(`לא הצלחתי לבדוק את Mealie (${response.status}). ודא שהאתר פתוח בכתובת הנכונה.`, "error");
+      setStatus(translator.t("status.check-failed", { status: response.status }), "error");
       return false;
     }
 
@@ -313,7 +315,7 @@ async function checkMealieStatus() {
     return true;
   }
   catch {
-    setStatus("לא הצלחתי להתחבר ל-Mealie. בדוק שהכתובת נכונה ושהאתר פתוח.", "error");
+    setStatus(translator.t("status.connection-failed"), "error");
     elements.connectMealie.hidden = false;
     return false;
   }
@@ -324,10 +326,10 @@ async function checkMealieStatus() {
 
 function aiProviderStatusMessage(payload) {
   if (statusProviderCount(payload) > 0 && !statusDefaultProviderConfigured(payload)) {
-    return "יש ספקי AI שמורים באתר, אבל לא נבחר ספק ברירת מחדל. בחר ספק ברירת מחדל בהגדרות API של Mealie.";
+    return translator.t("status.provider-no-default");
   }
 
-  return "צריך להגדיר ספק API/AI באתר Mealie לפני שימוש בתוסף.";
+  return translator.t("status.provider-required");
 }
 
 function statusAiEnabled(payload) {
@@ -345,7 +347,7 @@ function statusDefaultProviderConfigured(payload) {
 async function handleConnectMealie() {
   const settings = currentSettings();
   await openOrFocusMealieTab(settings.mealieUrl);
-  setStatus("פתחתי את Mealie. התחבר שם אם צריך, ואז לחץ שוב על התוסף.", "success");
+  setStatus(translator.t("status.mealie-opened"), "success");
 }
 
 async function openOrFocusMealieTab(mealieUrl) {
@@ -374,12 +376,17 @@ async function openOrFocusMealieTab(mealieUrl) {
 
 async function handleExtractOnly() {
   setBusy(true);
-  setStatus("מחלץ תוכן מהעמוד...");
+  setStatus(translator.t("status.extracting"));
 
   try {
     lastExtraction = await extractCurrentTab();
     showPreview(lastExtraction.markdown);
-    setStatus(`חולץ תוכן מהעמוד: ${lastExtraction.title || "ללא כותרת"}`, "success");
+    setStatus(
+      translator.t("status.extracted", {
+        title: lastExtraction.title || translator.t("status.untitled"),
+      }),
+      "success",
+    );
   }
   catch (error) {
     setStatus(errorMessage(error), "error");
@@ -392,7 +399,7 @@ async function handleExtractOnly() {
 async function handleSendToMealie() {
   setBusy(true);
   hideRecipeLink();
-  setStatus("מחלץ תוכן ושולח ל-Mealie...");
+  setStatus(translator.t("status.extracting-and-sending"));
 
   try {
     const settings = currentSettings();
@@ -416,22 +423,25 @@ async function handleSendToMealie() {
       const messages = [];
 
       if (article?.title) {
-        messages.push(`המאמר נוצר: ${article.title}`);
+        messages.push(translator.t("status.article-created", { title: article.title }));
       }
       if (recipeSlug) {
-        messages.push(`נוצר גם מתכון: ${recipeSlug}`);
+        messages.push(translator.t("status.recipe-created-too", { name: recipeSlug }));
       }
       if (shoppingListName) {
-        messages.push(`רשימת קניות: ${shoppingListName}`);
+        messages.push(translator.t("status.shopping-list", { name: shoppingListName }));
       }
       if (recipeError) {
-        messages.push(`שימו לב: ${recipeError}`);
+        messages.push(translator.t("status.attention", { message: recipeError }));
       }
       if (shoppingListError) {
-        messages.push(`שימו לב: ${shoppingListError}`);
+        messages.push(translator.t("status.attention", { message: shoppingListError }));
       }
 
-      setStatus(messages.join("\n") || "החילוץ הסתיים", recipeError || shoppingListError ? "" : "success");
+      setStatus(
+        messages.join("\n") || translator.t("status.extraction-finished"),
+        recipeError || shoppingListError ? "" : "success",
+      );
       if (article?.id) {
         showArticleLink(settings.mealieUrl, article.id);
       }
@@ -442,15 +452,17 @@ async function handleSendToMealie() {
     }
 
     const response = await createRecipeFromBrowserPage(settings, extraction);
-    const messages = [`המתכון נוצר: ${response.recipeSlug || response.recipe_slug}`];
+    const messages = [
+      translator.t("status.recipe-created", { name: response.recipeSlug || response.recipe_slug }),
+    ];
     const shoppingListName = response.shoppingListName || response.shopping_list_name;
     const shoppingListError = response.shoppingListError || response.shopping_list_error;
 
     if (shoppingListName) {
-      messages.push(`רשימת קניות: ${shoppingListName}`);
+      messages.push(translator.t("status.shopping-list", { name: shoppingListName }));
     }
     if (shoppingListError) {
-      messages.push(`שימו לב: ${shoppingListError}`);
+      messages.push(translator.t("status.attention", { message: shoppingListError }));
     }
 
     setStatus(messages.join("\n"), shoppingListError ? "" : "success");
@@ -470,32 +482,32 @@ async function handleSendToMealie() {
 
 function statusTextForMode(mode) {
   if (mode === "article") {
-    return "מחלץ מאמר ושולח ל-Mealie...";
+    return translator.t("status.processing-article");
   }
   if (mode === "recipe") {
-    return "מחלץ מתכון ושולח ל-Mealie...";
+    return translator.t("status.processing-recipe");
   }
-  return "מחלץ את העמוד, מזהה סוג תוכן ושולח ל-Mealie...";
+  return translator.t("status.processing-auto");
 }
 
 async function extractCurrentTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) {
-    throw new Error("לא נמצא tab פעיל.");
+    throw new Error(translator.t("errors.active-tab-missing"));
   }
 
   if (!tab.url || /^chrome:|^edge:|^about:|^chrome-extension:/i.test(tab.url)) {
-    throw new Error("אי אפשר לחלץ מהעמוד הזה. פתח עמוד מתכון רגיל ונסה שוב.");
+    throw new Error(translator.t("errors.unsupported-page"));
   }
 
   const [result] = await chrome.scripting.executeScript({
     target: { tabId: tab.id },
     func: extractRecipePage,
-    args: [MAX_EXTRACTED_TEXT_LENGTH],
+    args: [MAX_EXTRACTED_TEXT_LENGTH, extensionI18n.extractionLabels(translator)],
   });
 
   if (!result?.result?.markdown) {
-    throw new Error("לא הצלחתי לחלץ טקסט מהעמוד.");
+    throw new Error(translator.t("errors.text-extraction-failed"));
   }
 
   return result.result;
@@ -505,7 +517,7 @@ async function createRecipeFromBrowserPage(settings, extraction) {
   const endpoint = `${settings.mealieUrl}/api/recipes/create/browser-page`;
   const authToken = await findMealieAuthToken(settings.mealieUrl);
   if (!authToken) {
-    throw new Error("צריך לפתוח את Mealie בטאב באותו דפדפן ולהתחבר לפני שימוש בתוסף.");
+    throw new Error(translator.t("status.open-and-login"));
   }
 
   const headers = {
@@ -543,7 +555,7 @@ async function createArticleFromBrowserPage(settings, extraction) {
   const endpoint = `${settings.mealieUrl}/api/households/articles/browser-page`;
   const authToken = await findMealieAuthToken(settings.mealieUrl);
   if (!authToken) {
-    throw new Error("צריך לפתוח את Mealie בטאב באותו דפדפן ולהתחבר לפני שימוש בתוסף.");
+    throw new Error(translator.t("status.open-and-login"));
   }
 
   const translateLanguage = translationLanguageForRequest(settings.translateLanguage, extraction.language);
@@ -597,9 +609,9 @@ function apiErrorMessage(payload, status) {
     return detail.exception;
   }
   if (status === 401) {
-    return "הבקשה נכשלה כי אין התחברות פעילה ל-Mealie. פתח את Mealie באותו דפדפן, התחבר, ואז נסה שוב.";
+    return translator.t("errors.request-unauthorized");
   }
-  return `הבקשה נכשלה (${status}). בדוק ש-Mealie פתוח ושאתה מחובר אליו באותו דפדפן.`;
+  return translator.t("errors.request-failed", { status });
 }
 
 function showPreview(text) {
@@ -631,7 +643,7 @@ function showRecipeLink(baseUrl, slug, groupSlug) {
   const recipeGroupSlug = groupSlug || "home";
   showResultLink(
     `${normalizeBaseUrl(baseUrl)}/g/${encodeURIComponent(recipeGroupSlug)}/r/${encodeURIComponent(slug)}`,
-    "פתח את המתכון ב-Mealie",
+    translator.t("links.open-recipe"),
   );
 }
 
@@ -643,7 +655,7 @@ function showArticleLink(baseUrl, articleId) {
 
   showResultLink(
     `${normalizeBaseUrl(baseUrl)}/articles/${encodeURIComponent(articleId)}`,
-    "פתח את המאמר ב-Mealie",
+    translator.t("links.open-article"),
   );
 }
 
@@ -656,11 +668,11 @@ function showResultLink(href, text) {
 function hideRecipeLink() {
   elements.recipeLink.hidden = true;
   elements.recipeLink.href = "#";
-  elements.recipeLink.textContent = "פתח את המתכון ב-Mealie";
+  elements.recipeLink.textContent = translator.t("links.open-recipe");
 }
 
 function errorMessage(error) {
-  return error?.message || "משהו השתבש.";
+  return error?.message || translator.t("errors.unexpected");
 }
 
 function translationLanguageForRequest(targetLanguage, pageLanguage) {
@@ -681,7 +693,29 @@ function languagePrimary(value) {
     .toLocaleLowerCase();
 }
 
-function extractRecipePage(maxLength) {
+function extractRecipePage(maxLength, localizedLabels = {}) {
+  const labels = {
+    recipePage: "Recipe page",
+    sourceUrl: "Source URL",
+    sourceImage: "Source image",
+    structuredData: "Structured recipe data",
+    visibleText: "Visible page text",
+    name: "Name",
+    description: "Description",
+    author: "Author",
+    yield: "Yield",
+    prepTime: "Prep time",
+    cookTime: "Cook time",
+    totalTime: "Total time",
+    category: "Category",
+    cuisine: "Cuisine",
+    keywords: "Keywords",
+    image: "Image",
+    ingredients: "Ingredients",
+    instructions: "Instructions",
+    contentTruncated: "Content truncated by the Mealie extension",
+    ...localizedLabels,
+  };
   const url = location.href;
   const title = cleanText(document.querySelector("h1")?.innerText || document.title || "");
   const language = detectPageLanguage();
@@ -689,11 +723,11 @@ function extractRecipePage(maxLength) {
   const structured = extractStructuredRecipes();
   const readableText = extractReadableText();
   const sections = [
-    `# ${title || "Recipe page"}`,
-    `Source URL: ${url}`,
-    imageUrl ? `Source image: ${imageUrl}` : "",
-    structured ? `\n## Structured recipe data\n${structured}` : "",
-    readableText ? `\n## Visible page text\n${readableText}` : "",
+    `# ${title || labels.recipePage}`,
+    `${labels.sourceUrl}: ${url}`,
+    imageUrl ? `${labels.sourceImage}: ${imageUrl}` : "",
+    structured ? `\n## ${labels.structuredData}\n${structured}` : "",
+    readableText ? `\n## ${labels.visibleText}\n${readableText}` : "",
   ].filter(Boolean);
 
   return {
@@ -859,27 +893,27 @@ function extractRecipePage(maxLength) {
 
   function formatRecipeObject(recipe) {
     const lines = [];
-    appendLine(lines, "Name", recipe.name);
-    appendLine(lines, "Description", recipe.description);
-    appendLine(lines, "Author", formatValue(recipe.author));
-    appendLine(lines, "Yield", formatValue(recipe.recipeYield || recipe.yield));
-    appendLine(lines, "Prep time", recipe.prepTime);
-    appendLine(lines, "Cook time", recipe.cookTime);
-    appendLine(lines, "Total time", recipe.totalTime);
-    appendLine(lines, "Category", recipe.recipeCategory);
-    appendLine(lines, "Cuisine", recipe.recipeCuisine);
-    appendLine(lines, "Keywords", recipe.keywords);
-    appendLine(lines, "Image", imageValues(recipe.image || recipe.thumbnailUrl).join(", "));
+    appendLine(lines, labels.name, recipe.name);
+    appendLine(lines, labels.description, recipe.description);
+    appendLine(lines, labels.author, formatValue(recipe.author));
+    appendLine(lines, labels.yield, formatValue(recipe.recipeYield || recipe.yield));
+    appendLine(lines, labels.prepTime, recipe.prepTime);
+    appendLine(lines, labels.cookTime, recipe.cookTime);
+    appendLine(lines, labels.totalTime, recipe.totalTime);
+    appendLine(lines, labels.category, recipe.recipeCategory);
+    appendLine(lines, labels.cuisine, recipe.recipeCuisine);
+    appendLine(lines, labels.keywords, recipe.keywords);
+    appendLine(lines, labels.image, imageValues(recipe.image || recipe.thumbnailUrl).join(", "));
 
     const ingredients = recipe.recipeIngredient || recipe.ingredients;
     if (ingredients?.length) {
-      lines.push("\nIngredients:");
+      lines.push(`\n${labels.ingredients}:`);
       ingredients.forEach(ingredient => lines.push(`- ${formatValue(ingredient)}`));
     }
 
     const instructions = recipe.recipeInstructions || recipe.instructions;
     if (instructions?.length) {
-      lines.push("\nInstructions:");
+      lines.push(`\n${labels.instructions}:`);
       normalizeInstructions(instructions).forEach((instruction, index) => {
         lines.push(`${index + 1}. ${instruction}`);
       });
@@ -937,6 +971,6 @@ function extractRecipePage(maxLength) {
     if (text.length <= limit) {
       return text;
     }
-    return `${text.slice(0, limit)}\n\n[Content truncated by Mealie extension]`;
+    return `${text.slice(0, limit)}\n\n[${labels.contentTruncated}]`;
   }
 }

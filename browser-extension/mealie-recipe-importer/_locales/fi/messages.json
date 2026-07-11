@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "Mealie AI -reseptintuoja"
+  },
+  "extensionDescription": {
+    "message": "Poimi nykyinen selainsivu ja lähetä se Mealie AI:lle reseptinä tai artikkelina."
+  },
+  "actionTitle": {
+    "message": "Lähetä Mealie AI:lle"
+  }
+}

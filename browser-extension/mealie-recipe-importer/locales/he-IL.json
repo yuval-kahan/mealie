@@ -1,0 +1,100 @@
+{
+  "extraction": {
+    "keywords": "מילות מפתח",
+    "image": "תמונה",
+    "ingredients": "מרכיבים",
+    "instructions": "הוראות הכנה",
+    "content-truncated": "התוכן קוצר על ידי תוסף Mealie",
+    "recipe-page": "דף מתכון",
+    "source-url": "כתובת מקור",
+    "source-image": "תמונת מקור",
+    "structured-data": "נתוני מתכון מובנים",
+    "visible-text": "טקסט דף גלוי",
+    "name": "שם",
+    "description": "תיאור",
+    "author": "מחבר",
+    "yield": "כמות מנות",
+    "prep-time": "זמן הכנה",
+    "cook-time": "זמן בישול",
+    "total-time": "זמן כולל",
+    "category": "קטגוריה",
+    "cuisine": "מטבח"
+  },
+  "extension": {
+    "name": "Mealie AI",
+    "description": "חלץ את דף הדפדפן הנוכחי ושלח אותו ל-Mealie AI כמתכון או כמאמר.",
+    "action-title": "שלח ל-Mealie AI",
+    "manifest-name": "מייבא מתכונים Mealie AI"
+  },
+  "header": {
+    "subtitle": "חלץ את הדף הנוכחי ושלח אותו ליצירת מתכון או מאמר."
+  },
+  "settings": {
+    "mealie-url": "כתובת Mealie",
+    "extract-mode": "מה לחלץ",
+    "interface-language": "שפת ממשק",
+    "automatic-language": "אוטומטי (שפת הדפדפן)",
+    "translation-language": "שפת תרגום"
+  },
+  "mode": {
+    "auto": "זיהוי אוטומטי",
+    "recipe": "חלץ מתכון",
+    "article": "חלץ מאמר"
+  },
+  "options": {
+    "create-shopping-list": "צור גם רשימת קניות אוטומטית",
+    "organize-shopping-list": "ארגן את רשימת הקניות בעזרת AI",
+    "include-ai-tips": "הוסף הערות, טיפים והמלצות לגיוון רכיבים מ-AI",
+    "include-item-images": "מצא ושמור תמונות עבור רכיבים, כלים ופריטי רשימת קניות"
+  },
+  "actions": {
+    "extract-only": "חלץ בלבד",
+    "send-auto": "זהה ושלח ל-AI",
+    "send-recipe": "שלח מתכון ל-AI",
+    "send-article": "שלח מאמר ל-AI",
+    "connect-mealie": "פתח / התחבר ל-Mealie"
+  },
+  "preview": {
+    "title": "תצוגה מקדימה"
+  },
+  "links": {
+    "open-recipe": "פתח מתכון ב-Mealie",
+    "open-article": "פתח מאמר ב-Mealie"
+  },
+  "status": {
+    "open-and-login": "פתח את Mealie בלשונית בדפדפן זה והתחבר לפני השימוש בתוסף.",
+    "login-required": "התחבר ל-Mealie בדפדפן זה לפני השימוש בתוסף.",
+    "check-failed": "לא ניתן היה לבדוק את Mealie ({status}). ודא שהאתר פתוח בכתובת הנכונה.",
+    "provider-no-default": "ספקי AI שמורים, אך לא נבחר ספק ברירת מחדל. בחר ספק ברירת מחדל בהגדרות ה-API של Mealie.",
+    "provider-required": "הגדר ספק API/AI ב-Mealie לפני השימוש בתוסף.",
+    "connection-failed": "לא ניתן היה להתחבר ל-Mealie. בדוק את הכתובת וודא שהאתר פתוח.",
+    "mealie-opened": "Mealie נפתח. התחבר במידת הצורך, ולאחר מכן פתח את התוסף שוב.",
+    "extracting": "מחלץ תוכן מהדף...",
+    "extracted": "תוכן הדף חולץ: {title}",
+    "untitled": "ללא כותרת",
+    "extracting-and-sending": "מחלץ תוכן ושולח אותו ל-Mealie...",
+    "processing-article": "מחלץ את המאמר ושולח אותו ל-Mealie...",
+    "processing-recipe": "מחלץ את המתכון ושולח אותו ל-Mealie...",
+    "processing-auto": "מחלץ את הדף, מזהה את סוג התוכן שלו ושולח אותו ל-Mealie...",
+    "article-created": "מאמר נוצר: {title}",
+    "recipe-created": "מתכון נוצר: {name}",
+    "recipe-created-too": "נוצר גם מתכון: {name}",
+    "shopping-list": "רשימת קניות: {name}",
+    "attention": "שים לב: {message}",
+    "extraction-finished": "החילוץ הושלם"
+  },
+  "errors": {
+    "invalid-mealie-url": "כתובת Mealie אינה תקינה.",
+    "invalid-recipe-url": "קישור המתכון אינו תקין.",
+    "active-tab-missing": "לא נמצאה לשונית פעילה.",
+    "unsupported-page": "לא ניתן לחלץ דף זה. פתח דף מתכון רגיל ונסה שוב.",
+    "text-extraction-failed": "לא ניתן היה לחלץ טקסט מהדף.",
+    "open-link-failed": "לא ניתן היה לפתוח את הקישור בדפדפן.",
+    "page-load-timeout": "טעינת הדף ארכה זמן רב מדי.",
+    "request-unauthorized": "הבקשה נכשלה מכיוון שאין הפעלת Mealie פעילה. פתח את Mealie בדפדפן זה, התחבר ונסה שוב.",
+    "request-failed": "הבקשה נכשלה ({status}). ודא ש-Mealie פתוח ושאתה מחובר בדפדפן זה.",
+    "bridge-failed": "גשר התוסף של Mealie נכשל.",
+    "import-failed": "ייבוא התוסף של Mealie נכשל.",
+    "unexpected": "משהו השתבש."
+  }
+}

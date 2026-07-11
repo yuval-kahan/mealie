@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "Importatore di ricette Mealie AI"
+  },
+  "extensionDescription": {
+    "message": "Estrai la pagina corrente del browser e inviala a Mealie AI come ricetta o articolo."
+  },
+  "actionTitle": {
+    "message": "Invia a Mealie AI"
+  }
+}

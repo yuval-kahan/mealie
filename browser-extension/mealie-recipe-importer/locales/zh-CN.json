@@ -1,0 +1,100 @@
+{
+  "extraction": {
+    "keywords": "关键词",
+    "image": "图片",
+    "ingredients": "配料",
+    "instructions": "步骤",
+    "content-truncated": "内容已被 Mealie 扩展截断",
+    "recipe-page": "食谱页面",
+    "source-url": "源 URL",
+    "source-image": "源图片",
+    "structured-data": "结构化食谱数据",
+    "visible-text": "可见页面文本",
+    "name": "名称",
+    "description": "描述",
+    "author": "作者",
+    "yield": "份量",
+    "prep-time": "准备时间",
+    "cook-time": "烹饪时间",
+    "total-time": "总时间",
+    "category": "分类",
+    "cuisine": "菜系"
+  },
+  "extension": {
+    "name": "Mealie AI",
+    "description": "提取当前浏览器页面并将其作为食谱或文章发送至 Mealie AI。",
+    "action-title": "发送至 Mealie AI",
+    "manifest-name": "Mealie AI 食谱导入器"
+  },
+  "header": {
+    "subtitle": "提取当前页面并发送以创建食谱或文章。"
+  },
+  "settings": {
+    "mealie-url": "Mealie 地址",
+    "extract-mode": "提取内容",
+    "interface-language": "界面语言",
+    "automatic-language": "自动（浏览器语言）",
+    "translation-language": "翻译语言"
+  },
+  "mode": {
+    "auto": "自动检测",
+    "recipe": "提取食谱",
+    "article": "提取文章"
+  },
+  "options": {
+    "create-shopping-list": "同时创建自动购物清单",
+    "organize-shopping-list": "使用 AI 整理购物清单",
+    "include-ai-tips": "添加 AI 笔记、提示和配料变体建议",
+    "include-item-images": "为配料、工具和购物清单项目查找并保存图片"
+  },
+  "actions": {
+    "extract-only": "仅提取",
+    "send-auto": "检测并发送至 AI",
+    "send-recipe": "发送食谱至 AI",
+    "send-article": "发送文章至 AI",
+    "connect-mealie": "打开 / 连接 Mealie"
+  },
+  "preview": {
+    "title": "预览"
+  },
+  "links": {
+    "open-recipe": "在 Mealie 中打开食谱",
+    "open-article": "在 Mealie 中打开文章"
+  },
+  "status": {
+    "open-and-login": "在使用扩展程序前，请先在此浏览器中打开 Mealie 并登录。",
+    "login-required": "在使用扩展程序前，请先在此浏览器中登录 Mealie。",
+    "check-failed": "无法检查 Mealie ({status})。请确保网站已在正确地址打开。",
+    "provider-no-default": "AI 提供程序已保存，但未选择默认提供程序。请在 Mealie 的 API 设置中选择一个默认提供程序。",
+    "provider-required": "在使用扩展程序前，请先在 Mealie 中配置 API/AI 提供程序。",
+    "connection-failed": "无法连接到 Mealie。请检查地址并确保网站已打开。",
+    "mealie-opened": "Mealie 已打开。如有需要请在其中登录，然后再次打开扩展程序。",
+    "extracting": "正在从页面提取内容...",
+    "extracted": "页面内容已提取：{title}",
+    "untitled": "无标题",
+    "extracting-and-sending": "正在提取内容并发送至 Mealie...",
+    "processing-article": "正在提取文章并发送至 Mealie...",
+    "processing-recipe": "正在提取食谱并发送至 Mealie...",
+    "processing-auto": "正在提取页面、检测内容类型并发送至 Mealie...",
+    "article-created": "文章已创建：{title}",
+    "recipe-created": "食谱已创建：{name}",
+    "recipe-created-too": "同时创建了食谱：{name}",
+    "shopping-list": "购物清单：{name}",
+    "attention": "注意：{message}",
+    "extraction-finished": "提取完成"
+  },
+  "errors": {
+    "invalid-mealie-url": "Mealie 地址无效。",
+    "invalid-recipe-url": "食谱链接无效。",
+    "active-tab-missing": "未找到活动标签页。",
+    "unsupported-page": "无法提取此页面。请打开常规食谱页面后再试。",
+    "text-extraction-failed": "无法从页面提取文本。",
+    "open-link-failed": "无法在浏览器中打开链接。",
+    "page-load-timeout": "页面加载时间过长。",
+    "request-unauthorized": "请求失败，因为没有活动的 Mealie 会话。请在此浏览器中打开 Mealie 并登录，然后重试。",
+    "request-failed": "请求失败 ({status})。请确保 Mealie 已打开且您已在此浏览器中登录。",
+    "bridge-failed": "Mealie 扩展桥接失败。",
+    "import-failed": "Mealie 扩展导入失败。",
+    "unexpected": "发生错误。"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "Mealie AI レシピインポーター"
+  },
+  "extensionDescription": {
+    "message": "現在のブラウザページを抽出して、レシピまたは記事としてMealie AIに送信します。"
+  },
+  "actionTitle": {
+    "message": "Mealie AIに送信"
+  }
+}

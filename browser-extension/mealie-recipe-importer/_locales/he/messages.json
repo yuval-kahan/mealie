@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "מייבא מתכונים Mealie AI"
+  },
+  "extensionDescription": {
+    "message": "חלץ את דף הדפדפן הנוכחי ושלח אותו ל-Mealie AI כמתכון או כמאמר."
+  },
+  "actionTitle": {
+    "message": "שלח ל-Mealie AI"
+  }
+}

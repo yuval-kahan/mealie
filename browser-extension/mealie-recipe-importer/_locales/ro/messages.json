@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "Importator de rețete Mealie AI"
+  },
+  "extensionDescription": {
+    "message": "Extrage pagina curentă din browser și trimite-o către Mealie AI ca rețetă sau articol."
+  },
+  "actionTitle": {
+    "message": "Trimite către Mealie AI"
+  }
+}

@@ -1,0 +1,100 @@
+{
+  "extraction": {
+    "keywords": "Anahtar Kelimeler",
+    "image": "Görsel",
+    "ingredients": "Malzemeler",
+    "instructions": "Talimatlar",
+    "content-truncated": "İçerik Mealie eklentisi tarafından kısaltıldı",
+    "recipe-page": "Tarif sayfası",
+    "source-url": "Kaynak URL",
+    "source-image": "Kaynak görsel",
+    "structured-data": "Yapılandırılmış tarif verisi",
+    "visible-text": "Görünür sayfa metni",
+    "name": "İsim",
+    "description": "Açıklama",
+    "author": "Yazar",
+    "yield": "Porsiyon",
+    "prep-time": "Hazırlık süresi",
+    "cook-time": "Pişirme süresi",
+    "total-time": "Toplam süre",
+    "category": "Kategori",
+    "cuisine": "Mutfak"
+  },
+  "extension": {
+    "name": "Mealie AI",
+    "description": "Mevcut tarayıcı sayfasını ayıklayın ve tarif veya makale olarak Mealie AI'ye gönderin.",
+    "action-title": "Mealie AI'ye gönder",
+    "manifest-name": "Mealie AI Tarif İçe Aktarıcı"
+  },
+  "header": {
+    "subtitle": "Mevcut sayfayı ayıklayın ve tarif veya makale oluşturmak için gönderin."
+  },
+  "settings": {
+    "mealie-url": "Mealie adresi",
+    "extract-mode": "Ne ayıklanacak",
+    "interface-language": "Arayüz dili",
+    "automatic-language": "Otomatik (tarayıcı dili)",
+    "translation-language": "Çeviri dili"
+  },
+  "mode": {
+    "auto": "Otomatik algılama",
+    "recipe": "Tarifi ayıkla",
+    "article": "Makaleyi ayıkla"
+  },
+  "options": {
+    "create-shopping-list": "Ayrıca otomatik bir alışveriş listesi oluştur",
+    "organize-shopping-list": "Alışveriş listesini AI ile düzenle",
+    "include-ai-tips": "AI notları, ipuçları ve malzeme çeşitliliği önerileri ekle",
+    "include-item-images": "Malzemeler, araçlar ve alışveriş listesi öğeleri için görselleri bul ve kaydet"
+  },
+  "actions": {
+    "extract-only": "Sadece ayıkla",
+    "send-auto": "Algıla ve AI'ye gönder",
+    "send-recipe": "Tarifi AI'ye gönder",
+    "send-article": "Makaleyi AI'ye gönder",
+    "connect-mealie": "Mealie'yi aç / bağlan"
+  },
+  "preview": {
+    "title": "Önizleme"
+  },
+  "links": {
+    "open-recipe": "Tarifi Mealie'de aç",
+    "open-article": "Makaleyi Mealie'de aç"
+  },
+  "status": {
+    "open-and-login": "Uzantıyı kullanmadan önce bu tarayıcıda bir sekmede Mealie'yi açın ve giriş yapın.",
+    "login-required": "Uzantıyı kullanmadan önce bu tarayıcıda Mealie'ye giriş yapın.",
+    "check-failed": "Mealie kontrol edilemedi ({status}). Sitenin doğru adreste açık olduğundan emin olun.",
+    "provider-no-default": "AI sağlayıcıları kaydedildi ancak varsayılan bir sağlayıcı seçilmedi. Mealie'nin API ayarlarından varsayılan bir sağlayıcı seçin.",
+    "provider-required": "Uzantıyı kullanmadan önce Mealie'de bir API/AI sağlayıcısı yapılandırın.",
+    "connection-failed": "Mealie'ye bağlanılamadı. Adresi kontrol edin ve sitenin açık olduğundan emin olun.",
+    "mealie-opened": "Mealie açıldı. Gerekirse oradan giriş yapın, ardından uzantıyı tekrar açın.",
+    "extracting": "Sayfadan içerik ayıklanıyor...",
+    "extracted": "Sayfa içeriği ayıklandı: {title}",
+    "untitled": "Başlıksız",
+    "extracting-and-sending": "İçerik ayıklanıyor ve Mealie'ye gönderiliyor...",
+    "processing-article": "Makale ayıklanıyor ve Mealie'ye gönderiliyor...",
+    "processing-recipe": "Tarif ayıklanıyor ve Mealie'ye gönderiliyor...",
+    "processing-auto": "Sayfa ayıklanıyor, içerik türü algılanıyor ve Mealie'ye gönderiliyor...",
+    "article-created": "Makale oluşturuldu: {title}",
+    "recipe-created": "Tarif oluşturuldu: {name}",
+    "recipe-created-too": "Ayrıca bir tarif oluşturuldu: {name}",
+    "shopping-list": "Alışveriş listesi: {name}",
+    "attention": "Dikkat: {message}",
+    "extraction-finished": "Ayıklama tamamlandı"
+  },
+  "errors": {
+    "invalid-mealie-url": "Mealie adresi geçersiz.",
+    "invalid-recipe-url": "Tarif bağlantısı geçersiz.",
+    "active-tab-missing": "Aktif sekme bulunamadı.",
+    "unsupported-page": "Bu sayfa ayıklanamıyor. Normal bir tarif sayfası açıp tekrar deneyin.",
+    "text-extraction-failed": "Sayfadan metin ayıklanamadı.",
+    "open-link-failed": "Bağlantı tarayıcıda açılamadı.",
+    "page-load-timeout": "Sayfanın yüklenmesi çok uzun sürdü.",
+    "request-unauthorized": "Aktif bir Mealie oturumu olmadığı için istek başarısız oldu. Bu tarayıcıda Mealie'yi açın, giriş yapın ve tekrar deneyin.",
+    "request-failed": "İstek başarısız oldu ({status}). Mealie'nin açık olduğundan ve bu tarayıcıda giriş yaptığınızdan emin olun.",
+    "bridge-failed": "Mealie uzantı köprüsü başarısız oldu.",
+    "import-failed": "Mealie uzantı içe aktarma işlemi başarısız oldu.",
+    "unexpected": "Bir şeyler ters gitti."
+  }
+}

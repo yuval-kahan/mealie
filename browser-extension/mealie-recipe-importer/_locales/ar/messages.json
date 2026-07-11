@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "مستورد وصفات Mealie AI"
+  },
+  "extensionDescription": {
+    "message": "استخرج صفحة المتصفح الحالية وأرسلها إلى Mealie AI كوصفة أو مقالة."
+  },
+  "actionTitle": {
+    "message": "إرسال إلى Mealie AI"
+  }
+}

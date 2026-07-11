@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "Mealie AI 食谱导入器"
+  },
+  "extensionDescription": {
+    "message": "提取当前浏览器页面并将其作为食谱或文章发送至 Mealie AI。"
+  },
+  "actionTitle": {
+    "message": "发送至 Mealie AI"
+  }
+}

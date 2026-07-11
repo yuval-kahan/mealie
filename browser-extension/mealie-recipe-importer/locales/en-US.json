@@ -1,0 +1,100 @@
+{
+  "extension": {
+    "name": "Mealie AI",
+    "manifest-name": "Mealie AI Recipe Importer",
+    "description": "Extract the current browser page and send it to Mealie AI as a recipe or article.",
+    "action-title": "Send to Mealie AI"
+  },
+  "header": {
+    "subtitle": "Extract the current page and send it to create a recipe or article."
+  },
+  "settings": {
+    "mealie-url": "Mealie address",
+    "extract-mode": "What to extract",
+    "interface-language": "Interface language",
+    "automatic-language": "Automatic (browser language)",
+    "translation-language": "Translation language"
+  },
+  "mode": {
+    "auto": "Automatic detection",
+    "recipe": "Extract recipe",
+    "article": "Extract article"
+  },
+  "options": {
+    "create-shopping-list": "Also create an automatic shopping list",
+    "organize-shopping-list": "Organize the shopping list with AI",
+    "include-ai-tips": "Add AI notes, tips, and ingredient-variety recommendations",
+    "include-item-images": "Find and save images for ingredients, tools, and shopping-list items"
+  },
+  "actions": {
+    "extract-only": "Extract only",
+    "send-auto": "Detect and send to AI",
+    "send-recipe": "Send recipe to AI",
+    "send-article": "Send article to AI",
+    "connect-mealie": "Open / connect Mealie"
+  },
+  "preview": {
+    "title": "Preview"
+  },
+  "links": {
+    "open-recipe": "Open recipe in Mealie",
+    "open-article": "Open article in Mealie"
+  },
+  "status": {
+    "open-and-login": "Open Mealie in a tab in this browser and sign in before using the extension.",
+    "login-required": "Sign in to Mealie in this browser before using the extension.",
+    "check-failed": "Could not check Mealie ({status}). Make sure the site is open at the correct address.",
+    "provider-no-default": "AI providers are saved, but no default provider is selected. Select a default provider in Mealie's API settings.",
+    "provider-required": "Configure an API/AI provider in Mealie before using the extension.",
+    "connection-failed": "Could not connect to Mealie. Check the address and make sure the site is open.",
+    "mealie-opened": "Mealie was opened. Sign in there if needed, then open the extension again.",
+    "extracting": "Extracting content from the page...",
+    "extracted": "Page content extracted: {title}",
+    "untitled": "Untitled",
+    "extracting-and-sending": "Extracting content and sending it to Mealie...",
+    "processing-article": "Extracting the article and sending it to Mealie...",
+    "processing-recipe": "Extracting the recipe and sending it to Mealie...",
+    "processing-auto": "Extracting the page, detecting its content type, and sending it to Mealie...",
+    "article-created": "Article created: {title}",
+    "recipe-created": "Recipe created: {name}",
+    "recipe-created-too": "A recipe was also created: {name}",
+    "shopping-list": "Shopping list: {name}",
+    "attention": "Attention: {message}",
+    "extraction-finished": "Extraction completed"
+  },
+  "errors": {
+    "invalid-mealie-url": "The Mealie address is invalid.",
+    "invalid-recipe-url": "The recipe link is invalid.",
+    "active-tab-missing": "No active tab was found.",
+    "unsupported-page": "This page cannot be extracted. Open a regular recipe page and try again.",
+    "text-extraction-failed": "Could not extract text from the page.",
+    "open-link-failed": "Could not open the link in the browser.",
+    "page-load-timeout": "The page took too long to load.",
+    "request-unauthorized": "The request failed because there is no active Mealie session. Open Mealie in this browser, sign in, and try again.",
+    "request-failed": "The request failed ({status}). Make sure Mealie is open and you are signed in in this browser.",
+    "bridge-failed": "The Mealie extension bridge failed.",
+    "import-failed": "The Mealie extension import failed.",
+    "unexpected": "Something went wrong."
+  },
+  "extraction": {
+    "recipe-page": "Recipe page",
+    "source-url": "Source URL",
+    "source-image": "Source image",
+    "structured-data": "Structured recipe data",
+    "visible-text": "Visible page text",
+    "name": "Name",
+    "description": "Description",
+    "author": "Author",
+    "yield": "Yield",
+    "prep-time": "Prep time",
+    "cook-time": "Cook time",
+    "total-time": "Total time",
+    "category": "Category",
+    "cuisine": "Cuisine",
+    "keywords": "Keywords",
+    "image": "Image",
+    "ingredients": "Ingredients",
+    "instructions": "Instructions",
+    "content-truncated": "Content truncated by the Mealie extension"
+  }
+}

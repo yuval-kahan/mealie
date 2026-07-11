@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "Mealie AI recepšu importētājs"
+  },
+  "extensionDescription": {
+    "message": "Ekstrahējiet pašreizējo pārlūkprogrammas lapu un nosūtiet to uz Mealie AI kā recepti vai rakstu."
+  },
+  "actionTitle": {
+    "message": "Nosūtīt uz Mealie AI"
+  }
+}

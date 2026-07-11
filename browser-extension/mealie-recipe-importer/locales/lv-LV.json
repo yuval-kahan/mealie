@@ -1,0 +1,100 @@
+{
+  "extraction": {
+    "keywords": "Atslēgvārdi",
+    "image": "Attēls",
+    "ingredients": "Sastāvdaļas",
+    "instructions": "Norādījumi",
+    "content-truncated": "Saturs, ko saīsinājis Mealie paplašinājums",
+    "recipe-page": "Receptes lapa",
+    "source-url": "Avota URL",
+    "source-image": "Avota attēls",
+    "structured-data": "Strukturēti receptes dati",
+    "visible-text": "Redzamais lapas teksts",
+    "name": "Nosaukums",
+    "description": "Apraksts",
+    "author": "Autors",
+    "yield": "Daudzums",
+    "prep-time": "Sagatavošanas laiks",
+    "cook-time": "Gatavošanas laiks",
+    "total-time": "Kopējais laiks",
+    "category": "Kategorija",
+    "cuisine": "Virtuve"
+  },
+  "extension": {
+    "name": "Mealie AI",
+    "description": "Ekstrahējiet pašreizējo pārlūkprogrammas lapu un nosūtiet to uz Mealie AI kā recepti vai rakstu.",
+    "action-title": "Nosūtīt uz Mealie AI",
+    "manifest-name": "Mealie AI recepšu importētājs"
+  },
+  "header": {
+    "subtitle": "Ekstrahējiet pašreizējo lapu un nosūtiet to, lai izveidotu recepti vai rakstu."
+  },
+  "settings": {
+    "mealie-url": "Mealie adrese",
+    "extract-mode": "Ko ekstrahēt",
+    "interface-language": "Interfeisa valoda",
+    "automatic-language": "Automātiski (pārlūkprogrammas valoda)",
+    "translation-language": "Tulkošanas valoda"
+  },
+  "mode": {
+    "auto": "Automātiska noteikšana",
+    "recipe": "Ekstrahēt recepti",
+    "article": "Ekstrahēt rakstu"
+  },
+  "options": {
+    "create-shopping-list": "Izveidot arī automātisku iepirkumu sarakstu",
+    "organize-shopping-list": "Organizēt iepirkumu sarakstu ar AI",
+    "include-ai-tips": "Pievienot AI piezīmes, padomus un ieteikumus par sastāvdaļu variācijām",
+    "include-item-images": "Atrast un saglabāt attēlus sastāvdaļām, rīkiem un iepirkumu saraksta vienumiem"
+  },
+  "actions": {
+    "extract-only": "Tikai ekstrahēt",
+    "send-auto": "Noteikt un nosūtīt uz AI",
+    "send-recipe": "Nosūtīt recepti uz AI",
+    "send-article": "Nosūtīt rakstu uz AI",
+    "connect-mealie": "Atvērt / savienot Mealie"
+  },
+  "preview": {
+    "title": "Priekšskatījums"
+  },
+  "links": {
+    "open-recipe": "Atvērt recepti Mealie",
+    "open-article": "Atvērt rakstu Mealie"
+  },
+  "status": {
+    "open-and-login": "Atveriet Mealie šīs pārlūkprogrammas cilnē un pierakstieties pirms paplašinājuma lietošanas.",
+    "login-required": "Pirms paplašinājuma lietošanas pierakstieties Mealie šajā pārlūkprogrammā.",
+    "check-failed": "Neizdevās pārbaudīt Mealie ({status}). Pārliecinieties, ka vietne ir atvērta pareizajā adresē.",
+    "provider-no-default": "AI nodrošinātāji ir saglabāti, bet nav atlasīts noklusējuma nodrošinātājs. Atlasiet noklusējuma nodrošinātāju Mealie API iestatījumos.",
+    "provider-required": "Pirms paplašinājuma lietošanas konfigurējiet API/AI nodrošinātāju Mealie.",
+    "connection-failed": "Neizdevās izveidot savienojumu ar Mealie. Pārbaudiet adresi un pārliecinieties, ka vietne ir atvērta.",
+    "mealie-opened": "Mealie tika atvērts. Ja nepieciešams, pierakstieties tur un pēc tam atveriet paplašinājumu vēlreiz.",
+    "extracting": "Notiek satura ekstrahēšana no lapas...",
+    "extracted": "Lapas saturs ekstrahēts: {title}",
+    "untitled": "Bez nosaukuma",
+    "extracting-and-sending": "Notiek satura ekstrahēšana un nosūtīšana uz Mealie...",
+    "processing-article": "Notiek raksta ekstrahēšana un nosūtīšana uz Mealie...",
+    "processing-recipe": "Notiek receptes ekstrahēšana un nosūtīšana uz Mealie...",
+    "processing-auto": "Notiek lapas ekstrahēšana, tās satura veida noteikšana un nosūtīšana uz Mealie...",
+    "article-created": "Raksts izveidots: {title}",
+    "recipe-created": "Recepte izveidota: {name}",
+    "recipe-created-too": "Tika izveidota arī recepte: {name}",
+    "shopping-list": "Iepirkumu saraksts: {name}",
+    "attention": "Uzmanību: {message}",
+    "extraction-finished": "Ekstrahēšana pabeigta"
+  },
+  "errors": {
+    "invalid-mealie-url": "Mealie adrese nav derīga.",
+    "invalid-recipe-url": "Receptes saite nav derīga.",
+    "active-tab-missing": "Aktīvā cilne netika atrasta.",
+    "unsupported-page": "Šo lapu nevar ekstrahēt. Atveriet parastu receptes lapu un mēģiniet vēlreiz.",
+    "text-extraction-failed": "Neizdevās ekstrahēt tekstu no lapas.",
+    "open-link-failed": "Neizdevās atvērt saiti pārlūkprogrammā.",
+    "page-load-timeout": "Lapas ielāde aizņēma pārāk daudz laika.",
+    "request-unauthorized": "Pieprasījums neizdevās, jo nav aktīvas Mealie sesijas. Atveriet Mealie šajā pārlūkprogrammā, pierakstieties un mēģiniet vēlreiz.",
+    "request-failed": "Pieprasījums neizdevās ({status}). Pārliecinieties, ka Mealie ir atvērts un esat pierakstījies šajā pārlūkprogrammā.",
+    "bridge-failed": "Mealie paplašinājuma tilts neizdevās.",
+    "import-failed": "Mealie paplašinājuma imports neizdevās.",
+    "unexpected": "Kaut kas nogāja greizi."
+  }
+}

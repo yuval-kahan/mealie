@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "Trình nhập công thức AI Mealie"
+  },
+  "extensionDescription": {
+    "message": "Trích xuất trang web hiện tại và gửi đến Mealie AI dưới dạng công thức hoặc bài viết."
+  },
+  "actionTitle": {
+    "message": "Gửi đến Mealie AI"
+  }
+}

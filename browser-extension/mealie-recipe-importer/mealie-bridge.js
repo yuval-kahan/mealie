@@ -2,8 +2,13 @@ const BRIDGE_REQUEST = "MEALIE_EXTENSION_IMPORT_RECIPE_URL";
 const BRIDGE_ACK = "MEALIE_EXTENSION_IMPORT_RECIPE_URL_ACK";
 const BRIDGE_RESULT = "MEALIE_EXTENSION_IMPORT_RECIPE_URL_RESULT";
 const AUTH_COOKIE_NAME = "mealie.access_token";
+const extensionI18n = globalThis.MealieExtensionI18n;
 
 window.addEventListener("message", (event) => {
+  void handleBridgeMessage(event);
+});
+
+async function handleBridgeMessage(event) {
   if (event.source !== window || !event.data || event.data.type !== BRIDGE_REQUEST) {
     return;
   }
@@ -13,6 +18,9 @@ window.addEventListener("message", (event) => {
   if (!requestId || !isSameOrigin(payload.mealieUrl, window.location.origin)) {
     return;
   }
+  const translator = await extensionI18n.create(
+    payload.interfaceLanguage || payload.translateLanguage,
+  );
 
   window.postMessage({ type: BRIDGE_ACK, requestId }, window.location.origin);
 
@@ -32,14 +40,14 @@ window.addEventListener("message", (event) => {
           type: BRIDGE_RESULT,
           requestId,
           response: runtimeError
-            ? { ok: false, error: runtimeError.message || "Mealie extension bridge failed" }
+            ? { ok: false, error: runtimeError.message || translator.t("errors.bridge-failed") }
             : response,
         },
         window.location.origin,
       );
     },
   );
-});
+}
 
 function isSameOrigin(url, origin) {
   try {

@@ -1,0 +1,100 @@
+{
+  "extraction": {
+    "keywords": "Ключевые слова",
+    "image": "Изображение",
+    "ingredients": "Ингредиенты",
+    "instructions": "Инструкции",
+    "content-truncated": "Содержимое обрезано расширением Mealie",
+    "recipe-page": "Страница рецепта",
+    "source-url": "Исходный URL",
+    "source-image": "Исходное изображение",
+    "structured-data": "Структурированные данные рецепта",
+    "visible-text": "Видимый текст страницы",
+    "name": "Название",
+    "description": "Описание",
+    "author": "Автор",
+    "yield": "Выход",
+    "prep-time": "Время подготовки",
+    "cook-time": "Время приготовления",
+    "total-time": "Общее время",
+    "category": "Категория",
+    "cuisine": "Кухня"
+  },
+  "extension": {
+    "name": "Mealie AI",
+    "description": "Извлеките содержимое текущей страницы и отправьте его в Mealie AI как рецепт или статью.",
+    "action-title": "Отправить в Mealie AI",
+    "manifest-name": "Импорт рецептов Mealie AI"
+  },
+  "header": {
+    "subtitle": "Извлеките текущую страницу и отправьте её для создания рецепта или статьи."
+  },
+  "settings": {
+    "mealie-url": "Адрес Mealie",
+    "extract-mode": "Что извлекать",
+    "interface-language": "Язык интерфейса",
+    "automatic-language": "Автоматически (язык браузера)",
+    "translation-language": "Язык перевода"
+  },
+  "mode": {
+    "auto": "Автоматическое определение",
+    "recipe": "Извлечь рецепт",
+    "article": "Извлечь статью"
+  },
+  "options": {
+    "create-shopping-list": "Также создать автоматический список покупок",
+    "organize-shopping-list": "Упорядочить список покупок с помощью AI",
+    "include-ai-tips": "Добавить заметки, советы и рекомендации по замене ингредиентов от AI",
+    "include-item-images": "Находить и сохранять изображения для ингредиентов, инструментов и товаров в списке покупок"
+  },
+  "actions": {
+    "extract-only": "Только извлечь",
+    "send-auto": "Определить и отправить в AI",
+    "send-recipe": "Отправить рецепт в AI",
+    "send-article": "Отправить статью в AI",
+    "connect-mealie": "Открыть / подключить Mealie"
+  },
+  "preview": {
+    "title": "Предпросмотр"
+  },
+  "links": {
+    "open-recipe": "Открыть рецепт в Mealie",
+    "open-article": "Открыть статью в Mealie"
+  },
+  "status": {
+    "open-and-login": "Откройте Mealie в новой вкладке этого браузера и войдите в систему перед использованием расширения.",
+    "login-required": "Войдите в Mealie в этом браузере перед использованием расширения.",
+    "check-failed": "Не удалось проверить Mealie ({status}). Убедитесь, что сайт открыт по правильному адресу.",
+    "provider-no-default": "Провайдеры AI сохранены, но не выбран основной. Выберите провайдера по умолчанию в настройках API Mealie.",
+    "provider-required": "Настройте провайдера API/AI в Mealie перед использованием расширения.",
+    "connection-failed": "Не удалось подключиться к Mealie. Проверьте адрес и убедитесь, что сайт открыт.",
+    "mealie-opened": "Mealie был открыт. Войдите в систему, если нужно, затем снова откройте расширение.",
+    "extracting": "Извлечение содержимого страницы...",
+    "extracted": "Содержимое страницы извлечено: {title}",
+    "untitled": "Без названия",
+    "extracting-and-sending": "Извлечение содержимого и отправка в Mealie...",
+    "processing-article": "Извлечение статьи и отправка в Mealie...",
+    "processing-recipe": "Извлечение рецепта и отправка в Mealie...",
+    "processing-auto": "Извлечение страницы, определение типа содержимого и отправка в Mealie...",
+    "article-created": "Статья создана: {title}",
+    "recipe-created": "Рецепт создан: {name}",
+    "recipe-created-too": "Также был создан рецепт: {name}",
+    "shopping-list": "Список покупок: {name}",
+    "attention": "Внимание: {message}",
+    "extraction-finished": "Извлечение завершено"
+  },
+  "errors": {
+    "invalid-mealie-url": "Неверный адрес Mealie.",
+    "invalid-recipe-url": "Неверная ссылка на рецепт.",
+    "active-tab-missing": "Активная вкладка не найдена.",
+    "unsupported-page": "Эту страницу невозможно извлечь. Откройте страницу с обычным рецептом и попробуйте снова.",
+    "text-extraction-failed": "Не удалось извлечь текст со страницы.",
+    "open-link-failed": "Не удалось открыть ссылку в браузере.",
+    "page-load-timeout": "Страница загружалась слишком долго.",
+    "request-unauthorized": "Запрос не выполнен, так как нет активной сессии Mealie. Откройте Mealie в этом браузере, войдите в систему и попробуйте снова.",
+    "request-failed": "Запрос не выполнен ({status}). Убедитесь, что Mealie открыт и вы вошли в систему в этом браузере.",
+    "bridge-failed": "Ошибка моста расширения Mealie.",
+    "import-failed": "Ошибка импорта расширения Mealie.",
+    "unexpected": "Что-то пошло не так."
+  }
+}

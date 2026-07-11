@@ -1,0 +1,100 @@
+{
+  "extraction": {
+    "keywords": "Lykilorð",
+    "image": "Mynd",
+    "ingredients": "Innihald",
+    "instructions": "Leiðbeiningar",
+    "content-truncated": "Efni stytt af Mealie viðbótinni",
+    "recipe-page": "Uppskriftasíða",
+    "source-url": "Upprunaslóð",
+    "source-image": "Upprunamynd",
+    "structured-data": "Skipulögð uppskriftargögn",
+    "visible-text": "Sýnilegur texti síðu",
+    "name": "Nafn",
+    "description": "Lýsing",
+    "author": "Höfundur",
+    "yield": "Magn",
+    "prep-time": "Undirbúningstími",
+    "cook-time": "Eldunartími",
+    "total-time": "Heildartími",
+    "category": "Flokkur",
+    "cuisine": "Eldhús"
+  },
+  "extension": {
+    "name": "Mealie AI",
+    "description": "Sæktu efni af núverandi vefsíðu og sendu það til Mealie AI sem uppskrift eða grein.",
+    "action-title": "Senda til Mealie AI",
+    "manifest-name": "Mealie AI uppskriftainnflytjandi"
+  },
+  "header": {
+    "subtitle": "Sæktu efni af núverandi síðu og búðu til uppskrift eða grein."
+  },
+  "settings": {
+    "mealie-url": "Mealie-slóð",
+    "extract-mode": "Hvað á að sækja",
+    "interface-language": "Tungumál viðmóts",
+    "automatic-language": "Sjálfvirkt (tungumál vafra)",
+    "translation-language": "Tungumál þýðingar"
+  },
+  "mode": {
+    "auto": "Sjálfvirk greining",
+    "recipe": "Sækja uppskrift",
+    "article": "Sækja grein"
+  },
+  "options": {
+    "create-shopping-list": "Búa einnig til sjálfvirkan innkaupalista",
+    "organize-shopping-list": "Skipuleggja innkaupalistann með AI",
+    "include-ai-tips": "Bæta við AI-nótum, ráðum og tillögum um hráefnaskipti",
+    "include-item-images": "Finna og vista myndir fyrir hráefni, áhöld og innkaupalistahluti"
+  },
+  "actions": {
+    "extract-only": "Sækja aðeins",
+    "send-auto": "Greina og senda til AI",
+    "send-recipe": "Senda uppskrift til AI",
+    "send-article": "Senda grein til AI",
+    "connect-mealie": "Opna / tengja Mealie"
+  },
+  "preview": {
+    "title": "Forskoðun"
+  },
+  "links": {
+    "open-recipe": "Opna uppskrift í Mealie",
+    "open-article": "Opna grein í Mealie"
+  },
+  "status": {
+    "open-and-login": "Opnaðu Mealie í flipa í þessum vafra og skráðu þig inn áður en viðbótin er notuð.",
+    "login-required": "Skráðu þig inn í Mealie í þessum vafra áður en viðbótin er notuð.",
+    "check-failed": "Ekki tókst að athuga Mealie ({status}). Gakktu úr skugga um að síðan sé opin á réttu heimilisfangi.",
+    "provider-no-default": "AI-veitur eru vistaðar, en engin sjálfgefin veita er valin. Veldu sjálfgefna veitu í API-stillingum Mealie.",
+    "provider-required": "Stilltu API/AI-veitu í Mealie áður en viðbótin er notuð.",
+    "connection-failed": "Ekki tókst að tengjast Mealie. Athugaðu heimilisfangið og gakktu úr skugga um að síðan sé opin.",
+    "mealie-opened": "Mealie var opnað. Skráðu þig inn ef þörf krefur og opnaðu síðan viðbótina aftur.",
+    "extracting": "Sæki efni af síðunni...",
+    "extracted": "Efni síðunnar sótt: {title}",
+    "untitled": "Nafnlaust",
+    "extracting-and-sending": "Sæki efni og sendi til Mealie...",
+    "processing-article": "Sæki grein og sendi til Mealie...",
+    "processing-recipe": "Sæki uppskrift og sendi til Mealie...",
+    "processing-auto": "Sæki síðu, greini efnisgerð og sendi til Mealie...",
+    "article-created": "Grein búin til: {title}",
+    "recipe-created": "Uppskrift búin til: {name}",
+    "recipe-created-too": "Uppskrift var einnig búin til: {name}",
+    "shopping-list": "Innkaupalisti: {name}",
+    "attention": "Athugið: {message}",
+    "extraction-finished": "Sækingu lokið"
+  },
+  "errors": {
+    "invalid-mealie-url": "Mealie-slóðin er ógild.",
+    "invalid-recipe-url": "Uppskriftartengillinn er ógildur.",
+    "active-tab-missing": "Enginn virkur flipi fannst.",
+    "unsupported-page": "Ekki er hægt að sækja efni af þessari síðu. Opnaðu venjulega uppskriftasíðu og reyndu aftur.",
+    "text-extraction-failed": "Ekki tókst að sækja texta af síðunni.",
+    "open-link-failed": "Ekki tókst að opna tengilinn í vafranum.",
+    "page-load-timeout": "Það tók of langan tíma að hlaða síðunni.",
+    "request-unauthorized": "Beiðnin mistókst vegna þess að engin virk Mealie-lotu er til staðar. Opnaðu Mealie í þessum vafra, skráðu þig inn og reyndu aftur.",
+    "request-failed": "Beiðnin mistókst ({status}). Gakktu úr skugga um að Mealie sé opið og að þú sért skráður inn í þessum vafra.",
+    "bridge-failed": "Mealie-viðbótartengingin brást.",
+    "import-failed": "Innflutningur Mealie-viðbótarinnar brást.",
+    "unexpected": "Eitthvað fór úrskeiðis."
+  }
+}

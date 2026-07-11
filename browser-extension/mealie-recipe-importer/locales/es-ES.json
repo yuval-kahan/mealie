@@ -1,0 +1,100 @@
+{
+  "extraction": {
+    "keywords": "Palabras clave",
+    "image": "Imagen",
+    "ingredients": "Ingredientes",
+    "instructions": "Instrucciones",
+    "content-truncated": "Contenido truncado por la extensión de Mealie",
+    "recipe-page": "Página de receta",
+    "source-url": "URL de origen",
+    "source-image": "Imagen de origen",
+    "structured-data": "Datos estructurados de la receta",
+    "visible-text": "Texto visible de la página",
+    "name": "Nombre",
+    "description": "Descripción",
+    "author": "Autor",
+    "yield": "Rendimiento",
+    "prep-time": "Tiempo de preparación",
+    "cook-time": "Tiempo de cocción",
+    "total-time": "Tiempo total",
+    "category": "Categoría",
+    "cuisine": "Cocina"
+  },
+  "extension": {
+    "name": "Mealie AI",
+    "description": "Extrae la página actual del navegador y envíala a Mealie AI como receta o artículo.",
+    "action-title": "Enviar a Mealie AI",
+    "manifest-name": "Importador de recetas con IA de Mealie"
+  },
+  "header": {
+    "subtitle": "Extrae la página actual y envíala para crear una receta o artículo."
+  },
+  "settings": {
+    "mealie-url": "Dirección de Mealie",
+    "extract-mode": "Qué extraer",
+    "interface-language": "Idioma de la interfaz",
+    "automatic-language": "Automático (idioma del navegador)",
+    "translation-language": "Idioma de traducción"
+  },
+  "mode": {
+    "auto": "Detección automática",
+    "recipe": "Extraer receta",
+    "article": "Extraer artículo"
+  },
+  "options": {
+    "create-shopping-list": "Crear también una lista de la compra automática",
+    "organize-shopping-list": "Organizar la lista de la compra con IA",
+    "include-ai-tips": "Añadir notas, consejos y recomendaciones de variedades de ingredientes de la IA",
+    "include-item-images": "Buscar y guardar imágenes para ingredientes, utensilios y artículos de la lista de la compra"
+  },
+  "actions": {
+    "extract-only": "Extraer solo",
+    "send-auto": "Detectar y enviar a la IA",
+    "send-recipe": "Enviar receta a la IA",
+    "send-article": "Enviar artículo a la IA",
+    "connect-mealie": "Abrir / conectar Mealie"
+  },
+  "preview": {
+    "title": "Vista previa"
+  },
+  "links": {
+    "open-recipe": "Abrir receta en Mealie",
+    "open-article": "Abrir artículo en Mealie"
+  },
+  "status": {
+    "open-and-login": "Abre Mealie en una pestaña de este navegador e inicia sesión antes de usar la extensión.",
+    "login-required": "Inicia sesión en Mealie en este navegador antes de usar la extensión.",
+    "check-failed": "No se pudo comprobar Mealie ({status}). Asegúrate de que el sitio esté abierto en la dirección correcta.",
+    "provider-no-default": "Los proveedores de IA están guardados, pero no se ha seleccionado ninguno por defecto. Selecciona un proveedor predeterminado en los ajustes de API de Mealie.",
+    "provider-required": "Configura un proveedor de API/IA en Mealie antes de usar la extensión.",
+    "connection-failed": "No se pudo conectar con Mealie. Comprueba la dirección y asegúrate de que el sitio esté abierto.",
+    "mealie-opened": "Se ha abierto Mealie. Inicia sesión si es necesario y vuelve a abrir la extensión.",
+    "extracting": "Extrayendo contenido de la página...",
+    "extracted": "Contenido de la página extraído: {title}",
+    "untitled": "Sin título",
+    "extracting-and-sending": "Extrayendo contenido y enviándolo a Mealie...",
+    "processing-article": "Extrayendo el artículo y enviándolo a Mealie...",
+    "processing-recipe": "Extrayendo la receta y enviándola a Mealie...",
+    "processing-auto": "Extrayendo la página, detectando su tipo de contenido y enviándolo a Mealie...",
+    "article-created": "Artículo creado: {title}",
+    "recipe-created": "Receta creada: {name}",
+    "recipe-created-too": "También se ha creado una receta: {name}",
+    "shopping-list": "Lista de la compra: {name}",
+    "attention": "Atención: {message}",
+    "extraction-finished": "Extracción completada"
+  },
+  "errors": {
+    "invalid-mealie-url": "La dirección de Mealie no es válida.",
+    "invalid-recipe-url": "El enlace de la receta no es válido.",
+    "active-tab-missing": "No se encontró ninguna pestaña activa.",
+    "unsupported-page": "Esta página no se puede extraer. Abre una página de receta normal e inténtalo de nuevo.",
+    "text-extraction-failed": "No se pudo extraer texto de la página.",
+    "open-link-failed": "No se pudo abrir el enlace en el navegador.",
+    "page-load-timeout": "La página ha tardado demasiado en cargar.",
+    "request-unauthorized": "La solicitud falló porque no hay una sesión activa en Mealie. Abre Mealie en este navegador, inicia sesión e inténtalo de nuevo.",
+    "request-failed": "La solicitud falló ({status}). Asegúrate de que Mealie esté abierto y de haber iniciado sesión en este navegador.",
+    "bridge-failed": "El puente de la extensión de Mealie ha fallado.",
+    "import-failed": "La importación de la extensión de Mealie ha fallado.",
+    "unexpected": "Algo ha ido mal."
+  }
+}

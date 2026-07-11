@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "Mealie AI Receptimporteur"
+  },
+  "extensionDescription": {
+    "message": "Extraheer de huidige browserpagina en stuur deze naar Mealie AI als recept of artikel."
+  },
+  "actionTitle": {
+    "message": "Verstuur naar Mealie AI"
+  }
+}

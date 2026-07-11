@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "Mealie AI oppskriftsimport"
+  },
+  "extensionDescription": {
+    "message": "Hent gjeldende nettleserside og send den til Mealie AI som en oppskrift eller artikkel."
+  },
+  "actionTitle": {
+    "message": "Send til Mealie AI"
+  }
+}

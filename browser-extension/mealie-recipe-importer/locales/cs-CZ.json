@@ -1,0 +1,100 @@
+{
+  "extraction": {
+    "keywords": "Klíčová slova",
+    "image": "Obrázek",
+    "ingredients": "Ingredience",
+    "instructions": "Postup",
+    "content-truncated": "Obsah zkrácen rozšířením Mealie",
+    "recipe-page": "Stránka receptu",
+    "source-url": "Zdrojová URL",
+    "source-image": "Zdrojový obrázek",
+    "structured-data": "Strukturovaná data receptu",
+    "visible-text": "Viditelný text stránky",
+    "name": "Název",
+    "description": "Popis",
+    "author": "Autor",
+    "yield": "Výtěžnost",
+    "prep-time": "Doba přípravy",
+    "cook-time": "Doba vaření",
+    "total-time": "Celková doba",
+    "category": "Kategorie",
+    "cuisine": "Kuchyně"
+  },
+  "extension": {
+    "name": "Mealie AI",
+    "description": "Extrahujte aktuální stránku prohlížeče a odešlete ji do Mealie AI jako recept nebo článek.",
+    "action-title": "Odeslat do Mealie AI",
+    "manifest-name": "Mealie AI importér receptů"
+  },
+  "header": {
+    "subtitle": "Extrahujte aktuální stránku a odešlete ji pro vytvoření receptu nebo článku."
+  },
+  "settings": {
+    "mealie-url": "Adresa Mealie",
+    "extract-mode": "Co extrahovat",
+    "interface-language": "Jazyk rozhraní",
+    "automatic-language": "Automaticky (jazyk prohlížeče)",
+    "translation-language": "Jazyk překladu"
+  },
+  "mode": {
+    "auto": "Automatická detekce",
+    "recipe": "Extrahovat recept",
+    "article": "Extrahovat článek"
+  },
+  "options": {
+    "create-shopping-list": "Také vytvořit automatický nákupní seznam",
+    "organize-shopping-list": "Uspořádat nákupní seznam pomocí AI",
+    "include-ai-tips": "Přidat poznámky, tipy a doporučení pro obměnu ingrediencí od AI",
+    "include-item-images": "Najít a uložit obrázky pro ingredience, nástroje a položky nákupního seznamu"
+  },
+  "actions": {
+    "extract-only": "Pouze extrahovat",
+    "send-auto": "Detekovat a odeslat do AI",
+    "send-recipe": "Odeslat recept do AI",
+    "send-article": "Odeslat článek do AI",
+    "connect-mealie": "Otevřít / připojit Mealie"
+  },
+  "preview": {
+    "title": "Náhled"
+  },
+  "links": {
+    "open-recipe": "Otevřít recept v Mealie",
+    "open-article": "Otevřít článek v Mealie"
+  },
+  "status": {
+    "open-and-login": "Před použitím rozšíření otevřete Mealie na kartě v tomto prohlížeči a přihlaste se.",
+    "login-required": "Před použitím rozšíření se v tomto prohlížeči přihlaste k Mealie.",
+    "check-failed": "Nepodařilo se zkontrolovat Mealie ({status}). Ujistěte se, že je web otevřen na správné adrese.",
+    "provider-no-default": "Poskytovatelé AI jsou uloženi, ale není vybrán výchozí poskytovatel. Vyberte výchozího poskytovatele v nastavení API Mealie.",
+    "provider-required": "Před použitím rozšíření nakonfigurujte poskytovatele API/AI v Mealie.",
+    "connection-failed": "Nepodařilo se připojit k Mealie. Zkontrolujte adresu a ujistěte se, že je web otevřen.",
+    "mealie-opened": "Mealie bylo otevřeno. Pokud je to nutné, přihlaste se a poté znovu otevřete rozšíření.",
+    "extracting": "Extrahuji obsah ze stránky...",
+    "extracted": "Obsah stránky extrahován: {title}",
+    "untitled": "Bez názvu",
+    "extracting-and-sending": "Extrahuji obsah a odesílám jej do Mealie...",
+    "processing-article": "Extrahuji článek a odesílám jej do Mealie...",
+    "processing-recipe": "Extrahuji recept a odesílám jej do Mealie...",
+    "processing-auto": "Extrahuji stránku, detekuji typ obsahu a odesílám jej do Mealie...",
+    "article-created": "Článek vytvořen: {title}",
+    "recipe-created": "Recept vytvořen: {name}",
+    "recipe-created-too": "Byl také vytvořen recept: {name}",
+    "shopping-list": "Nákupní seznam: {name}",
+    "attention": "Pozor: {message}",
+    "extraction-finished": "Extrakce dokončena"
+  },
+  "errors": {
+    "invalid-mealie-url": "Adresa Mealie je neplatná.",
+    "invalid-recipe-url": "Odkaz na recept je neplatný.",
+    "active-tab-missing": "Nebyla nalezena žádná aktivní karta.",
+    "unsupported-page": "Tuto stránku nelze extrahovat. Otevřete běžnou stránku s receptem a zkuste to znovu.",
+    "text-extraction-failed": "Nepodařilo se extrahovat text ze stránky.",
+    "open-link-failed": "Nepodařilo se otevřít odkaz v prohlížeči.",
+    "page-load-timeout": "Načítání stránky trvalo příliš dlouho.",
+    "request-unauthorized": "Požadavek selhal, protože neexistuje žádná aktivní relace Mealie. Otevřete Mealie v tomto prohlížeči, přihlaste se a zkuste to znovu.",
+    "request-failed": "Požadavek selhal ({status}). Ujistěte se, že je Mealie otevřeno a že jste v tomto prohlížeči přihlášeni.",
+    "bridge-failed": "Most rozšíření Mealie selhal.",
+    "import-failed": "Import rozšíření Mealie selhal.",
+    "unexpected": "Něco se pokazilo."
+  }
+}

@@ -1,0 +1,100 @@
+{
+  "extraction": {
+    "keywords": "Ključne riječi",
+    "image": "Slika",
+    "ingredients": "Sastojci",
+    "instructions": "Upute",
+    "content-truncated": "Sadržaj skraćen od strane Mealie proširenja",
+    "recipe-page": "Stranica recepta",
+    "source-url": "Izvorna URL adresa",
+    "source-image": "Izvorna slika",
+    "structured-data": "Strukturirani podaci recepta",
+    "visible-text": "Vidljivi tekst stranice",
+    "name": "Naziv",
+    "description": "Opis",
+    "author": "Autor",
+    "yield": "Količina",
+    "prep-time": "Vrijeme pripreme",
+    "cook-time": "Vrijeme kuhanja",
+    "total-time": "Ukupno vrijeme",
+    "category": "Kategorija",
+    "cuisine": "Kuhinja"
+  },
+  "extension": {
+    "name": "Mealie AI",
+    "description": "Izdvojite trenutnu stranicu preglednika i pošaljite je u Mealie AI kao recept ili članak.",
+    "action-title": "Pošalji u Mealie AI",
+    "manifest-name": "Mealie AI uvoznik recepata"
+  },
+  "header": {
+    "subtitle": "Izdvojite trenutnu stranicu i pošaljite je za stvaranje recepta ili članka."
+  },
+  "settings": {
+    "mealie-url": "Mealie adresa",
+    "extract-mode": "Što izdvojiti",
+    "interface-language": "Jezik sučelja",
+    "automatic-language": "Automatski (jezik preglednika)",
+    "translation-language": "Jezik prijevoda"
+  },
+  "mode": {
+    "auto": "Automatsko otkrivanje",
+    "recipe": "Izdvoji recept",
+    "article": "Izdvoji članak"
+  },
+  "options": {
+    "create-shopping-list": "Također stvori automatski popis za kupovinu",
+    "organize-shopping-list": "Organiziraj popis za kupovinu pomoću AI-a",
+    "include-ai-tips": "Dodaj AI bilješke, savjete i preporuke za zamjenu sastojaka",
+    "include-item-images": "Pronađi i spremi slike za sastojke, alate i stavke popisa za kupovinu"
+  },
+  "actions": {
+    "extract-only": "Samo izdvoji",
+    "send-auto": "Otkrij i pošalji u AI",
+    "send-recipe": "Pošalji recept u AI",
+    "send-article": "Pošalji članak u AI",
+    "connect-mealie": "Otvori / poveži Mealie"
+  },
+  "preview": {
+    "title": "Pregled"
+  },
+  "links": {
+    "open-recipe": "Otvori recept u Mealie",
+    "open-article": "Otvori članak u Mealie"
+  },
+  "status": {
+    "open-and-login": "Otvorite Mealie u kartici u ovom pregledniku i prijavite se prije korištenja proširenja.",
+    "login-required": "Prijavite se u Mealie u ovom pregledniku prije korištenja proširenja.",
+    "check-failed": "Nije moguće provjeriti Mealie ({status}). Provjerite je li stranica otvorena na ispravnoj adresi.",
+    "provider-no-default": "AI pružatelji su spremljeni, ali nije odabran zadani pružatelj. Odaberite zadanog pružatelja u Mealie API postavkama.",
+    "provider-required": "Konfigurirajte API/AI pružatelja u Mealie prije korištenja proširenja.",
+    "connection-failed": "Nije moguće povezati se s Mealie. Provjerite adresu i provjerite je li stranica otvorena.",
+    "mealie-opened": "Mealie je otvoren. Prijavite se ako je potrebno, a zatim ponovno otvorite proširenje.",
+    "extracting": "Izdvajanje sadržaja sa stranice...",
+    "extracted": "Sadržaj stranice izdvojen: {title}",
+    "untitled": "Bez naslova",
+    "extracting-and-sending": "Izdvajanje sadržaja i slanje u Mealie...",
+    "processing-article": "Izdvajanje članka i slanje u Mealie...",
+    "processing-recipe": "Izdvajanje recepta i slanje u Mealie...",
+    "processing-auto": "Izdvajanje stranice, otkrivanje vrste sadržaja i slanje u Mealie...",
+    "article-created": "Članak stvoren: {title}",
+    "recipe-created": "Recept stvoren: {name}",
+    "recipe-created-too": "Također je stvoren recept: {name}",
+    "shopping-list": "Popis za kupovinu: {name}",
+    "attention": "Pažnja: {message}",
+    "extraction-finished": "Izdvajanje dovršeno"
+  },
+  "errors": {
+    "invalid-mealie-url": "Mealie adresa nije valjana.",
+    "invalid-recipe-url": "Poveznica recepta nije valjana.",
+    "active-tab-missing": "Nije pronađena aktivna kartica.",
+    "unsupported-page": "Ova se stranica ne može izdvojiti. Otvorite običnu stranicu recepta i pokušajte ponovno.",
+    "text-extraction-failed": "Nije moguće izdvojiti tekst sa stranice.",
+    "open-link-failed": "Nije moguće otvoriti poveznicu u pregledniku.",
+    "page-load-timeout": "Učitavanje stranice predugo traje.",
+    "request-unauthorized": "Zahtjev nije uspio jer nema aktivne Mealie sesije. Otvorite Mealie u ovom pregledniku, prijavite se i pokušajte ponovno.",
+    "request-failed": "Zahtjev nije uspio ({status}). Provjerite je li Mealie otvoren i jeste li prijavljeni u ovom pregledniku.",
+    "bridge-failed": "Mealie most proširenja nije uspio.",
+    "import-failed": "Uvoz Mealie proširenja nije uspio.",
+    "unexpected": "Nešto je pošlo po zlu."
+  }
+}

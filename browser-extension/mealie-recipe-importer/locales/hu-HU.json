@@ -1,0 +1,100 @@
+{
+  "extraction": {
+    "keywords": "Kulcsszavak",
+    "image": "Kép",
+    "ingredients": "Hozzávalók",
+    "instructions": "Elkészítés",
+    "content-truncated": "A tartalmat a Mealie kiegészítő levágta",
+    "recipe-page": "Receptoldal",
+    "source-url": "Forrás URL",
+    "source-image": "Forráskép",
+    "structured-data": "Strukturált receptadatok",
+    "visible-text": "Látható oldalszöveg",
+    "name": "Név",
+    "description": "Leírás",
+    "author": "Szerző",
+    "yield": "Adagok száma",
+    "prep-time": "Előkészítési idő",
+    "cook-time": "Sütési/főzési idő",
+    "total-time": "Teljes idő",
+    "category": "Kategória",
+    "cuisine": "Konyha"
+  },
+  "extension": {
+    "name": "Mealie AI",
+    "description": "Nyissa meg az aktuális böngészőoldalt, és küldje el a Mealie AI-nak receptként vagy cikként.",
+    "action-title": "Küldés a Mealie AI-nak",
+    "manifest-name": "Mealie AI receptimportáló"
+  },
+  "header": {
+    "subtitle": "Nyissa meg az aktuális oldalt, és küldje el recept vagy cikk létrehozásához."
+  },
+  "settings": {
+    "mealie-url": "Mealie cím",
+    "extract-mode": "Mit szeretne kinyerni",
+    "interface-language": "Felület nyelve",
+    "automatic-language": "Automatikus (böngésző nyelve)",
+    "translation-language": "Fordítás nyelve"
+  },
+  "mode": {
+    "auto": "Automatikus felismerés",
+    "recipe": "Recept kinyerése",
+    "article": "Cikk kinyerése"
+  },
+  "options": {
+    "create-shopping-list": "Automatikus bevásárlólista létrehozása is",
+    "organize-shopping-list": "Bevásárlólista rendszerezése AI-val",
+    "include-ai-tips": "AI-jegyzetek, tippek és összetevő-helyettesítési javaslatok hozzáadása",
+    "include-item-images": "Képek keresése és mentése az összetevőkhöz, eszközökhöz és bevásárlólista-tételekhez"
+  },
+  "actions": {
+    "extract-only": "Csak kinyerés",
+    "send-auto": "Felismerés és küldés az AI-nak",
+    "send-recipe": "Recept küldése az AI-nak",
+    "send-article": "Cikk küldése az AI-nak",
+    "connect-mealie": "Mealie megnyitása / csatlakoztatása"
+  },
+  "preview": {
+    "title": "Előnézet"
+  },
+  "links": {
+    "open-recipe": "Recept megnyitása a Mealie-ban",
+    "open-article": "Cikk megnyitása a Mealie-ban"
+  },
+  "status": {
+    "open-and-login": "A bővítmény használata előtt nyissa meg a Mealie-t egy lapon ebben a böngészőben, és jelentkezzen be.",
+    "login-required": "A bővítmény használata előtt jelentkezzen be a Mealie-ba ebben a böngészőben.",
+    "check-failed": "Nem sikerült ellenőrizni a Mealie-t ({status}). Győződjön meg róla, hogy az oldal a megfelelő címen nyílt meg.",
+    "provider-no-default": "Az AI-szolgáltatók el vannak mentve, de nincs alapértelmezett kiválasztva. Válasszon alapértelmezett szolgáltatót a Mealie API-beállításaiban.",
+    "provider-required": "A bővítmény használata előtt konfiguráljon egy API/AI-szolgáltatót a Mealie-ban.",
+    "connection-failed": "Nem sikerült csatlakozni a Mealie-hoz. Ellenőrizze a címet, és győződjön meg róla, hogy az oldal nyitva van.",
+    "mealie-opened": "A Mealie megnyílt. Ha szükséges, jelentkezzen be, majd nyissa meg újra a bővítményt.",
+    "extracting": "Tartalom kinyerése az oldalról...",
+    "extracted": "Oldaltartalom kinyerve: {title}",
+    "untitled": "Névtelen",
+    "extracting-and-sending": "Tartalom kinyerése és küldése a Mealie-nak...",
+    "processing-article": "Cikk kinyerése és küldése a Mealie-nak...",
+    "processing-recipe": "Recept kinyerése és küldése a Mealie-nak...",
+    "processing-auto": "Oldal kinyerése, tartalomtípus felismerése és küldése a Mealie-nak...",
+    "article-created": "Cikk létrehozva: {title}",
+    "recipe-created": "Recept létrehozva: {name}",
+    "recipe-created-too": "Egy recept is létrejött: {name}",
+    "shopping-list": "Bevásárlólista: {name}",
+    "attention": "Figyelem: {message}",
+    "extraction-finished": "Kinyerés befejeződött"
+  },
+  "errors": {
+    "invalid-mealie-url": "A Mealie-cím érvénytelen.",
+    "invalid-recipe-url": "A recept linkje érvénytelen.",
+    "active-tab-missing": "Nem található aktív lap.",
+    "unsupported-page": "Ez az oldal nem nyerhető ki. Nyisson meg egy normál receptoldalt, és próbálja újra.",
+    "text-extraction-failed": "Nem sikerült szöveget kinyerni az oldalról.",
+    "open-link-failed": "Nem sikerült megnyitni a linket a böngészőben.",
+    "page-load-timeout": "Az oldal túl lassan töltődött be.",
+    "request-unauthorized": "A kérés sikertelen, mert nincs aktív Mealie-munkamenet. Nyissa meg a Mealie-t ebben a böngészőben, jelentkezzen be, és próbálja újra.",
+    "request-failed": "A kérés sikertelen ({status}). Győződjön meg róla, hogy a Mealie nyitva van, és be van jelentkezve ebben a böngészőben.",
+    "bridge-failed": "A Mealie bővítményhídja nem működik.",
+    "import-failed": "A Mealie bővítmény importálása sikertelen.",
+    "unexpected": "Valami hiba történt."
+  }
+}

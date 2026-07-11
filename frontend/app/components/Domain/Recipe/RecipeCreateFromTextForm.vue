@@ -570,6 +570,7 @@ async function createRecipeFromUrlViaExtension(url: string): Promise<ExtensionRe
         payload: {
           url,
           mealieUrl: window.location.origin,
+          interfaceLanguage: i18n.locale.value,
           translateLanguage: i18n.locale.value,
           createShoppingList: shouldCreateShoppingList.value,
           organizeShoppingListWithAi: shouldCreateShoppingList.value,

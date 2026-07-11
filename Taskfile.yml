@@ -275,9 +275,19 @@ tasks:
       - exclude: dist/**
       - exclude: node_modules/.cache/**
 
+  locales:check:
+    desc: verifies site and browser-extension locale parity
+    cmds:
+      - python dev/scripts/check_localization_parity.py frontend/app/lang/messages browser-extension/mealie-recipe-importer/locales
+    sources:
+      - frontend/app/lang/messages/**
+      - browser-extension/mealie-recipe-importer/locales/**
+      - dev/scripts/check_localization_parity.py
+
   ui:check:
     desc: runs all frontend checks
     deps:
+      - locales:check
       - ui:lint
       - ui:test
 

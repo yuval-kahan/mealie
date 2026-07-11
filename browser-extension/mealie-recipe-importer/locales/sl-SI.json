@@ -1,0 +1,100 @@
+{
+  "extraction": {
+    "keywords": "Ključne besede",
+    "image": "Slika",
+    "ingredients": "Sestavine",
+    "instructions": "Navodila",
+    "content-truncated": "Vsebina skrajšana s strani razširitve Mealie",
+    "recipe-page": "Stran z receptom",
+    "source-url": "Izvorna povezava",
+    "source-image": "Izvorna slika",
+    "structured-data": "Strukturirani podatki recepta",
+    "visible-text": "Vidno besedilo strani",
+    "name": "Ime",
+    "description": "Opis",
+    "author": "Avtor",
+    "yield": "Količina",
+    "prep-time": "Čas priprave",
+    "cook-time": "Čas kuhanja",
+    "total-time": "Skupni čas",
+    "category": "Kategorija",
+    "cuisine": "Kuhinja"
+  },
+  "extension": {
+    "name": "Mealie AI",
+    "description": "Zajemite trenutno stran v brskalniku in jo pošljite v Mealie AI kot recept ali članek.",
+    "action-title": "Pošlji v Mealie AI",
+    "manifest-name": "Mealie AI uvoznik receptov"
+  },
+  "header": {
+    "subtitle": "Zajemite trenutno stran in jo pošljite za ustvarjanje recepta ali članka."
+  },
+  "settings": {
+    "mealie-url": "Naslov Mealie",
+    "extract-mode": "Kaj zajeti",
+    "interface-language": "Jezik vmesnika",
+    "automatic-language": "Samodejno (jezik brskalnika)",
+    "translation-language": "Jezik prevajanja"
+  },
+  "mode": {
+    "auto": "Samodejno zaznavanje",
+    "recipe": "Zajemi recept",
+    "article": "Zajemi članek"
+  },
+  "options": {
+    "create-shopping-list": "Ustvari tudi samodejni nakupovalni seznam",
+    "organize-shopping-list": "Organiziraj nakupovalni seznam z AI",
+    "include-ai-tips": "Dodaj AI opombe, nasvete in priporočila za nadomestke sestavin",
+    "include-item-images": "Poišči in shrani slike za sestavine, pripomočke in artikle na nakupovalnem seznamu"
+  },
+  "actions": {
+    "extract-only": "Samo zajemi",
+    "send-auto": "Zaznaj in pošlji v AI",
+    "send-recipe": "Pošlji recept v AI",
+    "send-article": "Pošlji članek v AI",
+    "connect-mealie": "Odpri / poveži Mealie"
+  },
+  "preview": {
+    "title": "Predogled"
+  },
+  "links": {
+    "open-recipe": "Odpri recept v Mealie",
+    "open-article": "Odpri članek v Mealie"
+  },
+  "status": {
+    "open-and-login": "Pred uporabo razširitve odprite Mealie v zavihku v tem brskalniku in se prijavite.",
+    "login-required": "Pred uporabo razširitve se prijavite v Mealie v tem brskalniku.",
+    "check-failed": "Preverjanje Mealie ni uspelo ({status}). Prepričajte se, da je spletno mesto odprto na pravilnem naslovu.",
+    "provider-no-default": "Ponudniki AI so shranjeni, vendar privzeti ponudnik ni izbran. Izberite privzetega ponudnika v nastavitvah API-ja za Mealie.",
+    "provider-required": "Pred uporabo razširitve konfigurirajte ponudnika API/AI v Mealie.",
+    "connection-failed": "Povezava z Mealie ni uspela. Preverite naslov in se prepričajte, da je spletno mesto odprto.",
+    "mealie-opened": "Mealie je bil odprt. Po potrebi se prijavite in nato znova odprite razširitev.",
+    "extracting": "Zajemanje vsebine s strani...",
+    "extracted": "Vsebina strani zajeta: {title}",
+    "untitled": "Brez naslova",
+    "extracting-and-sending": "Zajemanje vsebine in pošiljanje v Mealie...",
+    "processing-article": "Zajemanje članka in pošiljanje v Mealie...",
+    "processing-recipe": "Zajemanje recepta in pošiljanje v Mealie...",
+    "processing-auto": "Zajemanje strani, zaznavanje vrste vsebine in pošiljanje v Mealie...",
+    "article-created": "Članek ustvarjen: {title}",
+    "recipe-created": "Recept ustvarjen: {name}",
+    "recipe-created-too": "Ustvarjen je bil tudi recept: {name}",
+    "shopping-list": "Nakupovalni seznam: {name}",
+    "attention": "Pozor: {message}",
+    "extraction-finished": "Zajemanje zaključeno"
+  },
+  "errors": {
+    "invalid-mealie-url": "Naslov Mealie ni veljaven.",
+    "invalid-recipe-url": "Povezava do recepta ni veljavna.",
+    "active-tab-missing": "Aktivni zavihek ni bil najden.",
+    "unsupported-page": "Te strani ni mogoče zajeti. Odprite običajno stran z receptom in poskusite znova.",
+    "text-extraction-failed": "Besedila s strani ni bilo mogoče zajeti.",
+    "open-link-failed": "Povezave ni bilo mogoče odpreti v brskalniku.",
+    "page-load-timeout": "Stran se je nalagala predolgo.",
+    "request-unauthorized": "Zahteva ni uspela, ker ni aktivne seje Mealie. Odprite Mealie v tem brskalniku, se prijavite in poskusite znova.",
+    "request-failed": "Zahteva ni uspela ({status}). Prepričajte se, da je Mealie odprt in da ste prijavljeni v tem brskalniku.",
+    "bridge-failed": "Most razširitve Mealie ni uspel.",
+    "import-failed": "Uvoz razširitve Mealie ni uspel.",
+    "unexpected": "Nekaj je šlo narobe."
+  }
+}

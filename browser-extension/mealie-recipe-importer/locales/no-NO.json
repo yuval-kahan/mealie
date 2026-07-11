@@ -1,0 +1,100 @@
+{
+  "extension": {
+    "name": "Mealie AI",
+    "description": "Hent gjeldende nettleserside og send den til Mealie AI som en oppskrift eller artikkel.",
+    "action-title": "Send til Mealie AI",
+    "manifest-name": "Mealie AI oppskriftsimport"
+  },
+  "header": {
+    "subtitle": "Hent gjeldende side og send den for å opprette en oppskrift eller artikkel."
+  },
+  "settings": {
+    "mealie-url": "Mealie-adresse",
+    "extract-mode": "Hva skal hentes",
+    "interface-language": "Grensesnittspråk",
+    "automatic-language": "Automatisk (nettleserspråk)",
+    "translation-language": "Oversettelsesspråk"
+  },
+  "mode": {
+    "auto": "Automatisk gjenkjenning",
+    "recipe": "Hent oppskrift",
+    "article": "Hent artikkel"
+  },
+  "options": {
+    "create-shopping-list": "Opprett også en automatisk handleliste",
+    "organize-shopping-list": "Organiser handlelisten med AI",
+    "include-ai-tips": "Legg til AI-notater, tips og anbefalinger for ingrediensvarianter",
+    "include-item-images": "Finn og lagre bilder for ingredienser, verktøy og handlelisteartikler"
+  },
+  "actions": {
+    "extract-only": "Kun henting",
+    "send-auto": "Gjenkjenn og send til AI",
+    "send-recipe": "Send oppskrift til AI",
+    "send-article": "Send artikkel til AI",
+    "connect-mealie": "Åpne / koble til Mealie"
+  },
+  "preview": {
+    "title": "Forhåndsvisning"
+  },
+  "links": {
+    "open-recipe": "Åpne oppskrift i Mealie",
+    "open-article": "Åpne artikkel i Mealie"
+  },
+  "status": {
+    "open-and-login": "Åpne Mealie i en fane i denne nettleseren og logg inn før du bruker utvidelsen.",
+    "login-required": "Logg inn på Mealie i denne nettleseren før du bruker utvidelsen.",
+    "check-failed": "Kunne ikke sjekke Mealie ({status}). Sørg for at siden er åpen på riktig adresse.",
+    "provider-no-default": "AI-leverandører er lagret, men ingen standardleverandør er valgt. Velg en standardleverandør i Mealies API-innstillinger.",
+    "provider-required": "Konfigurer en API/AI-leverandør i Mealie før du bruker utvidelsen.",
+    "connection-failed": "Kunne ikke koble til Mealie. Sjekk adressen og sørg for at siden er åpen.",
+    "mealie-opened": "Mealie ble åpnet. Logg inn der om nødvendig, og åpne deretter utvidelsen på nytt.",
+    "extracting": "Henter innhold fra siden...",
+    "extracted": "Sideinnhold hentet: {title}",
+    "untitled": "Uten tittel",
+    "extracting-and-sending": "Henter innhold og sender det til Mealie...",
+    "processing-article": "Henter artikkelen og sender den til Mealie...",
+    "processing-recipe": "Henter oppskriften og sender den til Mealie...",
+    "processing-auto": "Henter siden, gjenkjenner innholdstypen og sender den til Mealie...",
+    "article-created": "Artikkel opprettet: {title}",
+    "recipe-created": "Oppskrift opprettet: {name}",
+    "recipe-created-too": "En oppskrift ble også opprettet: {name}",
+    "shopping-list": "Handleliste: {name}",
+    "attention": "Merk: {message}",
+    "extraction-finished": "Henting fullført"
+  },
+  "errors": {
+    "invalid-mealie-url": "Mealie-adressen er ugyldig.",
+    "invalid-recipe-url": "Oppskriftslenken er ugyldig.",
+    "active-tab-missing": "Ingen aktiv fane ble funnet.",
+    "unsupported-page": "Denne siden kan ikke hentes. Åpne en vanlig oppskriftsside og prøv igjen.",
+    "text-extraction-failed": "Kunne ikke hente tekst fra siden.",
+    "open-link-failed": "Kunne ikke åpne lenken i nettleseren.",
+    "page-load-timeout": "Siden tok for lang tid å laste.",
+    "request-unauthorized": "Forespørselen mislyktes fordi det ikke finnes en aktiv Mealie-økt. Åpne Mealie i denne nettleseren, logg inn og prøv igjen.",
+    "request-failed": "Forespørselen mislyktes ({status}). Sørg for at Mealie er åpen og at du er logget inn i denne nettleseren.",
+    "bridge-failed": "Mealie-utvidelsesbroen mislyktes.",
+    "import-failed": "Mealie-utvidelsesimporten mislyktes.",
+    "unexpected": "Noe gikk galt."
+  },
+  "extraction": {
+    "recipe-page": "Oppskriftsside",
+    "source-url": "Kilde-URL",
+    "source-image": "Kildebilde",
+    "structured-data": "Strukturert oppskriftsdata",
+    "visible-text": "Synlig sidetekst",
+    "name": "Navn",
+    "description": "Beskrivelse",
+    "author": "Forfatter",
+    "yield": "Porsjoner",
+    "prep-time": "Forberedelsestid",
+    "cook-time": "Steketid",
+    "total-time": "Total tid",
+    "category": "Kategori",
+    "cuisine": "Kjøkken",
+    "keywords": "Nøkkelord",
+    "image": "Bilde",
+    "ingredients": "Ingredienser",
+    "instructions": "Instruksjoner",
+    "content-truncated": "Innhold forkortet av Mealie-utvidelsen"
+  }
+}

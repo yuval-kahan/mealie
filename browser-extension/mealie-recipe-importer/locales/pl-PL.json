@@ -1,0 +1,100 @@
+{
+  "extraction": {
+    "keywords": "Słowa kluczowe",
+    "image": "Obraz",
+    "ingredients": "Składniki",
+    "instructions": "Instrukcje",
+    "content-truncated": "Treść przycięta przez rozszerzenie Mealie",
+    "recipe-page": "Strona przepisu",
+    "source-url": "Źródłowy URL",
+    "source-image": "Obraz źródłowy",
+    "structured-data": "Ustrukturyzowane dane przepisu",
+    "visible-text": "Widoczny tekst strony",
+    "name": "Nazwa",
+    "description": "Opis",
+    "author": "Autor",
+    "yield": "Porcje",
+    "prep-time": "Czas przygotowania",
+    "cook-time": "Czas gotowania",
+    "total-time": "Czas całkowity",
+    "category": "Kategoria",
+    "cuisine": "Kuchnia"
+  },
+  "extension": {
+    "name": "Mealie AI",
+    "description": "Wyodrębnij zawartość bieżącej strony i wyślij ją do Mealie AI jako przepis lub artykuł.",
+    "action-title": "Wyślij do Mealie AI",
+    "manifest-name": "Importer przepisów Mealie AI"
+  },
+  "header": {
+    "subtitle": "Wyodrębnij bieżącą stronę i wyślij ją, aby utworzyć przepis lub artykuł."
+  },
+  "settings": {
+    "mealie-url": "Adres Mealie",
+    "extract-mode": "Co wyodrębnić",
+    "interface-language": "Język interfejsu",
+    "automatic-language": "Automatyczny (język przeglądarki)",
+    "translation-language": "Język tłumaczenia"
+  },
+  "mode": {
+    "auto": "Automatyczne wykrywanie",
+    "recipe": "Wyodrębnij przepis",
+    "article": "Wyodrębnij artykuł"
+  },
+  "options": {
+    "create-shopping-list": "Utwórz również automatyczną listę zakupów",
+    "organize-shopping-list": "Organizuj listę zakupów za pomocą AI",
+    "include-ai-tips": "Dodaj notatki AI, wskazówki i rekomendacje zamienników składników",
+    "include-item-images": "Znajdź i zapisz obrazy dla składników, narzędzi i pozycji na liście zakupów"
+  },
+  "actions": {
+    "extract-only": "Tylko wyodrębnij",
+    "send-auto": "Wykryj i wyślij do AI",
+    "send-recipe": "Wyślij przepis do AI",
+    "send-article": "Wyślij artykuł do AI",
+    "connect-mealie": "Otwórz / połącz Mealie"
+  },
+  "preview": {
+    "title": "Podgląd"
+  },
+  "links": {
+    "open-recipe": "Otwórz przepis w Mealie",
+    "open-article": "Otwórz artykuł w Mealie"
+  },
+  "status": {
+    "open-and-login": "Otwórz Mealie w karcie przeglądarki i zaloguj się przed użyciem rozszerzenia.",
+    "login-required": "Zaloguj się do Mealie w tej przeglądarce przed użyciem rozszerzenia.",
+    "check-failed": "Nie można sprawdzić Mealie ({status}). Upewnij się, że strona jest otwarta pod poprawnym adresem.",
+    "provider-no-default": "Dostawcy AI są zapisani, ale nie wybrano domyślnego. Wybierz domyślnego dostawcę w ustawieniach API Mealie.",
+    "provider-required": "Skonfiguruj dostawcę API/AI w Mealie przed użyciem rozszerzenia.",
+    "connection-failed": "Nie można połączyć się z Mealie. Sprawdź adres i upewnij się, że strona jest otwarta.",
+    "mealie-opened": "Mealie zostało otwarte. Zaloguj się, jeśli to konieczne, a następnie otwórz ponownie rozszerzenie.",
+    "extracting": "Wyodrębnianie zawartości ze strony...",
+    "extracted": "Zawartość strony wyodrębniona: {title}",
+    "untitled": "Bez tytułu",
+    "extracting-and-sending": "Wyodrębnianie zawartości i wysyłanie do Mealie...",
+    "processing-article": "Wyodrębnianie artykułu i wysyłanie do Mealie...",
+    "processing-recipe": "Wyodrębnianie przepisu i wysyłanie do Mealie...",
+    "processing-auto": "Wyodrębnianie strony, wykrywanie typu zawartości i wysyłanie do Mealie...",
+    "article-created": "Artykuł utworzony: {title}",
+    "recipe-created": "Przepis utworzony: {name}",
+    "recipe-created-too": "Utworzono również przepis: {name}",
+    "shopping-list": "Lista zakupów: {name}",
+    "attention": "Uwaga: {message}",
+    "extraction-finished": "Wyodrębnianie zakończone"
+  },
+  "errors": {
+    "invalid-mealie-url": "Adres Mealie jest nieprawidłowy.",
+    "invalid-recipe-url": "Link do przepisu jest nieprawidłowy.",
+    "active-tab-missing": "Nie znaleziono aktywnej karty.",
+    "unsupported-page": "Tej strony nie można wyodrębnić. Otwórz stronę z przepisem i spróbuj ponownie.",
+    "text-extraction-failed": "Nie można wyodrębnić tekstu ze strony.",
+    "open-link-failed": "Nie można otworzyć linku w przeglądarce.",
+    "page-load-timeout": "Ładowanie strony trwało zbyt długo.",
+    "request-unauthorized": "Żądanie nie powiodło się, ponieważ brak aktywnej sesji Mealie. Otwórz Mealie w tej przeglądarce, zaloguj się i spróbuj ponownie.",
+    "request-failed": "Żądanie nie powiodło się ({status}). Upewnij się, że Mealie jest otwarte i jesteś zalogowany w tej przeglądarce.",
+    "bridge-failed": "Mostek rozszerzenia Mealie nie powiódł się.",
+    "import-failed": "Import rozszerzenia Mealie nie powiódł się.",
+    "unexpected": "Coś poszło nie tak."
+  }
+}

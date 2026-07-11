@@ -1,0 +1,100 @@
+{
+  "extraction": {
+    "keywords": "關鍵字",
+    "image": "圖片",
+    "ingredients": "食材",
+    "instructions": "步驟",
+    "content-truncated": "內容已被 Mealie 擴充功能截斷",
+    "recipe-page": "食譜頁面",
+    "source-url": "來源網址",
+    "source-image": "來源圖片",
+    "structured-data": "結構化食譜資料",
+    "visible-text": "可見頁面文字",
+    "name": "名稱",
+    "description": "描述",
+    "author": "作者",
+    "yield": "份量",
+    "prep-time": "準備時間",
+    "cook-time": "烹飪時間",
+    "total-time": "總時間",
+    "category": "分類",
+    "cuisine": "菜系"
+  },
+  "extension": {
+    "name": "Mealie AI",
+    "description": "擷取目前瀏覽器頁面並將其作為食譜或文章發送至 Mealie AI。",
+    "action-title": "發送至 Mealie AI",
+    "manifest-name": "Mealie AI 食譜匯入工具"
+  },
+  "header": {
+    "subtitle": "擷取目前頁面並發送以建立食譜或文章。"
+  },
+  "settings": {
+    "mealie-url": "Mealie 位址",
+    "extract-mode": "擷取內容",
+    "interface-language": "介面語言",
+    "automatic-language": "自動（瀏覽器語言）",
+    "translation-language": "翻譯語言"
+  },
+  "mode": {
+    "auto": "自動偵測",
+    "recipe": "擷取食譜",
+    "article": "擷取文章"
+  },
+  "options": {
+    "create-shopping-list": "同時建立自動購物清單",
+    "organize-shopping-list": "使用 AI 整理購物清單",
+    "include-ai-tips": "加入 AI 筆記、小撇步及食材變化建議",
+    "include-item-images": "搜尋並儲存食材、工具及購物清單項目的圖片"
+  },
+  "actions": {
+    "extract-only": "僅擷取",
+    "send-auto": "偵測並發送至 AI",
+    "send-recipe": "發送食譜至 AI",
+    "send-article": "發送文章至 AI",
+    "connect-mealie": "開啟 / 連接 Mealie"
+  },
+  "preview": {
+    "title": "預覽"
+  },
+  "links": {
+    "open-recipe": "在 Mealie 中開啟食譜",
+    "open-article": "在 Mealie 中開啟文章"
+  },
+  "status": {
+    "open-and-login": "請先在此瀏覽器分頁中開啟 Mealie 並登入，再使用擴充功能。",
+    "login-required": "請先在此瀏覽器中登入 Mealie，再使用擴充功能。",
+    "check-failed": "無法檢查 Mealie ({status})。請確保網站已在正確位址開啟。",
+    "provider-no-default": "已儲存 AI 提供者，但未選取預設提供者。請在 Mealie 的 API 設定中選取預設提供者。",
+    "provider-required": "請先在 Mealie 中設定 API/AI 提供者，再使用擴充功能。",
+    "connection-failed": "無法連接至 Mealie。請檢查位址並確保網站已開啟。",
+    "mealie-opened": "Mealie 已開啟。如有需要請在該處登入，然後再次開啟擴充功能。",
+    "extracting": "正在從頁面擷取內容...",
+    "extracted": "頁面內容已擷取：{title}",
+    "untitled": "未命名",
+    "extracting-and-sending": "正在擷取內容並發送至 Mealie...",
+    "processing-article": "正在擷取文章並發送至 Mealie...",
+    "processing-recipe": "正在擷取食譜並發送至 Mealie...",
+    "processing-auto": "正在擷取頁面、偵測內容類型並發送至 Mealie...",
+    "article-created": "文章已建立：{title}",
+    "recipe-created": "食譜已建立：{name}",
+    "recipe-created-too": "同時也建立了食譜：{name}",
+    "shopping-list": "購物清單：{name}",
+    "attention": "注意：{message}",
+    "extraction-finished": "擷取完成"
+  },
+  "errors": {
+    "invalid-mealie-url": "Mealie 位址無效。",
+    "invalid-recipe-url": "食譜連結無效。",
+    "active-tab-missing": "找不到作用中的分頁。",
+    "unsupported-page": "無法擷取此頁面。請開啟一般的食譜頁面後再試一次。",
+    "text-extraction-failed": "無法從頁面擷取文字。",
+    "open-link-failed": "無法在瀏覽器中開啟連結。",
+    "page-load-timeout": "頁面載入逾時。",
+    "request-unauthorized": "請求失敗，因為沒有作用中的 Mealie 工作階段。請在此瀏覽器中開啟 Mealie 並登入，然後再試一次。",
+    "request-failed": "請求失敗 ({status})。請確保 Mealie 已開啟且您已在此瀏覽器中登入。",
+    "bridge-failed": "Mealie 擴充功能橋接失敗。",
+    "import-failed": "Mealie 擴充功能匯入失敗。",
+    "unexpected": "發生未預期的錯誤。"
+  }
+}

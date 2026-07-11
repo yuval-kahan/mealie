@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "Importador de receptes amb IA de Mealie"
+  },
+  "extensionDescription": {
+    "message": "Extreu la pàgina actual del navegador i envia-la a Mealie AI com a recepta o article."
+  },
+  "actionTitle": {
+    "message": "Enviar a Mealie AI"
+  }
+}

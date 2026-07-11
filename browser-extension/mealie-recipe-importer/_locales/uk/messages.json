@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "Імпортер рецептів Mealie AI"
+  },
+  "extensionDescription": {
+    "message": "Витягніть вміст поточної сторінки браузера та надішліть його до Mealie AI як рецепт або статтю."
+  },
+  "actionTitle": {
+    "message": "Надіслати до Mealie AI"
+  }
+}

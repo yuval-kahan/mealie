@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "Mealie AI uvoznik receptov"
+  },
+  "extensionDescription": {
+    "message": "Zajemite trenutno stran v brskalniku in jo pošljite v Mealie AI kot recept ali članek."
+  },
+  "actionTitle": {
+    "message": "Pošlji v Mealie AI"
+  }
+}

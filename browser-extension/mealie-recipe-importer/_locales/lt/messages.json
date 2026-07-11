@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "Mealie AI receptų importuotojas"
+  },
+  "extensionDescription": {
+    "message": "Ištraukite dabartinį naršyklės puslapį ir nusiųskite jį į Mealie AI kaip receptą arba straipsnį."
+  },
+  "actionTitle": {
+    "message": "Siųsti į Mealie AI"
+  }
+}

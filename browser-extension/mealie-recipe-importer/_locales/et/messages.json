@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "Mealie AI retseptiimportija"
+  },
+  "extensionDescription": {
+    "message": "Ekstrakti praegune brauserileht ja saada see Mealie AI-le retsepti või artiklina."
+  },
+  "actionTitle": {
+    "message": "Saada Mealie AI-le"
+  }
+}

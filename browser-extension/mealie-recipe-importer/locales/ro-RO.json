@@ -1,0 +1,100 @@
+{
+  "extraction": {
+    "keywords": "Cuvinte cheie",
+    "image": "Imagine",
+    "ingredients": "Ingrediente",
+    "instructions": "Instrucțiuni",
+    "content-truncated": "Conținut trunchiat de extensia Mealie",
+    "recipe-page": "Pagină rețetă",
+    "source-url": "URL sursă",
+    "source-image": "Imagine sursă",
+    "structured-data": "Date structurate rețetă",
+    "visible-text": "Text vizibil pagină",
+    "name": "Nume",
+    "description": "Descriere",
+    "author": "Autor",
+    "yield": "Porții",
+    "prep-time": "Timp de pregătire",
+    "cook-time": "Timp de gătire",
+    "total-time": "Timp total",
+    "category": "Categorie",
+    "cuisine": "Bucătărie"
+  },
+  "extension": {
+    "name": "Mealie AI",
+    "description": "Extrage pagina curentă din browser și trimite-o către Mealie AI ca rețetă sau articol.",
+    "action-title": "Trimite către Mealie AI",
+    "manifest-name": "Importator de rețete Mealie AI"
+  },
+  "header": {
+    "subtitle": "Extrage pagina curentă și trimite-o pentru a crea o rețetă sau un articol."
+  },
+  "settings": {
+    "mealie-url": "Adresă Mealie",
+    "extract-mode": "Ce să extragi",
+    "interface-language": "Limba interfeței",
+    "automatic-language": "Automat (limba browserului)",
+    "translation-language": "Limba de traducere"
+  },
+  "mode": {
+    "auto": "Detectare automată",
+    "recipe": "Extrage rețeta",
+    "article": "Extrage articolul"
+  },
+  "options": {
+    "create-shopping-list": "Creează și o listă de cumpărături automată",
+    "organize-shopping-list": "Organizează lista de cumpărături cu AI",
+    "include-ai-tips": "Adaugă note AI, sfaturi și recomandări de varietăți de ingrediente",
+    "include-item-images": "Găsește și salvează imagini pentru ingrediente, ustensile și articole din lista de cumpărături"
+  },
+  "actions": {
+    "extract-only": "Doar extragere",
+    "send-auto": "Detectează și trimite către AI",
+    "send-recipe": "Trimite rețeta către AI",
+    "send-article": "Trimite articolul către AI",
+    "connect-mealie": "Deschide / conectează Mealie"
+  },
+  "preview": {
+    "title": "Previzualizare"
+  },
+  "links": {
+    "open-recipe": "Deschide rețeta în Mealie",
+    "open-article": "Deschide articolul în Mealie"
+  },
+  "status": {
+    "open-and-login": "Deschide Mealie într-o filă în acest browser și autentifică-te înainte de a utiliza extensia.",
+    "login-required": "Autentifică-te în Mealie în acest browser înainte de a utiliza extensia.",
+    "check-failed": "Nu s-a putut verifica Mealie ({status}). Asigură-te că site-ul este deschis la adresa corectă.",
+    "provider-no-default": "Furnizorii AI sunt salvați, dar nu este selectat niciun furnizor implicit. Selectează un furnizor implicit în setările API din Mealie.",
+    "provider-required": "Configurează un furnizor API/AI în Mealie înainte de a utiliza extensia.",
+    "connection-failed": "Nu s-a putut face conexiunea la Mealie. Verifică adresa și asigură-te că site-ul este deschis.",
+    "mealie-opened": "Mealie a fost deschis. Autentifică-te acolo dacă este necesar, apoi deschide extensia din nou.",
+    "extracting": "Se extrage conținutul din pagină...",
+    "extracted": "Conținutul paginii a fost extras: {title}",
+    "untitled": "Fără titlu",
+    "extracting-and-sending": "Se extrage conținutul și se trimite către Mealie...",
+    "processing-article": "Se extrage articolul și se trimite către Mealie...",
+    "processing-recipe": "Se extrage rețeta și se trimite către Mealie...",
+    "processing-auto": "Se extrage pagina, se detectează tipul de conținut și se trimite către Mealie...",
+    "article-created": "Articol creat: {title}",
+    "recipe-created": "Rețetă creată: {name}",
+    "recipe-created-too": "A fost creată și o rețetă: {name}",
+    "shopping-list": "Listă de cumpărături: {name}",
+    "attention": "Atenție: {message}",
+    "extraction-finished": "Extragerea a fost finalizată"
+  },
+  "errors": {
+    "invalid-mealie-url": "Adresa Mealie este invalidă.",
+    "invalid-recipe-url": "Linkul rețetei este invalid.",
+    "active-tab-missing": "Nu a fost găsită nicio filă activă.",
+    "unsupported-page": "Această pagină nu poate fi extrasă. Deschide o pagină de rețetă obișnuită și încearcă din nou.",
+    "text-extraction-failed": "Nu s-a putut extrage textul din pagină.",
+    "open-link-failed": "Nu s-a putut deschide linkul în browser.",
+    "page-load-timeout": "Pagina a durat prea mult să se încarce.",
+    "request-unauthorized": "Cererea a eșuat deoarece nu există nicio sesiune Mealie activă. Deschide Mealie în acest browser, autentifică-te și încearcă din nou.",
+    "request-failed": "Cererea a eșuat ({status}). Asigură-te că Mealie este deschis și că ești autentificat în acest browser.",
+    "bridge-failed": "Puntea extensiei Mealie a eșuat.",
+    "import-failed": "Importul extensiei Mealie a eșuat.",
+    "unexpected": "Ceva nu a funcționat corect."
+  }
+}

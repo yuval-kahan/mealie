@@ -1,0 +1,100 @@
+{
+  "extraction": {
+    "keywords": "Ključne reči",
+    "image": "Slika",
+    "ingredients": "Sastojci",
+    "instructions": "Uputstva",
+    "content-truncated": "Sadržaj skraćen od strane Mealie ekstenzije",
+    "recipe-page": "Stranica recepta",
+    "source-url": "Izvorni URL",
+    "source-image": "Izvorna slika",
+    "structured-data": "Strukturirani podaci recepta",
+    "visible-text": "Vidljivi tekst stranice",
+    "name": "Naziv",
+    "description": "Opis",
+    "author": "Autor",
+    "yield": "Količina",
+    "prep-time": "Vreme pripreme",
+    "cook-time": "Vreme kuvanja",
+    "total-time": "Ukupno vreme",
+    "category": "Kategorija",
+    "cuisine": "Kuhinja"
+  },
+  "extension": {
+    "name": "Mealie AI",
+    "description": "Ekstrahujte trenutnu stranicu pregledača i pošaljite je na Mealie AI kao recept ili članak.",
+    "action-title": "Pošalji na Mealie AI",
+    "manifest-name": "Mealie AI uvoznik recepata"
+  },
+  "header": {
+    "subtitle": "Ekstrahujte trenutnu stranicu i pošaljite je radi kreiranja recepta ili članka."
+  },
+  "settings": {
+    "mealie-url": "Mealie adresa",
+    "extract-mode": "Šta ekstrahovati",
+    "interface-language": "Jezik interfejsa",
+    "automatic-language": "Automatski (jezik pregledača)",
+    "translation-language": "Jezik prevoda"
+  },
+  "mode": {
+    "auto": "Automatsko otkrivanje",
+    "recipe": "Ekstrahuj recept",
+    "article": "Ekstrahuj članak"
+  },
+  "options": {
+    "create-shopping-list": "Takođe kreiraj automatsku listu za kupovinu",
+    "organize-shopping-list": "Organizuj listu za kupovinu pomoću AI",
+    "include-ai-tips": "Dodaj AI beleške, savete i preporuke za zamenu sastojaka",
+    "include-item-images": "Pronađi i sačuvaj slike za sastojke, alatke i stavke sa liste za kupovinu"
+  },
+  "actions": {
+    "extract-only": "Samo ekstrahuj",
+    "send-auto": "Otkrij i pošalji na AI",
+    "send-recipe": "Pošalji recept na AI",
+    "send-article": "Pošalji članak na AI",
+    "connect-mealie": "Otvori / poveži Mealie"
+  },
+  "preview": {
+    "title": "Pregled"
+  },
+  "links": {
+    "open-recipe": "Otvori recept u Mealie-u",
+    "open-article": "Otvori članak u Mealie-u"
+  },
+  "status": {
+    "open-and-login": "Otvorite Mealie u kartici u ovom pregledaču i prijavite se pre korišćenja ekstenzije.",
+    "login-required": "Prijavite se na Mealie u ovom pregledaču pre korišćenja ekstenzije.",
+    "check-failed": "Nije bilo moguće proveriti Mealie ({status}). Uverite se da je sajt otvoren na ispravnoj adresi.",
+    "provider-no-default": "AI provajderi su sačuvani, ali nijedan podrazumevani provajder nije izabran. Izaberite podrazumevanog provajdera u Mealie API podešavanjima.",
+    "provider-required": "Konfigurišite API/AI provajdera u Mealie-u pre korišćenja ekstenzije.",
+    "connection-failed": "Nije bilo moguće povezati se sa Mealie-om. Proverite adresu i uverite se da je sajt otvoren.",
+    "mealie-opened": "Mealie je otvoren. Prijavite se tamo ako je potrebno, a zatim ponovo otvorite ekstenziju.",
+    "extracting": "Ekstrahovanje sadržaja sa stranice...",
+    "extracted": "Sadržaj stranice ekstrahovan: {title}",
+    "untitled": "Bez naslova",
+    "extracting-and-sending": "Ekstrahovanje sadržaja i slanje na Mealie...",
+    "processing-article": "Ekstrahovanje članka i slanje na Mealie...",
+    "processing-recipe": "Ekstrahovanje recepta i slanje na Mealie...",
+    "processing-auto": "Ekstrahovanje stranice, otkrivanje tipa sadržaja i slanje na Mealie...",
+    "article-created": "Članak kreiran: {title}",
+    "recipe-created": "Recept kreiran: {name}",
+    "recipe-created-too": "Takođe je kreiran recept: {name}",
+    "shopping-list": "Lista za kupovinu: {name}",
+    "attention": "Pažnja: {message}",
+    "extraction-finished": "Ekstrahovanje završeno"
+  },
+  "errors": {
+    "invalid-mealie-url": "Mealie adresa nije ispravna.",
+    "invalid-recipe-url": "Link recepta nije ispravan.",
+    "active-tab-missing": "Nije pronađena aktivna kartica.",
+    "unsupported-page": "Ova stranica se ne može ekstrahovati. Otvorite običnu stranicu recepta i pokušajte ponovo.",
+    "text-extraction-failed": "Nije bilo moguće ekstrahovati tekst sa stranice.",
+    "open-link-failed": "Nije bilo moguće otvoriti link u pregledaču.",
+    "page-load-timeout": "Učitavanje stranice je trajalo predugo.",
+    "request-unauthorized": "Zahtev nije uspeo jer ne postoji aktivna Mealie sesija. Otvorite Mealie u ovom pregledaču, prijavite se i pokušajte ponovo.",
+    "request-failed": "Zahtev nije uspeo ({status}). Uverite se da je Mealie otvoren i da ste prijavljeni u ovom pregledaču.",
+    "bridge-failed": "Mealie ekstenzija most nije uspela.",
+    "import-failed": "Uvoz Mealie ekstenzije nije uspeo.",
+    "unexpected": "Nešto je pošlo po zlu."
+  }
+}

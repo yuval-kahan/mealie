@@ -1,0 +1,100 @@
+{
+  "extraction": {
+    "keywords": "Märksõnad",
+    "image": "Pilt",
+    "ingredients": "Koostisosad",
+    "instructions": "Juhised",
+    "content-truncated": "Mealie laiendus kärpis sisu",
+    "recipe-page": "Retseptileht",
+    "source-url": "Allika URL",
+    "source-image": "Allika pilt",
+    "structured-data": "Struktureeritud retseptiandmed",
+    "visible-text": "Nähtav lehe tekst",
+    "name": "Nimi",
+    "description": "Kirjeldus",
+    "author": "Autor",
+    "yield": "Kogus",
+    "prep-time": "Ettevalmistusaeg",
+    "cook-time": "Küpsetusaeg",
+    "total-time": "Koguaeg",
+    "category": "Kategooria",
+    "cuisine": "Köök"
+  },
+  "extension": {
+    "name": "Mealie AI",
+    "description": "Ekstrakti praegune brauserileht ja saada see Mealie AI-le retsepti või artiklina.",
+    "action-title": "Saada Mealie AI-le",
+    "manifest-name": "Mealie AI retseptiimportija"
+  },
+  "header": {
+    "subtitle": "Ekstrakti praegune leht ja saada see retsepti või artikli loomiseks."
+  },
+  "settings": {
+    "mealie-url": "Mealie aadress",
+    "extract-mode": "Mida ekstraktida",
+    "interface-language": "Liidese keel",
+    "automatic-language": "Automaatne (brauseri keel)",
+    "translation-language": "Tõlke keel"
+  },
+  "mode": {
+    "auto": "Automaatne tuvastamine",
+    "recipe": "Ekstrakti retsept",
+    "article": "Ekstrakti artikkel"
+  },
+  "options": {
+    "create-shopping-list": "Loo ka automaatne ostunimekiri",
+    "organize-shopping-list": "Korralda ostunimekiri AI abil",
+    "include-ai-tips": "Lisa AI märkmed, näpunäited ja soovitused koostisosade asendamiseks",
+    "include-item-images": "Leia ja salvesta pildid koostisosadele, tööriistadele ja ostunimekirja esemetele"
+  },
+  "actions": {
+    "extract-only": "Ainult ekstrakti",
+    "send-auto": "Tuvasta ja saada AI-le",
+    "send-recipe": "Saada retsept AI-le",
+    "send-article": "Saada artikkel AI-le",
+    "connect-mealie": "Ava / ühenda Mealie"
+  },
+  "preview": {
+    "title": "Eelvaade"
+  },
+  "links": {
+    "open-recipe": "Ava retsept Mealie's",
+    "open-article": "Ava artikkel Mealie's"
+  },
+  "status": {
+    "open-and-login": "Ava Mealie selle brauseri vahekaardil ja logi sisse enne laienduse kasutamist.",
+    "login-required": "Logi enne laienduse kasutamist selles brauseris Mealie'sse sisse.",
+    "check-failed": "Mealie kontrollimine ebaõnnestus ({status}). Veendu, et sait on avatud õigel aadressil.",
+    "provider-no-default": "AI-pakkujad on salvestatud, kuid vaikimisi pakkujat pole valitud. Vali vaikimisi pakkuja Mealie API-seadetes.",
+    "provider-required": "Konfigureeri API/AI-pakkuja Mealie's enne laienduse kasutamist.",
+    "connection-failed": "Mealie'ga ühenduse loomine ebaõnnestus. Kontrolli aadressi ja veendu, et sait on avatud.",
+    "mealie-opened": "Mealie avati. Logi seal sisse, kui vaja, ja ava seejärel laiendus uuesti.",
+    "extracting": "Ekstraktin lehe sisu...",
+    "extracted": "Lehe sisu ekstraktitud: {title}",
+    "untitled": "Pealkirjata",
+    "extracting-and-sending": "Ekstraktin sisu ja saadan selle Mealie'sse...",
+    "processing-article": "Ekstraktin artiklit ja saadan selle Mealie'sse...",
+    "processing-recipe": "Ekstraktin retsepti ja saadan selle Mealie'sse...",
+    "processing-auto": "Ekstraktin lehte, tuvastan selle sisutüübi ja saadan Mealie'sse...",
+    "article-created": "Artikkel loodud: {title}",
+    "recipe-created": "Retsept loodud: {name}",
+    "recipe-created-too": "Loodi ka retsept: {name}",
+    "shopping-list": "Ostunimekiri: {name}",
+    "attention": "Tähelepanu: {message}",
+    "extraction-finished": "Ekstraktimine lõpetatud"
+  },
+  "errors": {
+    "invalid-mealie-url": "Mealie aadress on kehtetu.",
+    "invalid-recipe-url": "Retsepti link on kehtetu.",
+    "active-tab-missing": "Aktiivset vahekaarti ei leitud.",
+    "unsupported-page": "Seda lehte ei saa ekstraktida. Ava tavaline retseptileht ja proovi uuesti.",
+    "text-extraction-failed": "Teksti ekstraktimine lehelt ebaõnnestus.",
+    "open-link-failed": "Lingi avamine brauseris ebaõnnestus.",
+    "page-load-timeout": "Lehe laadimine võttis liiga kaua aega.",
+    "request-unauthorized": "Päring ebaõnnestus, kuna aktiivset Mealie-seanssi pole. Ava Mealie selles brauseris, logi sisse ja proovi uuesti.",
+    "request-failed": "Päring ebaõnnestus ({status}). Veendu, et Mealie on avatud ja oled selles brauseris sisse logitud.",
+    "bridge-failed": "Mealie laienduse sild ebaõnnestus.",
+    "import-failed": "Mealie laienduse import ebaõnnestus.",
+    "unexpected": "Midagi läks valesti."
+  }
+}

@@ -1,0 +1,100 @@
+{
+  "extraction": {
+    "keywords": "Avainsanat",
+    "image": "Kuva",
+    "ingredients": "Ainekset",
+    "instructions": "Ohjeet",
+    "content-truncated": "Mealie-laajennus on katkaissut sisällön",
+    "recipe-page": "Reseptisivu",
+    "source-url": "Lähde-URL",
+    "source-image": "Lähdekuva",
+    "structured-data": "Jäsennelty reseptidata",
+    "visible-text": "Näkyvä sivuteksti",
+    "name": "Nimi",
+    "description": "Kuvaus",
+    "author": "Tekijä",
+    "yield": "Annosmäärä",
+    "prep-time": "Valmisteluaika",
+    "cook-time": "Kypsennysaika",
+    "total-time": "Kokonaisaika",
+    "category": "Kategoria",
+    "cuisine": "Keittiö"
+  },
+  "extension": {
+    "name": "Mealie AI",
+    "description": "Poimi nykyinen selainsivu ja lähetä se Mealie AI:lle reseptinä tai artikkelina.",
+    "action-title": "Lähetä Mealie AI:lle",
+    "manifest-name": "Mealie AI -reseptintuoja"
+  },
+  "header": {
+    "subtitle": "Poimi nykyinen sivu ja lähetä se reseptin tai artikkelin luomiseksi."
+  },
+  "settings": {
+    "mealie-url": "Mealien osoite",
+    "extract-mode": "Mitä poimitaan",
+    "interface-language": "Käyttöliittymän kieli",
+    "automatic-language": "Automaattinen (selaimen kieli)",
+    "translation-language": "Käännöskieli"
+  },
+  "mode": {
+    "auto": "Automaattinen tunnistus",
+    "recipe": "Poimi resepti",
+    "article": "Poimi artikkeli"
+  },
+  "options": {
+    "create-shopping-list": "Luo myös automaattinen ostoslista",
+    "organize-shopping-list": "Järjestä ostoslista tekoälyllä",
+    "include-ai-tips": "Lisää tekoälyn huomautuksia, vinkkejä ja ainesosien korvaussuosituksia",
+    "include-item-images": "Etsi ja tallenna kuvia ainesosille, välineille ja ostoslistan tuotteille"
+  },
+  "actions": {
+    "extract-only": "Poimi vain",
+    "send-auto": "Tunnista ja lähetä tekoälylle",
+    "send-recipe": "Lähetä resepti tekoälylle",
+    "send-article": "Lähetä artikkeli tekoälylle",
+    "connect-mealie": "Avaa / yhdistä Mealie"
+  },
+  "preview": {
+    "title": "Esikatselu"
+  },
+  "links": {
+    "open-recipe": "Avaa resepti Mealiessa",
+    "open-article": "Avaa artikkeli Mealiessa"
+  },
+  "status": {
+    "open-and-login": "Avaa Mealie selaimen välilehdellä ja kirjaudu sisään ennen laajennuksen käyttöä.",
+    "login-required": "Kirjaudu Mealieen tässä selaimessa ennen laajennuksen käyttöä.",
+    "check-failed": "Mealien tarkistus epäonnistui ({status}). Varmista, että sivusto on auki oikeassa osoitteessa.",
+    "provider-no-default": "Tekoälypalveluntarjoajat on tallennettu, mutta oletuspalveluntarjoajaa ei ole valittu. Valitse oletuspalveluntarjoaja Mealien API-asetuksista.",
+    "provider-required": "Määritä API/AI-palveluntarjoaja Mealiessa ennen laajennuksen käyttöä.",
+    "connection-failed": "Yhteyden muodostaminen Mealieen epäonnistui. Tarkista osoite ja varmista, että sivusto on auki.",
+    "mealie-opened": "Mealie avattiin. Kirjaudu sisään tarvittaessa ja avaa laajennus uudelleen.",
+    "extracting": "Poimitaan sisältöä sivulta...",
+    "extracted": "Sivun sisältö poimittu: {title}",
+    "untitled": "Nimetön",
+    "extracting-and-sending": "Poimitaan sisältöä ja lähetetään se Mealieen...",
+    "processing-article": "Poimitaan artikkelia ja lähetetään se Mealieen...",
+    "processing-recipe": "Poimitaan reseptiä ja lähetetään se Mealieen...",
+    "processing-auto": "Poimitaan sivua, tunnistetaan sisältötyyppi ja lähetetään se Mealieen...",
+    "article-created": "Artikkeli luotu: {title}",
+    "recipe-created": "Resepti luotu: {name}",
+    "recipe-created-too": "Myös resepti luotiin: {name}",
+    "shopping-list": "Ostoslista: {name}",
+    "attention": "Huomio: {message}",
+    "extraction-finished": "Poiminta valmis"
+  },
+  "errors": {
+    "invalid-mealie-url": "Mealien osoite on virheellinen.",
+    "invalid-recipe-url": "Reseptilinkki on virheellinen.",
+    "active-tab-missing": "Aktiivista välilehteä ei löytynyt.",
+    "unsupported-page": "Tätä sivua ei voi poimia. Avaa tavallinen reseptisivu ja yritä uudelleen.",
+    "text-extraction-failed": "Tekstin poiminta sivulta epäonnistui.",
+    "open-link-failed": "Linkin avaaminen selaimessa epäonnistui.",
+    "page-load-timeout": "Sivun lataaminen kesti liian kauan.",
+    "request-unauthorized": "Pyyntö epäonnistui, koska aktiivista Mealie-istuntoa ei ole. Avaa Mealie tässä selaimessa, kirjaudu sisään ja yritä uudelleen.",
+    "request-failed": "Pyyntö epäonnistui ({status}). Varmista, että Mealie on auki ja olet kirjautunut sisään tässä selaimessa.",
+    "bridge-failed": "Mealie-laajennussilta epäonnistui.",
+    "import-failed": "Mealie-laajennuksen tuonti epäonnistui.",
+    "unexpected": "Jotain meni pieleen."
+  }
+}

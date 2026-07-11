@@ -134,7 +134,7 @@ button:disabled {
 }
 
 textarea {
-  direction: ltr;
+  direction: auto;
   height: 180px;
   resize: vertical;
   width: 100%;
@@ -159,4 +159,9 @@ textarea {
   color: #bd5b00;
   font-weight: 800;
   text-decoration: none;
+}
+
+html[dir="rtl"] .recipe-link,
+html[dir="rtl"] .status {
+  text-align: right;
 }

@@ -1,0 +1,100 @@
+{
+  "extraction": {
+    "keywords": "キーワード",
+    "image": "画像",
+    "ingredients": "材料",
+    "instructions": "手順",
+    "content-truncated": "Mealie拡張機能によってコンテンツが切り詰められました",
+    "recipe-page": "レシピページ",
+    "source-url": "ソースURL",
+    "source-image": "ソース画像",
+    "structured-data": "構造化レシピデータ",
+    "visible-text": "表示テキスト",
+    "name": "名前",
+    "description": "説明",
+    "author": "作成者",
+    "yield": "分量",
+    "prep-time": "準備時間",
+    "cook-time": "調理時間",
+    "total-time": "合計時間",
+    "category": "カテゴリー",
+    "cuisine": "料理の種類"
+  },
+  "extension": {
+    "name": "Mealie AI",
+    "description": "現在のブラウザページを抽出して、レシピまたは記事としてMealie AIに送信します。",
+    "action-title": "Mealie AIに送信",
+    "manifest-name": "Mealie AI レシピインポーター"
+  },
+  "header": {
+    "subtitle": "現在のページを抽出して、レシピまたは記事を作成します。"
+  },
+  "settings": {
+    "mealie-url": "Mealieアドレス",
+    "extract-mode": "抽出対象",
+    "interface-language": "インターフェース言語",
+    "automatic-language": "自動（ブラウザの言語）",
+    "translation-language": "翻訳言語"
+  },
+  "mode": {
+    "auto": "自動検出",
+    "recipe": "レシピを抽出",
+    "article": "記事を抽出"
+  },
+  "options": {
+    "create-shopping-list": "自動買い物リストも作成する",
+    "organize-shopping-list": "AIで買い物リストを整理する",
+    "include-ai-tips": "AIによるメモ、ヒント、材料の代替案を追加する",
+    "include-item-images": "材料、道具、買い物リスト項目の画像を探して保存する"
+  },
+  "actions": {
+    "extract-only": "抽出のみ",
+    "send-auto": "検出してAIに送信",
+    "send-recipe": "レシピをAIに送信",
+    "send-article": "記事をAIに送信",
+    "connect-mealie": "Mealieを開く / 接続する"
+  },
+  "preview": {
+    "title": "プレビュー"
+  },
+  "links": {
+    "open-recipe": "Mealieでレシピを開く",
+    "open-article": "Mealieで記事を開く"
+  },
+  "status": {
+    "open-and-login": "拡張機能を使用する前に、このブラウザのタブでMealieを開き、サインインしてください。",
+    "login-required": "拡張機能を使用する前に、このブラウザでMealieにサインインしてください。",
+    "check-failed": "Mealieを確認できませんでした ({status})。正しいアドレスでサイトが開いていることを確認してください。",
+    "provider-no-default": "AIプロバイダーは保存されていますが、デフォルトのプロバイダーが選択されていません。MealieのAPI設定でデフォルトのプロバイダーを選択してください。",
+    "provider-required": "拡張機能を使用する前に、MealieでAPI/AIプロバイダーを設定してください。",
+    "connection-failed": "Mealieに接続できませんでした。アドレスを確認し、サイトが開いていることを確認してください。",
+    "mealie-opened": "Mealieが開かれました。必要に応じてサインインし、再度拡張機能を開いてください。",
+    "extracting": "ページからコンテンツを抽出中...",
+    "extracted": "ページコンテンツを抽出しました: {title}",
+    "untitled": "タイトルなし",
+    "extracting-and-sending": "コンテンツを抽出してMealieに送信中...",
+    "processing-article": "記事を抽出してMealieに送信中...",
+    "processing-recipe": "レシピを抽出してMealieに送信中...",
+    "processing-auto": "ページを抽出してコンテンツタイプを検出し、Mealieに送信中...",
+    "article-created": "記事を作成しました: {title}",
+    "recipe-created": "レシピを作成しました: {name}",
+    "recipe-created-too": "レシピも作成されました: {name}",
+    "shopping-list": "買い物リスト: {name}",
+    "attention": "注意: {message}",
+    "extraction-finished": "抽出が完了しました"
+  },
+  "errors": {
+    "invalid-mealie-url": "Mealieアドレスが無効です。",
+    "invalid-recipe-url": "レシピリンクが無効です。",
+    "active-tab-missing": "アクティブなタブが見つかりませんでした。",
+    "unsupported-page": "このページは抽出できません。通常のレシピページを開いて再度試してください。",
+    "text-extraction-failed": "ページからテキストを抽出できませんでした。",
+    "open-link-failed": "ブラウザでリンクを開けませんでした。",
+    "page-load-timeout": "ページの読み込みに時間がかかりすぎました。",
+    "request-unauthorized": "アクティブなMealieセッションがないため、リクエストに失敗しました。このブラウザでMealieを開いてサインインし、再度試してください。",
+    "request-failed": "リクエストに失敗しました ({status})。Mealieが開いており、このブラウザでサインインしていることを確認してください。",
+    "bridge-failed": "Mealie拡張機能ブリッジが失敗しました。",
+    "import-failed": "Mealie拡張機能のインポートが失敗しました。",
+    "unexpected": "予期しないエラーが発生しました。"
+  }
+}

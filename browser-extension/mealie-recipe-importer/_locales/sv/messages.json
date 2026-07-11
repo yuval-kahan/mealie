@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "Mealie AI Receptimportör"
+  },
+  "extensionDescription": {
+    "message": "Extrahera den aktuella webbsidan och skicka den till Mealie AI som ett recept eller en artikel."
+  },
+  "actionTitle": {
+    "message": "Skicka till Mealie AI"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "Mealie AI Tarif İçe Aktarıcı"
+  },
+  "extensionDescription": {
+    "message": "Mevcut tarayıcı sayfasını ayıklayın ve tarif veya makale olarak Mealie AI'ye gönderin."
+  },
+  "actionTitle": {
+    "message": "Mealie AI'ye gönder"
+  }
+}

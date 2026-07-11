@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "Mealie AI 레시피 가져오기"
+  },
+  "extensionDescription": {
+    "message": "현재 브라우저 페이지를 추출하여 레시피나 아티클로 Mealie AI에 전송합니다."
+  },
+  "actionTitle": {
+    "message": "Mealie AI로 전송"
+  }
+}

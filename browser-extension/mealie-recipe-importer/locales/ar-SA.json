@@ -1,0 +1,100 @@
+{
+  "extraction": {
+    "keywords": "الكلمات المفتاحية",
+    "image": "صورة",
+    "ingredients": "المكونات",
+    "instructions": "التعليمات",
+    "content-truncated": "تم اقتطاع المحتوى بواسطة إضافة Mealie",
+    "recipe-page": "صفحة الوصفة",
+    "source-url": "رابط المصدر",
+    "source-image": "صورة المصدر",
+    "structured-data": "بيانات الوصفة المهيكلة",
+    "visible-text": "نص الصفحة المرئي",
+    "name": "الاسم",
+    "description": "الوصف",
+    "author": "المؤلف",
+    "yield": "الكمية",
+    "prep-time": "وقت التحضير",
+    "cook-time": "وقت الطهي",
+    "total-time": "الوقت الإجمالي",
+    "category": "الفئة",
+    "cuisine": "المطبخ"
+  },
+  "extension": {
+    "name": "Mealie AI",
+    "description": "استخرج صفحة المتصفح الحالية وأرسلها إلى Mealie AI كوصفة أو مقالة.",
+    "action-title": "إرسال إلى Mealie AI",
+    "manifest-name": "مستورد وصفات Mealie AI"
+  },
+  "header": {
+    "subtitle": "استخرج الصفحة الحالية وأرسلها لإنشاء وصفة أو مقالة."
+  },
+  "settings": {
+    "mealie-url": "عنوان Mealie",
+    "extract-mode": "ما الذي تريد استخراجه",
+    "interface-language": "لغة الواجهة",
+    "automatic-language": "تلقائي (لغة المتصفح)",
+    "translation-language": "لغة الترجمة"
+  },
+  "mode": {
+    "auto": "اكتشاف تلقائي",
+    "recipe": "استخراج وصفة",
+    "article": "استخراج مقالة"
+  },
+  "options": {
+    "create-shopping-list": "إنشاء قائمة تسوق تلقائية أيضاً",
+    "organize-shopping-list": "تنظيم قائمة التسوق باستخدام AI",
+    "include-ai-tips": "إضافة ملاحظات ونصائح وتوصيات متنوعة للمكونات من AI",
+    "include-item-images": "البحث عن صور للمكونات والأدوات وعناصر قائمة التسوق وحفظها"
+  },
+  "actions": {
+    "extract-only": "استخراج فقط",
+    "send-auto": "اكتشاف وإرسال إلى AI",
+    "send-recipe": "إرسال الوصفة إلى AI",
+    "send-article": "إرسال المقالة إلى AI",
+    "connect-mealie": "فتح / ربط Mealie"
+  },
+  "preview": {
+    "title": "معاينة"
+  },
+  "links": {
+    "open-recipe": "فتح الوصفة في Mealie",
+    "open-article": "فتح المقالة في Mealie"
+  },
+  "status": {
+    "open-and-login": "افتح Mealie في علامة تبويب في هذا المتصفح وسجّل الدخول قبل استخدام الإضافة.",
+    "login-required": "سجّل الدخول إلى Mealie في هذا المتصفح قبل استخدام الإضافة.",
+    "check-failed": "تعذر التحقق من Mealie ({status}). تأكد من فتح الموقع على العنوان الصحيح.",
+    "provider-no-default": "تم حفظ مزودي AI، ولكن لم يتم اختيار مزود افتراضي. اختر مزوداً افتراضياً في إعدادات API الخاصة بـ Mealie.",
+    "provider-required": "قم بتهيئة مزود API/AI في Mealie قبل استخدام الإضافة.",
+    "connection-failed": "تعذر الاتصال بـ Mealie. تحقق من العنوان وتأكد من فتح الموقع.",
+    "mealie-opened": "تم فتح Mealie. سجّل الدخول هناك إذا لزم الأمر، ثم افتح الإضافة مرة أخرى.",
+    "extracting": "جاري استخراج المحتوى من الصفحة...",
+    "extracted": "تم استخراج محتوى الصفحة: {title}",
+    "untitled": "بدون عنوان",
+    "extracting-and-sending": "جاري استخراج المحتوى وإرساله إلى Mealie...",
+    "processing-article": "جاري استخراج المقالة وإرسالها إلى Mealie...",
+    "processing-recipe": "جاري استخراج الوصفة وإرسالها إلى Mealie...",
+    "processing-auto": "جاري استخراج الصفحة، واكتشاف نوع محتواها، وإرسالها إلى Mealie...",
+    "article-created": "تم إنشاء المقالة: {title}",
+    "recipe-created": "تم إنشاء الوصفة: {name}",
+    "recipe-created-too": "تم إنشاء وصفة أيضاً: {name}",
+    "shopping-list": "قائمة التسوق: {name}",
+    "attention": "تنبيه: {message}",
+    "extraction-finished": "اكتمل الاستخراج"
+  },
+  "errors": {
+    "invalid-mealie-url": "عنوان Mealie غير صالح.",
+    "invalid-recipe-url": "رابط الوصفة غير صالح.",
+    "active-tab-missing": "لم يتم العثور على علامة تبويب نشطة.",
+    "unsupported-page": "لا يمكن استخراج هذه الصفحة. افتح صفحة وصفة عادية وحاول مرة أخرى.",
+    "text-extraction-failed": "تعذر استخراج النص من الصفحة.",
+    "open-link-failed": "تعذر فتح الرابط في المتصفح.",
+    "page-load-timeout": "استغرقت الصفحة وقتاً طويلاً للتحميل.",
+    "request-unauthorized": "فشل الطلب لعدم وجود جلسة Mealie نشطة. افتح Mealie في هذا المتصفح، وسجّل الدخول، وحاول مرة أخرى.",
+    "request-failed": "فشل الطلب ({status}). تأكد من فتح Mealie وأنك مسجل الدخول في هذا المتصفح.",
+    "bridge-failed": "فشل جسر إضافة Mealie.",
+    "import-failed": "فشل استيراد إضافة Mealie.",
+    "unexpected": "حدث خطأ غير متوقع."
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "Импорт рецептов Mealie AI"
+  },
+  "extensionDescription": {
+    "message": "Извлеките содержимое текущей страницы и отправьте его в Mealie AI как рецепт или статью."
+  },
+  "actionTitle": {
+    "message": "Отправить в Mealie AI"
+  }
+}

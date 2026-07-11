@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "Mealie AI Recipe Importer"
+  },
+  "extensionDescription": {
+    "message": "Extract the current browser page and send it to Mealie AI as a recipe or article."
+  },
+  "actionTitle": {
+    "message": "Send to Mealie AI"
+  }
+}

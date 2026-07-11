@@ -125,7 +125,7 @@
     "dashboard": "לוח הבקרה",
     "delete": "מחיקה",
     "disabled": "כבוי",
-    "done": "Done",
+    "done": "בוצע",
     "download": "הורדה",
     "duplicate": "שכפול",
     "edit": "עריכה",
@@ -196,7 +196,7 @@
     "token": "טוקן",
     "tuesday": "שלישי",
     "type": "סוג",
-    "undo": "Undo",
+    "undo": "ביטול",
     "update": "עדכון",
     "updated": "עודכן",
     "upload": "העלאה",
@@ -251,8 +251,8 @@
     "add-field": "הוסף שדה",
     "date-created": "תאריך יצירה",
     "date-updated": "תאריך עדכון",
-    "key": "Key",
-    "value": "Value"
+    "key": "מפתח",
+    "value": "ערך"
   },
   "group": {
     "are-you-sure-you-want-to-delete-the-group": "למחוק את <b>{groupName}<b/>?",
@@ -279,7 +279,7 @@
       "keep-my-recipes-private-description": "הגדר את ברירת המחדל של הקבוצה שלך וכל המתכונים לפרטיים. תמיד תוכל לשנות זאת מאוחר יותר."
     },
     "manage-members": "ניהול משתמשים",
-    "manage-members-description": "נהל את ההרשאות של החברים במשק הבית שלך. {manage} מאפשר למשתמש לגשת לדף ניהול הנתונים, {invite} מאפשר למשתמש ליצור קישורי הזמנה עבור משתמשים אחרים. בעלי קבוצות לא יכולים לשנות את ההרשאות של עצמם.",
+    "manage-members-description": "נהל את ההרשאות של החברים במשק הבית שלך. {manage} מאפשר למשתמש לגשת לאזורי ניהול הקבוצה, {organize} מאפשר למשתמש לנהל נתוני קבוצה כגון מזונות, תגיות וקטגוריות, ו-{invite} מאפשר למשתמש ליצור קישורי הזמנה עבור משתמשים אחרים. בעלי קבוצה אינם יכולים לשנות את ההרשאות של עצמם.",
     "manage": "ניהול",
     "manage-household": "נהל את משק הבית",
     "invite": "להזמין",
@@ -314,28 +314,28 @@
     "total-households": "סך כל משקי בית",
     "you-must-select-a-group-before-selecting-a-household": "חובה לבחור קבוצה לפני בחירת משק בית",
     "ai-provider-settings": {
-      "ai-provider-settings": "AI Provider Settings",
-      "ai-provider": "AI Provider",
-      "ai-providers": "AI Providers",
-      "ai-provider-settings-description": "Configure AI providers to enable AI-powered features, such as enhanced ingredient parsing, creating recipes from videos, and more!",
-      "providers": "Providers",
-      "create-provider": "Create Provider",
-      "edit-provider": "Edit Provider",
+      "ai-provider-settings": "הגדרות ספק AI",
+      "ai-provider": "ספק AI",
+      "ai-providers": "ספקי AI",
+      "ai-provider-settings-description": "הגדר ספקי AI כדי לאפשר תכונות מבוססות AI, כגון ניתוח רכיבים משופר, יצירת מתכונים מסרטונים ועוד!",
+      "providers": "ספקים",
+      "create-provider": "צור ספק",
+      "edit-provider": "ערוך ספק",
       "default-provider": "ספק ברירת מחדל",
       "default-provider-description": "נדרש להפעלת יכולות AI",
       "default-badge": "ברירת מחדל",
       "model-unknown": "לא צוין מודל",
       "custom-provider": "ספק מותאם אישית",
-      "audio-provider": "Audio Provider",
-      "audio-provider-description": "Enables audio transcription features, such as creating recipes from videos",
-      "image-provider": "Image Provider",
-      "image-provider-description": "Enables image recognition features, such as creating recipes from images",
-      "provider-name": "Provider Name",
+      "audio-provider": "ספק אודיו",
+      "audio-provider-description": "מאפשר תכונות תמלול אודיו, כגון יצירת מתכונים מסרטונים",
+      "image-provider": "ספק תמונות",
+      "image-provider-description": "מאפשר תכונות זיהוי תמונה, כגון יצירת מתכונים מתמונות",
+      "provider-name": "שם הספק",
       "provider-preset": "ספק AI",
-      "api-key": "API Key",
+      "api-key": "מפתח API",
       "api-keys": "מפתחות API",
-      "api-key-description-create": "Your provider's API key for authentication. If your service (e.g. Ollama) doesn't use an API key, you still have to put something here.",
-      "api-key-description-edit": "Leave this blank unless you want to change it.",
+      "api-key-description-create": "מפתח ה-API של הספק שלך לצורך אימות. אם השירות שלך (למשל Ollama) אינו משתמש במפתח API, עליך להזין כאן משהו בכל זאת.",
+      "api-key-description-edit": "השאר ריק אלא אם ברצונך לשנות אותו.",
       "gemini-api-keys-description": "ב-Google Gemini אפשר לשים כמה מפתחות API. הפרדה אפשרית בשורה חדשה או בפסיק; כפולים יוסרו אוטומטית וכל המפתחות ייבדקו לפני שמירה.",
       "api-key-checking": "בודק את מפתח ה-API...",
       "api-key-valid": "מפתח ה-API תקין",
@@ -346,20 +346,20 @@
       "not-default-provider-selected": "הספק הזה שמור, אבל הוא לא נבחר כספק ה-AI כברירת מחדל.",
       "gemini-default-key-description": "נמצאו {count} מפתחות Gemini. כרגע המפתח הראשון בשדה הוא זה שמשמש כברירת מחדל.",
       "gemini-duplicate-api-keys": "נמצאו {count} מפתחות Gemini כפולים. בשמירה המפתחות הכפולים יוסרו אוטומטית.",
-      "base-url": "Base URL",
+      "base-url": "כתובת בסיס (Base URL)",
       "base-url-description": "מתמלא אוטומטית לספקים מוכרים. לספק מותאם אישית השתמש בכתובת OpenAI-compatible, למשל \"http://localhost:11434/v1\".",
-      "model": "Model",
+      "model": "מודל",
       "model-description": "בחר מודל מהרשימה, או הקלד מזהה מודל ידנית.",
-      "request-timeout-seconds": "Request Timeout (seconds)",
-      "provider-created": "Provider created",
-      "provider-updated": "Provider updated",
-      "provider-deleted": "Provider deleted",
-      "provider-create-failed": "Failed to create provider",
-      "provider-update-failed": "Failed to update provider",
-      "provider-delete-failed": "Failed to delete provider",
-      "request-headers": "Request Headers",
-      "request-params": "Request Parameters",
-      "no-default-provider-warning": "You have not set a default provider, so AI features are disabled"
+      "request-timeout-seconds": "זמן קצוב לבקשה (בשניות)",
+      "provider-created": "הספק נוצר",
+      "provider-updated": "הספק עודכן",
+      "provider-deleted": "הספק נמחק",
+      "provider-create-failed": "יצירת הספק נכשלה",
+      "provider-update-failed": "עדכון הספק נכשל",
+      "provider-delete-failed": "מחיקת הספק נכשלה",
+      "request-headers": "כותרות בקשה (Request Headers)",
+      "request-params": "פרמטרים של בקשה",
+      "no-default-provider-warning": "לא הגדרת ספק ברירת מחדל, לכן תכונות ה-AI מושבתות"
     }
   },
   "household": {
@@ -488,7 +488,7 @@
       "title": "מתכוני Tandoor"
     },
     "cookn": {
-      "description-long": "Mealie can import recipes from DVO Cook'n X3. Export a cookbook or menu in the \"Cook'n\" format, rename the export extension to .zip, then upload the .zip below.",
+      "description-long": "Mealie יכול לייבא מתכונים מ-DVO Cook'n X3. ייצא ספר מתכונים או תפריט בפורמט \"Cook'n\", שנה את סיומת הקובץ ל-.zip, ולאחר מכן העלה את ה-.zip למטה.",
       "title": "DVO Cook'n X3"
     },
     "recipe-data-migrations": "מגרציית מידע מתכונים",
@@ -725,7 +725,7 @@
     "create-recipe-description": "יצירת מתכון חדש מאפס.",
     "create-recipes": "יצירת מתכונים",
     "import-with-zip": "ייבא באמצעות zip",
-    "create-recipe-from-images": "Create Recipe from Images",
+    "create-recipe-from-images": "צור מתכון מתמונות",
     "create-recipe-from-an-image-description": "יצירת מתכון ע\"י העלאת תמונה שלו. Mealie תנסה לחלץ את הטקסט מהתמונה באמצעות AI ותייצר ממנו מתכון.",
     "crop-and-rotate-the-image": "נא לחתוך ולסובב את התמונה כך שרואים רק את הטקסט, והוא בכיוון הנכון.",
     "create-from-images": "יצירה מתמונה",
@@ -769,14 +769,14 @@
     "create-a-recipe-by-providing-the-name-all-recipes-must-have-unique-names": "יצירת מתכון באמצעות שם. כל שמות המתכונים צריכים להיות שונים.",
     "new-recipe-names-must-be-unique": "שם מתכון חדש חייב להיות ייחודי",
     "scrape-recipe": "קריאת מתכון",
-    "scrape-recipe-description": "Scrape a recipe by url. Provide the url for the site you want to scrape, and Mealie will attempt to scrape the recipe from that site and add it to your collection.",
-    "scrape-recipe-description-transcription": "You can also provide the url to a video and Mealie will attempt to transcribe it into a recipe.",
+    "scrape-recipe-description": "משוך מתכון לפי כתובת אתר. ספק את הכתובת של האתר ממנו תרצה למשוך, ו-Mealie ינסה למשוך את המתכון מהאתר ולהוסיף אותו לאוסף שלך.",
+    "scrape-recipe-description-transcription": "ניתן גם לספק כתובת של סרטון ו-Mealie ינסה לתמלל אותו למתכון.",
     "scrape-recipe-have-a-lot-of-recipes": "יש לך הרבה מתכונים שאתה רוצה לקרוא בבת אחת?",
     "scrape-recipe-suggest-bulk-importer": "נסה את יכולת קריאת רשימה",
     "scrape-recipe-have-raw-html-or-json-data": "יש לך מידע גולמי ב-HTML או JSON?",
     "scrape-recipe-you-can-import-from-raw-data-directly": "ניתן לייבא ישירות ממידע גולמי",
     "scrape-recipe-website-being-blocked": "האתר חסום?",
-    "scrape-recipe-try-importing-raw-html-instead": "Try importing the raw HTML instead.",
+    "scrape-recipe-try-importing-raw-html-instead": "נסה לייבא את ה-HTML הגולמי במקום.",
     "import-original-keywords-as-tags": "ייבוא שמות מפתח מקוריות כתגיות",
     "import-original-categories": "ייבא קטגוריות מקוריות",
     "stay-in-edit-mode": "השאר במצב עריכה",
@@ -855,11 +855,11 @@
     "manual-basic-details": "פרטי המתכון",
     "manual-time-details": "זמנים",
     "upload-more-images": "העלאת תמונות נוספות",
-    "set-as-cover-image": "Set as recipe cover image",
-    "cover-image": "Cover image",
-    "include-linked-recipes": "Include Linked Recipes",
-    "include-linked-recipe-ingredients": "Include Linked Recipe Ingredients",
-    "toggle-recipe": "Toggle Recipe"
+    "set-as-cover-image": "הגדר כתמונת שער למתכון",
+    "cover-image": "תמונת שער",
+    "include-linked-recipes": "כלול מתכונים מקושרים",
+    "include-linked-recipe-ingredients": "כלול רכיבים של מתכונים מקושרים",
+    "toggle-recipe": "החלף מתכון"
   },
   "recipe-finder": {
     "recipe-finder": "מצא מתכון",
@@ -990,8 +990,8 @@
     },
     "token": {
       "active-tokens": "Tokens פעילים",
-      "api-token": "API Token",
-      "api-tokens": "API Tokens",
+      "api-token": "אסימון API",
+      "api-tokens": "אסימוני API",
       "copy-this-token-for-use-with-an-external-application-this-token-will-not-be-viewable-again": "העתיקו את ה-Token לשימוש באפליקציה חיצונית. ה-Token לא יהיה זמין לצפייה שוב.",
       "create-an-api-token": "צור API Token",
       "token-name": "שם Token",
@@ -1005,12 +1005,12 @@
       "no-unused-items": "אין פריטים לא בשימוש",
       "recipes-affected": "אף מתכון לא הושפע|מתכון אחד הושפע|{count} מתכונים הושפעו",
       "remove-unused": "הסר את מה שלא שבשימוש",
-      "title-case-all": "Title Case All",
+      "title-case-all": "הפוך הכל ל-Title Case",
       "toolbox": "ארגז כלים",
       "unorganized": "לא מאורגן"
     },
     "webhooks": {
-      "test-webhooks": "Test Webhooks",
+      "test-webhooks": "בדוק Webhooks",
       "the-urls-listed-below-will-recieve-webhooks-containing-the-recipe-data-for-the-meal-plan-on-its-scheduled-day-currently-webhooks-will-execute-at": "הקישורים למטה יקבלו webhooks המכילים את מידע תכנית הארוחות ביום המתוזמן. מועד התזמון הבא",
       "webhook-url": "קישור Webhook",
       "webhooks-caps": "WEBHOOKS",
@@ -1022,7 +1022,7 @@
     "bug-report-information": "השתמש במידע זה לדווח על בעיה. סיפוק של הפרטים אודות הסביבה למפתחים היא הדרך הטובה ביותר לקבלת פתרון מהיר.",
     "tracker": "טראקר",
     "configuration": "הגדרות",
-    "docker-volume": "Docker Volume",
+    "docker-volume": "נפח Docker",
     "docker-volume-help": "Mealie דורשת שקונטיינר הקצה הקדמי והקצה האחורי יחלקו את אותו כונן / נפח אחסון. זה יבטיח שהקצה הקדמי יוכל לגשת לתמונות ונכסים ששמורים בדיסק.",
     "volumes-are-misconfigured": "כוננים אינם מוגדרים בצורה תקינה.",
     "volumes-are-configured-correctly": "ה-Volumeים מוגדרים תקין.",
@@ -1046,17 +1046,17 @@
     "server-side-base-url-error-text": "'כתובת בסיס' היא עדיין הערך ברירת המחדל בשרת ה- API. הדבר יגרום לבעיות עם קישורי התראות בשרת עבור אימייל וכו'.",
     "server-side-base-url-success-text": "קישור צד שרת אינו תואם לברירת המחדל",
     "ldap-ready": "LDAP מוכן",
-    "ldap-not-ready": "LDAP Not Ready",
+    "ldap-not-ready": "LDAP אינו מוכן",
     "ldap-ready-error-text": "לא כל הערכים הנחוצים ל-LDAP מוגדרים. ניתן להתעלם אם לא נעשה שימוש באימות LDAP.",
     "ldap-ready-success-text": "כל המשתנים הנחוצים ל-LDAP מוגדרים.",
     "build": "בניה",
     "recipe-scraper-version": "גרסת סורק המתכונים",
     "oidc-ready": "OIDC מוכן",
-    "oidc-not-ready": "OIDC Not Ready",
+    "oidc-not-ready": "OIDC אינו מוכן",
     "oidc-ready-error-text": "לא כל הערכים הנחוצים ל-OIDC מוגדרים. ניתן להתעלם אם לא נעשה שימוש באימות OIDC.",
     "oidc-ready-success-text": "כל המשתנים הנחוצים ל-OIDC מוגדרים.",
     "openai-ready": "OpenAI מוכן",
-    "openai-not-ready": "OpenAI Not Ready",
+    "openai-not-ready": "OpenAI אינו מוכן",
     "openai-ready-error-text": "לא כל הערכים הנחוצים ל-OpenAI מוגדרים. ניתן להתעלם אם לא נעשה שימוש ב-OpenAI.",
     "openai-ready-success-text": "כל המשתנים הנחוצים ל-OpenAI מוגדרים."
   },
@@ -1064,7 +1064,7 @@
     "all-lists": "כל הרשימות",
     "create-shopping-list": "צור רשימת קניות",
     "from-recipe": "מתוך מתכון",
-    "ingredient-of-recipe": "Ingredient of {recipe}",
+    "ingredient-of-recipe": "רכיב מתוך {recipe}",
     "list-name": "שם רשימה",
     "new-list": "רשימה חדשה",
     "quantity": "כמות: {0}",
@@ -1120,7 +1120,7 @@
     "ai-organize-empty": "אי אפשר לסדר עם AI רשימת קניות ריקה",
     "link-recipe": "שיוך למתכון",
     "search-recipe": "חיפוש מתכון",
-    "item-checked-off": "Checked off {item}"
+    "item-checked-off": "סומן כבוצע: {item}"
   },
   "sidebar": {
     "all-recipes": "כל המתכונים",
@@ -1281,7 +1281,7 @@
     "forgot-password": "שכחתי סיסמא",
     "forgot-password-text": "נא לספק כתובת דוא\"ל. אנו נשלח לך הודעת דוא\"ל לצורך איפוס הסיסמה שלך.",
     "changes-reflected-immediately": "שינויים למשתמש זה ישתקפו מיידית.",
-    "default-activity": "Default Activity",
+    "default-activity": "פעילות ברירת מחדל",
     "default-activity-hint": "בחר את עמוד ברירת המחדל בשביל המכשיר הזה",
     "strike-completed-recipe-items": "הצג קו חוצה על פריטי מתכון שסומנו",
     "strike-completed-recipe-items-hint": "כאשר מסמנים V על מרכיב או שלב הכנה במתכון, הטקסט יוצג עם קו חוצה."
@@ -1295,8 +1295,8 @@
   },
   "data-pages": {
     "foods": {
-      "delete-affects-recipes": "Warning: this food is used in {count} recipe(s). Deleting it will leave an empty ingredient in the recipe(s).",
-      "delete-affects-recipes-more": "View all {count} recipes",
+      "delete-affects-recipes": "אזהרה: מזון זה נמצא בשימוש ב-{count} מתכון/ים. מחיקתו תשאיר רכיב ריק במתכון/ים.",
+      "delete-affects-recipes-more": "הצג את כל {count} המתכונים",
       "merge-dialog-text": "צירוף של המאכלים שנבחרו יאחד את אוכל המקור ואוכל היעד לפריט אוכל אחד. אוכל המקור ימחק וכל ההפניות / הייחוסים אליו יעודכנו ויופנו לאוכל היעד.",
       "merge-food-example": "ממזג את {food1} לתוך {food2}",
       "seed-dialog-text": "אכלס את מסד הנתונים עם אוכל בהתבסס על השפה המקומית שלך. הפעולה תיצור +200 מאכלים נפוצים שיכולים לשמש לארגון מסד הנתונים. מאכלים מתורגמים על ידי מאמצי הקהילה.",
@@ -1334,20 +1334,20 @@
       "example-unit-plural": "דוגמא: כפיות",
       "example-unit-abbreviation-singular": "דוגמא: כף",
       "example-unit-abbreviation-plural": "דוגמא: כפות",
-      "standardization": "Standardization",
-      "standardization-description": "How this unit can be represented as a standard unit. This enables unit conversion features such as merging compatible units in shopping lists.",
-      "standard-unit": "Standard Unit",
-      "standard-quantity": "Standard Quantity",
-      "unit-conversion": "Unit Conversion",
+      "standardization": "סטנדרטיזציה",
+      "standardization-description": "כיצד יחידה זו יכולה להיות מיוצגת כיחידה סטנדרטית. זה מאפשר תכונות המרת יחידות כגון מיזוג יחידות תואמות ברשימות קניות.",
+      "standard-unit": "יחידה סטנדרטית",
+      "standard-quantity": "כמות סטנדרטית",
+      "unit-conversion": "המרת יחידות",
       "standard-unit-labels": {
-        "fluid-ounce": "fluid ounce",
+        "fluid-ounce": "אונקיית נוזל",
         "cup": "כוס",
-        "ounce": "ounce",
-        "pound": "pound",
+        "ounce": "אונקיה",
+        "pound": "פאונד",
         "milliliter": "מיליליטר",
         "liter": "ליטר",
         "gram": "גרם",
-        "kilogram": "kilogram"
+        "kilogram": "קילוגרם"
       }
     },
     "labels": {
@@ -1385,7 +1385,7 @@
       "action-type": "סוג פעולה",
       "action-types": {
         "link": "לינק",
-        "post": "Post"
+        "post": "פרסם"
       }
     },
     "create-alias": "יצירת שם נרדף",
@@ -1423,7 +1423,7 @@
     "group-details": "פרטי הקבוצה",
     "group-details-description": "לפני יצירת חשבון יש צורך ליצור קבוצה. הקבוצה תכיל רק אותך אבל תוכל להזמין אחרים בשלב מאוחר יותר. חברים בקבוצה יכולים לשתף תוכנית ארוחות, רשימות קניות, מתכונים ועוד!",
     "use-seed-data": "השתמש בנתוני האכלוס",
-    "use-seed-data-description": "Mealie ships with a collection of Foods, Units, and Labels that can be used to populate your group with helpful data for organizing your recipes. These are translated into the language you currently have selected. You can always add to or modify this data later.",
+    "use-seed-data-description": "Mealie מגיעה עם אוסף של מזונות, יחידות ותוויות שניתן להשתמש בהם כדי לאכלס את הקבוצה שלך בנתונים מועילים לארגון המתכונים. נתונים אלו מתורגמים לשפה שנבחרה כעת. תמיד ניתן להוסיף או לשנות נתונים אלו מאוחר יותר.",
     "account-details": "פרטי חשבון"
   },
   "validation": {
@@ -1552,7 +1552,7 @@
       "already-set-up-bring-to-homepage": "כבר הגדרתי הכל, תעבירו אותי לעמוד הבית",
       "common-settings-for-new-sites": "הגדרות נפוצות לאתרים חדשים יופיעו כאן",
       "setup-complete": "ההגדרה הושלמה!",
-      "ai-providers-description": "Optionally configure AI providers for your group. AI providers enable features like creating recipes from images, importing recipes from videos, and enhanced ingredient parsing. You can always configure this later from your group settings.",
+      "ai-providers-description": "ניתן להגדיר ספקי AI עבור הקבוצה שלך (אופציונלי). ספקי AI מאפשרים תכונות כמו יצירת מתכונים מתמונות, ייבוא מתכונים מסרטונים וניתוח משופר של רכיבים. תמיד ניתן להגדיר זאת מאוחר יותר בהגדרות הקבוצה.",
       "here-are-a-few-things-to-help-you-get-started": "כמה דברים שיעזרו לך להתחיל להשתמש ב-Mealie",
       "restore-from-v1-backup": "יש לך גיבוי משרת Mealie v1? ניתן לשחזר אותו כאן.",
       "manage-profile-or-get-invite-link": "ניתן לנהל את הפרופיל שלך, או לשתף את לינק ההזמנה לאחרים."
@@ -1783,8 +1783,8 @@
       "is-greater-than-or-equal-to": "גדול או שווה ל-",
       "is-less-than": "קטן מ-",
       "is-less-than-or-equal-to": "קטן או שווה ל-",
-      "is-older-than": "is older than",
-      "is-newer-than": "is newer than"
+      "is-older-than": "ישן יותר מ-",
+      "is-newer-than": "חדש יותר מ-"
     },
     "relational-keywords": {
       "is": "זהה ל-",
@@ -1796,22 +1796,22 @@
       "is-not-like": "לא דומה לא-"
     },
     "dates": {
-      "days-ago": "days ago|day ago|days ago"
+      "days-ago": "לפני ימים|לפני יום|לפני ימים"
     }
   },
   "validators": {
     "required": "חובה למלא שדה זה",
-    "invalid-email": "Email Must Be Valid",
-    "invalid-url": "Must Be A Valid URL",
-    "no-whitespace": "No Whitespace Allowed",
-    "min-length": "Must Be At Least {min} Characters",
-    "max-length": "Must Be At Most {max} Character|Must Be At Most {max} Characters"
+    "invalid-email": "כתובת האימייל חייבת להיות תקינה",
+    "invalid-url": "חייב להיות URL תקין",
+    "no-whitespace": "אין להשתמש ברווחים",
+    "min-length": "חייב להכיל לפחות {min} תווים",
+    "max-length": "חייב להכיל לכל היותר {max} תו|חייב להכיל לכל היותר {max} תווים"
   },
   "announcements": {
-    "announcements": "Announcements",
-    "all-announcements": "All announcements",
-    "mark-all-as-read": "Mark All as Read",
-    "show-announcements-from-mealie": "Show announcements from Mealie",
-    "show-announcements-setting-description": "Whether or not you want to allow users to see announcements from Mealie. When enabled users can still opt-out from seeing them in their user settings"
+    "announcements": "הודעות",
+    "all-announcements": "כל ההודעות",
+    "mark-all-as-read": "סמן הכל כנקרא",
+    "show-announcements-from-mealie": "הצג הודעות מ-Mealie",
+    "show-announcements-setting-description": "האם לאפשר למשתמשים לראות הודעות מ-Mealie. כאשר מופעל, משתמשים עדיין יכולים לבחור שלא לראות אותן בהגדרות המשתמש שלהם"
   }
 }

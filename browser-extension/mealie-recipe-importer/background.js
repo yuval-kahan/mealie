@@ -1,6 +1,18 @@
+importScripts("i18n.js");
+
 const BRIDGE_REQUEST = "MEALIE_EXTENSION_IMPORT_RECIPE_URL";
 const MAX_EXTRACTED_TEXT_LENGTH = 180000;
 const AUTH_COOKIE_NAME = "mealie.access_token";
+const extensionI18n = globalThis.MealieExtensionI18n;
+
+void updateActionTitle();
+chrome.runtime.onInstalled.addListener(updateActionTitle);
+chrome.runtime.onStartup.addListener(updateActionTitle);
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === "sync" && changes.interfaceLanguage) {
+    void updateActionTitle();
+  }
+});
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type !== BRIDGE_REQUEST) {
@@ -9,10 +21,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   importRecipeFromUrl(message.payload)
     .then(sendResponse)
-    .catch((error) => {
+    .catch(async (error) => {
+      const translator = await extensionI18n.create(
+        message.payload?.interfaceLanguage || message.payload?.translateLanguage,
+      );
       sendResponse({
         ok: false,
-        error: error?.message || "Mealie extension import failed",
+        error: error?.message || translator.t("errors.import-failed"),
       });
     });
 
@@ -20,40 +35,50 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 async function importRecipeFromUrl(payload) {
+  const translator = await extensionI18n.create(
+    payload?.interfaceLanguage || payload?.translateLanguage,
+  );
+  const t = translator.t;
   const mealieUrl = normalizeBaseUrl(payload?.mealieUrl);
   const recipeUrl = String(payload?.url || "").trim();
   const extractMode = payload?.extractMode || "recipe";
   if (!mealieUrl || !/^https?:\/\//i.test(mealieUrl)) {
-    throw new Error("כתובת Mealie לא תקינה.");
+    throw new Error(t("errors.invalid-mealie-url"));
   }
   if (!recipeUrl || !/^https?:\/\//i.test(recipeUrl)) {
-    throw new Error("קישור המתכון לא תקין.");
+    throw new Error(t("errors.invalid-recipe-url"));
   }
 
   const authToken = payload?.authToken || await findMealieAuthToken(mealieUrl);
   if (!authToken) {
-    throw new Error("צריך לפתוח את Mealie בטאב באותו דפדפן ולהתחבר לפני שימוש בתוסף.");
+    throw new Error(t("status.open-and-login"));
   }
 
-  const status = await checkMealieStatus(mealieUrl, authToken);
+  const status = await checkMealieStatus(mealieUrl, authToken, t);
   if (!statusAiEnabled(status)) {
-    throw new Error(aiProviderStatusMessage(status));
+    throw new Error(aiProviderStatusMessage(status, t));
   }
 
-  const extraction = await extractPageInBackgroundTab(recipeUrl);
+  const extraction = await extractPageInBackgroundTab(recipeUrl, translator);
   if (extractMode === "article" || extractMode === "auto") {
-    return await importArticlePage(mealieUrl, authToken, payload, extraction);
+    return await importArticlePage(mealieUrl, authToken, payload, extraction, t);
   }
 
-  return await importRecipePage(mealieUrl, authToken, payload, extraction);
+  return await importRecipePage(mealieUrl, authToken, payload, extraction, t);
 }
 
-function aiProviderStatusMessage(payload) {
+async function updateActionTitle() {
+  const stored = await chrome.storage.sync.get("interfaceLanguage");
+  const translator = await extensionI18n.create(stored.interfaceLanguage);
+  await chrome.action.setTitle({ title: translator.t("extension.action-title") });
+}
+
+function aiProviderStatusMessage(payload, t) {
   if (statusProviderCount(payload) > 0 && !statusDefaultProviderConfigured(payload)) {
-    return "יש ספקי AI שמורים באתר, אבל לא נבחר ספק ברירת מחדל. בחר ספק ברירת מחדל בהגדרות API של Mealie.";
+    return t("status.provider-no-default");
   }
 
-  return "צריך להגדיר ספק API/AI באתר Mealie לפני שימוש בתוסף.";
+  return t("status.provider-required");
 }
 
 function statusAiEnabled(payload) {
@@ -68,7 +93,7 @@ function statusDefaultProviderConfigured(payload) {
   return Boolean(payload?.default_provider_configured ?? payload?.defaultProviderConfigured);
 }
 
-async function importRecipePage(mealieUrl, authToken, payload, extraction) {
+async function importRecipePage(mealieUrl, authToken, payload, extraction, t) {
   const translateLanguage = translationLanguageForRequest(payload.translateLanguage, extraction.language);
   const response = await fetch(`${mealieUrl}/api/recipes/create/browser-page`, {
     method: "POST",
@@ -92,7 +117,7 @@ async function importRecipePage(mealieUrl, authToken, payload, extraction) {
 
   const body = await safeJson(response);
   if (!response.ok) {
-    throw new Error(apiErrorMessage(body, response.status));
+    throw new Error(apiErrorMessage(body, response.status, t));
   }
 
   return {
@@ -106,7 +131,7 @@ async function importRecipePage(mealieUrl, authToken, payload, extraction) {
   };
 }
 
-async function importArticlePage(mealieUrl, authToken, payload, extraction) {
+async function importArticlePage(mealieUrl, authToken, payload, extraction, t) {
   const translateLanguage = translationLanguageForRequest(payload.translateLanguage, extraction.language);
   const response = await fetch(`${mealieUrl}/api/households/articles/browser-page`, {
     method: "POST",
@@ -131,7 +156,7 @@ async function importArticlePage(mealieUrl, authToken, payload, extraction) {
 
   const body = await safeJson(response);
   if (!response.ok) {
-    throw new Error(apiErrorMessage(body, response.status));
+    throw new Error(apiErrorMessage(body, response.status, t));
   }
 
   return {
@@ -148,14 +173,14 @@ async function importArticlePage(mealieUrl, authToken, payload, extraction) {
   };
 }
 
-async function checkMealieStatus(mealieUrl, authToken) {
+async function checkMealieStatus(mealieUrl, authToken, t) {
   const response = await fetch(`${mealieUrl}/api/recipes/create/browser-page/status`, {
     credentials: "include",
     headers: authHeaders(authToken),
   });
   const body = await safeJson(response);
   if (!response.ok) {
-    throw new Error(apiErrorMessage(body, response.status));
+    throw new Error(apiErrorMessage(body, response.status, t));
   }
   return body || { ai_enabled: false };
 }
@@ -223,25 +248,25 @@ function authHeaders(authToken) {
   return authToken ? { Authorization: `Bearer ${authToken}` } : {};
 }
 
-async function extractPageInBackgroundTab(url) {
+async function extractPageInBackgroundTab(url, translator) {
   const tab = await chrome.tabs.create({ url, active: false });
   if (!tab?.id) {
-    throw new Error("לא הצלחתי לפתוח את הקישור בדפדפן.");
+    throw new Error(translator.t("errors.open-link-failed"));
   }
 
   try {
     if (tab.status !== "complete") {
-      await waitForTabComplete(tab.id);
+      await waitForTabComplete(tab.id, translator.t);
     }
 
     const [result] = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: extractRecipePage,
-      args: [MAX_EXTRACTED_TEXT_LENGTH],
+      args: [MAX_EXTRACTED_TEXT_LENGTH, extensionI18n.extractionLabels(translator)],
     });
 
     if (!result?.result?.markdown) {
-      throw new Error("לא הצלחתי לחלץ טקסט מהעמוד.");
+      throw new Error(translator.t("errors.text-extraction-failed"));
     }
 
     return result.result;
@@ -251,11 +276,11 @@ async function extractPageInBackgroundTab(url) {
   }
 }
 
-function waitForTabComplete(tabId) {
+function waitForTabComplete(tabId, t) {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       cleanup();
-      reject(new Error("טעינת העמוד נמשכה יותר מדי זמן."));
+      reject(new Error(t("errors.page-load-timeout")));
     }, 45000);
 
     const listener = (updatedTabId, changeInfo) => {
@@ -295,7 +320,7 @@ async function safeJson(response) {
   }
 }
 
-function apiErrorMessage(payload, status) {
+function apiErrorMessage(payload, status, t) {
   const detail = payload?.detail;
   if (typeof detail === "string") {
     return detail;
@@ -307,9 +332,9 @@ function apiErrorMessage(payload, status) {
     return detail.exception;
   }
   if (status === 401 || status === 403) {
-    return "צריך להתחבר ל-Mealie באותו דפדפן לפני שימוש בתוסף.";
+    return t("status.login-required");
   }
-  return `הבקשה נכשלה (${status}). בדוק ש-Mealie פתוח ושאתה מחובר אליו באותו דפדפן.`;
+  return t("errors.request-failed", { status });
 }
 
 function normalizeBaseUrl(value) {
@@ -334,7 +359,29 @@ function languagePrimary(value) {
     .toLocaleLowerCase();
 }
 
-function extractRecipePage(maxLength) {
+function extractRecipePage(maxLength, localizedLabels = {}) {
+  const labels = {
+    recipePage: "Recipe page",
+    sourceUrl: "Source URL",
+    sourceImage: "Source image",
+    structuredData: "Structured recipe data",
+    visibleText: "Visible page text",
+    name: "Name",
+    description: "Description",
+    author: "Author",
+    yield: "Yield",
+    prepTime: "Prep time",
+    cookTime: "Cook time",
+    totalTime: "Total time",
+    category: "Category",
+    cuisine: "Cuisine",
+    keywords: "Keywords",
+    image: "Image",
+    ingredients: "Ingredients",
+    instructions: "Instructions",
+    contentTruncated: "Content truncated by the Mealie extension",
+    ...localizedLabels,
+  };
   const url = location.href;
   const title = cleanText(document.querySelector("h1")?.innerText || document.title || "");
   const language = detectPageLanguage();
@@ -342,11 +389,11 @@ function extractRecipePage(maxLength) {
   const structured = extractStructuredRecipes();
   const readableText = extractReadableText();
   const sections = [
-    `# ${title || "Recipe page"}`,
-    `Source URL: ${url}`,
-    imageUrl ? `Source image: ${imageUrl}` : "",
-    structured ? `\n## Structured recipe data\n${structured}` : "",
-    readableText ? `\n## Visible page text\n${readableText}` : "",
+    `# ${title || labels.recipePage}`,
+    `${labels.sourceUrl}: ${url}`,
+    imageUrl ? `${labels.sourceImage}: ${imageUrl}` : "",
+    structured ? `\n## ${labels.structuredData}\n${structured}` : "",
+    readableText ? `\n## ${labels.visibleText}\n${readableText}` : "",
   ].filter(Boolean);
 
   return {
@@ -512,27 +559,27 @@ function extractRecipePage(maxLength) {
 
   function formatRecipeObject(recipe) {
     const lines = [];
-    appendLine(lines, "Name", recipe.name);
-    appendLine(lines, "Description", recipe.description);
-    appendLine(lines, "Author", formatValue(recipe.author));
-    appendLine(lines, "Yield", formatValue(recipe.recipeYield || recipe.yield));
-    appendLine(lines, "Prep time", recipe.prepTime);
-    appendLine(lines, "Cook time", recipe.cookTime);
-    appendLine(lines, "Total time", recipe.totalTime);
-    appendLine(lines, "Category", recipe.recipeCategory);
-    appendLine(lines, "Cuisine", recipe.recipeCuisine);
-    appendLine(lines, "Keywords", recipe.keywords);
-    appendLine(lines, "Image", imageValues(recipe.image || recipe.thumbnailUrl).join(", "));
+    appendLine(lines, labels.name, recipe.name);
+    appendLine(lines, labels.description, recipe.description);
+    appendLine(lines, labels.author, formatValue(recipe.author));
+    appendLine(lines, labels.yield, formatValue(recipe.recipeYield || recipe.yield));
+    appendLine(lines, labels.prepTime, recipe.prepTime);
+    appendLine(lines, labels.cookTime, recipe.cookTime);
+    appendLine(lines, labels.totalTime, recipe.totalTime);
+    appendLine(lines, labels.category, recipe.recipeCategory);
+    appendLine(lines, labels.cuisine, recipe.recipeCuisine);
+    appendLine(lines, labels.keywords, recipe.keywords);
+    appendLine(lines, labels.image, imageValues(recipe.image || recipe.thumbnailUrl).join(", "));
 
     const ingredients = recipe.recipeIngredient || recipe.ingredients;
     if (ingredients?.length) {
-      lines.push("\nIngredients:");
+      lines.push(`\n${labels.ingredients}:`);
       ingredients.forEach(ingredient => lines.push(`- ${formatValue(ingredient)}`));
     }
 
     const instructions = recipe.recipeInstructions || recipe.instructions;
     if (instructions?.length) {
-      lines.push("\nInstructions:");
+      lines.push(`\n${labels.instructions}:`);
       normalizeInstructions(instructions).forEach((instruction, index) => {
         lines.push(`${index + 1}. ${instruction}`);
       });
@@ -590,6 +637,6 @@ function extractRecipePage(maxLength) {
     if (text.length <= limit) {
       return text;
     }
-    return `${text.slice(0, limit)}\n\n[Content truncated by Mealie extension]`;
+    return `${text.slice(0, limit)}\n\n[${labels.contentTruncated}]`;
   }
 }

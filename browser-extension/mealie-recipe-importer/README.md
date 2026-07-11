@@ -23,15 +23,24 @@ Why this exists:
 3. Set the Mealie URL, usually `http://localhost:3000`.
 4. Make sure you are logged in to Mealie in the same browser.
 5. Choose whether to auto-detect the page type, extract a recipe, or extract an article.
-6. Choose a target translation language from the same locales supported by Mealie.
-7. Choose whether to create a shopping list, organize it with AI, and add AI tips / ingredient-variety notes.
-8. Click **חלץ ושלח ל-AI**.
+6. Keep the interface language on **Automatic** to follow the browser, or select one of Mealie's existing 42 locales.
+7. Choose a target translation language from the same locales supported by Mealie.
+8. Choose whether to create a shopping list, organize it with AI, and add AI tips / ingredient-variety notes.
+9. Click the primary **Send to AI** action in the selected interface language.
+
+## Languages
+
+- The popup, status messages, errors, result links, preview labels, and extraction metadata are translated into exactly the same 42 locales that already exist in Mealie.
+- No extension-only language is added. The locale lists are checked for exact parity with `frontend/app/lang/messages`.
+- Arabic and Hebrew switch the complete popup to RTL automatically.
+- Chrome manifest metadata is generated for the 37 locale codes supported by the Chrome Web Store. Afrikaans, Galician, Icelandic, and regional French variants remain fully available inside the popup through the runtime locale selector; Chrome uses its closest supported manifest locale for store metadata.
+- Runtime messages fall back to `en-US` only if a locale file cannot be loaded.
 
 If the page language already matches the selected translation language, the extension sends the recipe without a translation target.
 
 The extension also exposes a browser bridge to Mealie pages. When Mealie's regular server-side link import fails because a site blocks the server, Mealie can ask the installed extension to open the link in the user's browser, extract the page, and send it back automatically.
 
-The popup checks whether Mealie has an active AI provider before enabling **חלץ ושלח ל-AI**. It reads the existing Mealie login cookie through the browser and falls back to reading the login token from an open Mealie tab. It does not store a separate AI key. If the extension cannot find an active Mealie login, it shows a connect button that opens or focuses Mealie. If AI is not configured in Mealie, the extension shows a message and blocks sending.
+The popup checks whether Mealie has an active AI provider before enabling its primary send action. It reads the existing Mealie login cookie through the browser and falls back to reading the login token from an open Mealie tab. It does not store a separate AI key. If the extension cannot find an active Mealie login, it shows a connect button that opens or focuses Mealie. If AI is not configured in Mealie, the extension shows a localized message and blocks sending.
 
 The extension calls:
 

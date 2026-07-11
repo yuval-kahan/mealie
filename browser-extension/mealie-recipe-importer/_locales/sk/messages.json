@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "Mealie AI importér receptov"
+  },
+  "extensionDescription": {
+    "message": "Extrahujte aktuálnu stránku prehliadača a odošlite ju do Mealie AI ako recept alebo článok."
+  },
+  "actionTitle": {
+    "message": "Odoslať do Mealie AI"
+  }
+}

@@ -1,0 +1,100 @@
+{
+  "extension": {
+    "name": "Mealie AI",
+    "description": "Ištraukite dabartinį naršyklės puslapį ir nusiųskite jį į Mealie AI kaip receptą arba straipsnį.",
+    "action-title": "Siųsti į Mealie AI",
+    "manifest-name": "Mealie AI receptų importuotojas"
+  },
+  "header": {
+    "subtitle": "Ištraukite dabartinį puslapį ir nusiųskite jį, kad sukurtumėte receptą arba straipsnį."
+  },
+  "settings": {
+    "mealie-url": "Mealie adresas",
+    "extract-mode": "Ką ištraukti",
+    "interface-language": "Sąsajos kalba",
+    "automatic-language": "Automatinė (naršyklės kalba)",
+    "translation-language": "Vertimo kalba"
+  },
+  "mode": {
+    "auto": "Automatinis aptikimas",
+    "recipe": "Ištraukti receptą",
+    "article": "Ištraukti straipsnį"
+  },
+  "options": {
+    "create-shopping-list": "Taip pat sukurti automatinį pirkinių sąrašą",
+    "organize-shopping-list": "Tvarkyti pirkinių sąrašą naudojant AI",
+    "include-ai-tips": "Pridėti AI pastabas, patarimus ir ingredientų alternatyvų rekomendacijas",
+    "include-item-images": "Rasti ir išsaugoti ingredientų, įrankių ir pirkinių sąrašo elementų vaizdus"
+  },
+  "actions": {
+    "extract-only": "Tik ištraukti",
+    "send-auto": "Aptikti ir siųsti į AI",
+    "send-recipe": "Siųsti receptą į AI",
+    "send-article": "Siųsti straipsnį į AI",
+    "connect-mealie": "Atidaryti / prijungti Mealie"
+  },
+  "preview": {
+    "title": "Peržiūra"
+  },
+  "links": {
+    "open-recipe": "Atidaryti receptą Mealie",
+    "open-article": "Atidaryti straipsnį Mealie"
+  },
+  "status": {
+    "open-and-login": "Prieš naudodami plėtinį, atidarykite Mealie šios naršyklės skirtuke ir prisijunkite.",
+    "login-required": "Prieš naudodami plėtinį, prisijunkite prie Mealie šioje naršyklėje.",
+    "check-failed": "Nepavyko patikrinti Mealie ({status}). Įsitikinkite, kad svetainė atidaryta tinkamu adresu.",
+    "provider-no-default": "AI teikėjai išsaugoti, bet nepasirinktas numatytasis teikėjas. Pasirinkite numatytąjį teikėją Mealie API nustatymuose.",
+    "provider-required": "Prieš naudodami plėtinį, sukonfigūruokite API/AI teikėją Mealie.",
+    "connection-failed": "Nepavyko prisijungti prie Mealie. Patikrinkite adresą ir įsitikinkite, kad svetainė atidaryta.",
+    "mealie-opened": "Mealie buvo atidarytas. Jei reikia, prisijunkite ten, tada vėl atidarykite plėtinį.",
+    "extracting": "Ištraukiamas turinys iš puslapio...",
+    "extracted": "Puslapio turinys ištrauktas: {title}",
+    "untitled": "Be pavadinimo",
+    "extracting-and-sending": "Ištraukiamas turinys ir siunčiamas į Mealie...",
+    "processing-article": "Ištraukiamas straipsnis ir siunčiamas į Mealie...",
+    "processing-recipe": "Ištraukiamas receptas ir siunčiamas į Mealie...",
+    "processing-auto": "Ištraukiamas puslapis, aptinkamas jo turinio tipas ir siunčiamas į Mealie...",
+    "article-created": "Straipsnis sukurtas: {title}",
+    "recipe-created": "Receptas sukurtas: {name}",
+    "recipe-created-too": "Taip pat buvo sukurtas receptas: {name}",
+    "shopping-list": "Pirkinių sąrašas: {name}",
+    "attention": "Dėmesio: {message}",
+    "extraction-finished": "Ištraukimas baigtas"
+  },
+  "errors": {
+    "invalid-mealie-url": "Mealie adresas neteisingas.",
+    "invalid-recipe-url": "Recepto nuoroda neteisinga.",
+    "active-tab-missing": "Nerastas aktyvus skirtukas.",
+    "unsupported-page": "Šio puslapio ištraukti nepavyko. Atidarykite įprastą recepto puslapį ir bandykite dar kartą.",
+    "text-extraction-failed": "Nepavyko ištraukti teksto iš puslapio.",
+    "open-link-failed": "Nepavyko atidaryti nuorodos naršyklėje.",
+    "page-load-timeout": "Puslapis krovėsi per ilgai.",
+    "request-unauthorized": "Užklausa nepavyko, nes nėra aktyvios Mealie sesijos. Atidarykite Mealie šioje naršyklėje, prisijunkite ir bandykite dar kartą.",
+    "request-failed": "Užklausa nepavyko ({status}). Įsitikinkite, kad Mealie atidarytas ir esate prisijungę šioje naršyklėje.",
+    "bridge-failed": "Mealie plėtinio tiltas nepavyko.",
+    "import-failed": "Mealie plėtinio importavimas nepavyko.",
+    "unexpected": "Įvyko klaida."
+  },
+  "extraction": {
+    "recipe-page": "Recepto puslapis",
+    "source-url": "Šaltinio URL",
+    "source-image": "Šaltinio vaizdas",
+    "structured-data": "Struktūrizuoti recepto duomenys",
+    "visible-text": "Matomas puslapio tekstas",
+    "name": "Pavadinimas",
+    "description": "Aprašymas",
+    "author": "Autorius",
+    "yield": "Išeiga",
+    "prep-time": "Paruošimo laikas",
+    "cook-time": "Gaminimo laikas",
+    "total-time": "Bendras laikas",
+    "category": "Kategorija",
+    "cuisine": "Virtuvė",
+    "keywords": "Raktažodžiai",
+    "image": "Paveikslėlis",
+    "ingredients": "Ingredientai",
+    "instructions": "Gaminimo eiga",
+    "content-truncated": "Turinys sutrumpintas Mealie plėtinio"
+  }
+}
