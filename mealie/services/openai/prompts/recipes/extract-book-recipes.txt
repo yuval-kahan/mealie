@@ -11,7 +11,9 @@ Rules:
 - Translate all returned recipe content to Hebrew.
 - Preserve useful details such as yield, prep time, cook time, notes, serving suggestions, and equipment.
 - For each ingredient, fill recommended_variety when a specific type/variety would materially improve the recipe or is stated/implied by the recipe. This is especially useful for vegetables and fruit, such as tomato type, pepper color/type, potato type, onion type, fresh herbs, mushroom type, cheese style, meat cut, or pasta shape. Keep it short and practical. Leave it null when no specific type is useful.
-- Use short, practical categories and tags in Hebrew when obvious.
+- Give every returned recipe 1-3 short, practical categories and 2-6 useful tags in Hebrew. Categories describe the dish family or course; tags describe cuisine, diet, technique, occasion, or defining ingredients. Do not leave both lists empty.
+- Add concise notes with genuinely useful chef tips, serving advice, or safe substitutions when they are supported by the recipe. Do not invent required ingredients or change the recipe.
+- Fill the tools list with the main kitchen equipment needed to execute the recipe.
 - Do not invent author, source, page numbers, or cookbook name. Use only the source context provided by the user message.
 - Include the cookbook title and page range in the recipe source when provided.
 - If no complete recipes are present, return an empty recipes list.

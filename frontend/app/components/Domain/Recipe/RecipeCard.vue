@@ -82,6 +82,15 @@
           </v-chip>
           <RecipeChips
             :truncate="true"
+            :items="categories"
+            :title="false"
+            small
+            color="primary"
+            url-prefix="categories"
+            v-bind="$attrs"
+          />
+          <RecipeChips
+            :truncate="true"
             :items="tags"
             :title="false"
             small
@@ -212,6 +221,7 @@ interface Props {
   ratingColor?: string;
   image?: string;
   tags?: Array<any>;
+  categories?: Array<any>;
   recipeId: string;
   imageHeight?: number;
   extras?: Record<string, unknown> | null;
@@ -222,6 +232,7 @@ const props = withDefaults(defineProps<Props>(), {
   ratingColor: "secondary",
   image: "abc123",
   tags: () => [],
+  categories: () => [],
   imageHeight: 200,
   extras: null,
 });

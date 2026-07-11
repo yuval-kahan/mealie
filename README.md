@@ -6,6 +6,10 @@
 [![Docker Pulls][docker-pull]][docker-url]
 [![GHCR Pulls][ghcr-pulls]][ghcr-url]
 
+> [!IMPORTANT]
+> This repository is a customized fork of [Mealie](https://github.com/mealie-recipes/mealie), focused on AI-assisted recipe creation, cookbook translation and extraction, richer shopping-list workflows, Hebrew/RTL usability, and local-first media management.
+> See [FORK_CHANGES.md](FORK_CHANGES.md) for the complete feature list, implementation notes, stability review, and verification results.
+
 <!-- PROJECT LOGO -->
 <br />
 <p align="center">

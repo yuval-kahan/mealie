@@ -1,9 +1,11 @@
+import asyncio
 import hashlib
 import json
 import math
 import os
 import re
 import shutil
+import time
 from collections import Counter
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
@@ -748,6 +750,7 @@ class RecipeService(RecipeServiceBase):
         if " recipe" not in query.lower() and " food" not in query.lower():
             query = f"{query} recipe food"
 
+        payload: dict = {}
         try:
             async with httpx.AsyncClient(timeout=6.0, follow_redirects=True) as client:
                 response = await client.get(
@@ -763,17 +766,69 @@ class RecipeService(RecipeServiceBase):
                 payload = response.json()
         except Exception:
             self.logger.exception("Failed to search for automatic recipe image")
-            return []
 
         urls: list[str] = []
         for result in payload.get("results", []):
-            candidate = (result.get("url") or result.get("thumbnail") or "").strip()
+            candidate = (result.get("thumbnail") or result.get("url") or "").strip()
             if not candidate.lower().startswith(("http://", "https://")):
                 continue
             if candidate.lower().split("?")[0].endswith(".svg"):
                 continue
             urls.append(candidate)
 
+        if urls:
+            return urls
+        return await self._find_wikimedia_recipe_image_urls(query)
+
+    async def _find_wikimedia_recipe_image_urls(self, query: str) -> list[str]:
+        """Use Wikimedia Commons when the anonymous Openverse quota is exhausted."""
+
+        try:
+            async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
+                response = None
+                for attempt in range(3):
+                    elapsed = time.monotonic() - getattr(self, "_wikimedia_last_request", 0.0)
+                    if elapsed < 1.1:
+                        await asyncio.sleep(1.1 - elapsed)
+                    response = await client.get(
+                        "https://commons.wikimedia.org/w/api.php",
+                        params={
+                            "action": "query",
+                            "format": "json",
+                            "generator": "search",
+                            "gsrsearch": query,
+                            "gsrnamespace": 6,
+                            "gsrlimit": 8,
+                            "prop": "imageinfo",
+                            "iiprop": "url",
+                            "iiurlwidth": 1400,
+                        },
+                        headers={"User-Agent": "Mealie personal recipe image search"},
+                    )
+                    self._wikimedia_last_request = time.monotonic()
+                    if response.status_code != 429 or attempt == 2:
+                        break
+                    retry_after = int(response.headers.get("retry-after", "0") or 0)
+                    await asyncio.sleep(min(max(retry_after, 3 * (attempt + 1)), 30))
+                assert response is not None
+                response.raise_for_status()
+                payload = response.json()
+        except Exception:
+            self.logger.exception("Failed to search Wikimedia Commons for an automatic recipe image")
+            return []
+
+        urls: list[str] = []
+        pages = payload.get("query", {}).get("pages", {})
+        for page in pages.values():
+            image_info = page.get("imageinfo") or []
+            if not image_info:
+                continue
+            candidate = (image_info[0].get("thumburl") or image_info[0].get("url") or "").strip()
+            if not candidate.lower().startswith(("http://", "https://")):
+                continue
+            if candidate.lower().split("?", 1)[0].endswith(".svg"):
+                continue
+            urls.append(candidate)
         return urls
 
     async def search_with_ai(self, query: str, limit: int) -> RecipeAISearchResponse:

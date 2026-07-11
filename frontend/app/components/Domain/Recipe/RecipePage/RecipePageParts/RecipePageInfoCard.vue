@@ -66,6 +66,7 @@
                       target="_blank"
                       rel="noopener noreferrer"
                       class="recipe-origin-meta__link"
+                      :title="$t('recipe.open-source')"
                     >
                       {{ recipe.source }}
                     </a>
@@ -142,6 +143,7 @@ const props = withDefaults(defineProps<Props>(), {
   recipeScale: 1,
 });
 
+const api = useUserApi();
 const { isOwnGroup } = useLoggedInState();
 const { ensureAvailability, hasAllGroceriesForRecipe } = useShoppingListAvailability();
 const hasAllGroceries = computed(() => hasAllGroceriesForRecipe(props.recipe.name));
@@ -165,8 +167,36 @@ onMounted(() => {
 });
 
 const recipeSourceUrl = computed(() => {
-  return externalUrlFromSource(props.recipe.source);
+  const externalUrl = externalUrlFromSource(props.recipe.source);
+  if (externalUrl) {
+    return externalUrl;
+  }
+
+  const source = props.recipe.source?.trim();
+  if (!source) {
+    return null;
+  }
+
+  const extras = props.recipe.extras || {};
+  const bookId = typeof extras.uploadedBookSourceId === "string"
+    ? extras.uploadedBookSourceId.trim()
+    : "";
+  const storedPage = Number(extras.uploadedBookSourcePageStart);
+  const page = Number.isInteger(storedPage) && storedPage > 0
+    ? storedPage
+    : pageFromBookSource(source);
+
+  if (bookId) {
+    return api.uploadedBooks.openUrl(bookId, page);
+  }
+  return page ? api.uploadedBooks.openSourceUrl(source, page) : null;
 });
+
+function pageFromBookSource(source: string) {
+  const match = source.match(/(?:pages?|p\.?|עמוד(?:ים)?|עמ[׳'])\s*[:#]?\s*(\d{1,5})/i);
+  const page = Number(match?.[1]);
+  return Number.isInteger(page) && page > 0 ? page : null;
+}
 
 function externalUrlFromSource(source?: string | null) {
   const value = source?.trim();

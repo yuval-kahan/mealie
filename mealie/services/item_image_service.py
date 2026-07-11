@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import re
+import time
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -60,6 +61,8 @@ class ItemImageService(BaseService):
         self.group_id = str(group_id)
         self.root_dir = self.directories.DATA_DIR.joinpath("item-images", self.group_id)
         self.minifier = img.PillowMinifier(purge=True, logger=self.logger)
+        self._wikimedia_lock = asyncio.Lock()
+        self._wikimedia_last_request = 0.0
 
     @classmethod
     def normalize_name(cls, name: str | None) -> str:
@@ -93,6 +96,16 @@ class ItemImageService(BaseService):
         return self.image_path(self.root_dir, kind, name, file_name)
 
     async def ensure_recipe_images(self, recipe: Recipe) -> ItemImageEnsureResult:
+        return await self.ensure_many(self._recipe_image_requests(recipe))
+
+    async def ensure_recipes_images(self, recipes: Iterable[Recipe]) -> ItemImageEnsureResult:
+        requests: list[ItemImageRequest] = []
+
+        for recipe in recipes:
+            requests.extend(self._recipe_image_requests(recipe))
+        return await self.ensure_many(requests)
+
+    def _recipe_image_requests(self, recipe: Recipe) -> list[ItemImageRequest]:
         requests: list[ItemImageRequest] = []
 
         for ingredient in recipe.recipe_ingredient or []:
@@ -110,7 +123,7 @@ class ItemImageService(BaseService):
             if tool.name:
                 requests.append(ItemImageRequest("tool", tool.name, recipe.name or None))
 
-        return await self.ensure_many(requests)
+        return requests
 
     async def ensure_shopping_list_images(self, shopping_list: ShoppingListOut) -> ItemImageEnsureResult:
         requests = [
@@ -281,6 +294,7 @@ class ItemImageService(BaseService):
         return queries
 
     async def _find_public_image_urls(self, query: str, client: httpx.AsyncClient) -> list[str]:
+        payload: dict = {}
         try:
             response = await client.get(
                 ITEM_IMAGE_SEARCH_URL,
@@ -291,7 +305,6 @@ class ItemImageService(BaseService):
             payload = response.json()
         except Exception:
             self.logger.exception("Failed to search for item image")
-            return []
 
         urls: list[str] = []
         for result in payload.get("results", []):
@@ -306,6 +319,56 @@ class ItemImageService(BaseService):
                     continue
                 if candidate not in urls:
                     urls.append(candidate)
+        if urls:
+            return urls
+        return await self._find_wikimedia_image_urls(query, client)
+
+    async def _find_wikimedia_image_urls(self, query: str, client: httpx.AsyncClient) -> list[str]:
+        try:
+            async with self._wikimedia_lock:
+                response = None
+                for attempt in range(3):
+                    elapsed = time.monotonic() - self._wikimedia_last_request
+                    if elapsed < 1.1:
+                        await asyncio.sleep(1.1 - elapsed)
+                    response = await client.get(
+                        "https://commons.wikimedia.org/w/api.php",
+                        params={
+                            "action": "query",
+                            "format": "json",
+                            "generator": "search",
+                            "gsrsearch": query,
+                            "gsrnamespace": 6,
+                            "gsrlimit": 6,
+                            "prop": "imageinfo",
+                            "iiprop": "url",
+                            "iiurlwidth": 1200,
+                        },
+                        headers={"User-Agent": "Mealie item image search"},
+                    )
+                    self._wikimedia_last_request = time.monotonic()
+                    if response.status_code != 429 or attempt == 2:
+                        break
+                    retry_after = int(response.headers.get("retry-after", "0") or 0)
+                    await asyncio.sleep(min(max(retry_after, 3 * (attempt + 1)), 30))
+                assert response is not None
+            response.raise_for_status()
+            payload = response.json()
+        except Exception:
+            self.logger.exception("Failed to search Wikimedia Commons for an item image")
+            return []
+
+        urls: list[str] = []
+        for page in payload.get("query", {}).get("pages", {}).values():
+            image_info = page.get("imageinfo") or []
+            if not image_info:
+                continue
+            candidate = (image_info[0].get("thumburl") or image_info[0].get("url") or "").strip()
+            if not candidate.lower().startswith(("http://", "https://")):
+                continue
+            if candidate.lower().split("?", 1)[0].endswith(".svg"):
+                continue
+            urls.append(candidate)
         return urls
 
     async def _download_image(

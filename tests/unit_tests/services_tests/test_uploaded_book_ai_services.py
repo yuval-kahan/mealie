@@ -5,10 +5,17 @@ from uuid import uuid4
 
 import mealie.services.uploaded_books.ai_cookbook_builder as cookbook_builder_module
 import pytest
+from mealie.routes.households.controller_uploaded_books import UploadedBooksController
+from mealie.schema.cookbook.uploaded_book import UploadedBookRecipeDeleteRequest
 from mealie.schema.group.ai_providers import AIProviderOut
 from mealie.schema.openai.general import OpenAICookbookChapter, OpenAICookbookPlan
 from mealie.services.uploaded_books.ai_cookbook_builder import AICookbookBuilder
-from mealie.services.uploaded_books.book_recipe_extractor import BookTextPage, UploadedBookRecipeExtractor
+from mealie.services.uploaded_books.book_recipe_extractor import (
+    BookTextPage,
+    UploadedBookRecipeExtractor,
+    UploadedBookTranslator,
+    parse_book_source_page_range,
+)
 
 
 def test_gemini_provider_creates_one_worker_slot_per_unique_key():
@@ -87,6 +94,90 @@ def test_extraction_chunks_include_forward_context_without_changing_primary_rang
     assert "[Page 3]" in chunks[0].text
     assert "[Page 4]" not in chunks[0].text
     assert "[Page 5]" in chunks[1].text
+
+
+def test_translation_completeness_rejects_an_omitted_meaningful_page():
+    source = "Mix 500 grams flour with 5 eggs. Knead for 10 minutes, rest for 30 minutes, then roll and cut."
+
+    issue = UploadedBookTranslator._translation_page_issue(12, source, "")
+
+    assert issue is not None
+    assert "page 12" in issue
+
+
+def test_book_recipe_source_page_range_supports_hebrew_and_english():
+    assert parse_book_source_page_range("White Heat - Marco Pierre White, עמוד 182") == (182, 182)
+    assert parse_book_source_page_range("White Heat, pages 12-15") == (12, 15)
+    assert parse_book_source_page_range("White Heat", 21, 30) == (21, 30)
+
+
+@pytest.mark.parametrize(
+    ("is_translated", "extension", "expected_fragment"),
+    [(True, ".html", "#page-182"), (False, ".pdf", "#page=182")],
+)
+def test_book_open_redirect_uses_the_correct_page_fragment(is_translated, extension, expected_fragment):
+    controller = object.__new__(UploadedBooksController)
+    book_id = uuid4()
+    book = SimpleNamespace(id=book_id, is_translated_book=is_translated, extension=extension)
+    controller._preferred_reading_book = lambda current_book, _page: current_book
+
+    response = controller._book_open_redirect(book, 182)
+
+    assert response.status_code == 307
+    assert response.headers["location"] == f"/api/households/uploaded-books/{book_id}/file{expected_fragment}"
+
+
+def test_book_recipe_bulk_delete_skips_recipe_ids_from_other_books():
+    controller = object.__new__(UploadedBooksController)
+    book = SimpleNamespace(extraction_recipes_created=1)
+    linked_recipe = SimpleNamespace(id=uuid4(), slug="linked-recipe")
+    foreign_recipe_id = uuid4()
+    controller.session = MagicMock()
+    controller._get_book_or_404 = lambda _book_id: book
+    controller._assert_book_not_processing = lambda _book: None
+    controller._book_recipe_models = lambda _book: [linked_recipe]
+
+    response = controller.delete_extracted_book_recipes(
+        uuid4(),
+        UploadedBookRecipeDeleteRequest(recipe_ids=[foreign_recipe_id]),
+    )
+
+    assert response.deleted_count == 0
+    assert response.remaining_count == 1
+    assert response.skipped_count == 1
+    assert response.deleted_recipe_ids == []
+
+
+def test_translation_completeness_allows_empty_decorative_or_ocr_page():
+    assert UploadedBookTranslator._translation_page_issue(2, "WHITE HEAT", "") is None
+
+
+def test_translated_book_html_has_cover_contents_and_numbered_pages():
+    translator = object.__new__(UploadedBookTranslator)
+    book = SimpleNamespace(
+        name="White Heat",
+        original_file_name="White Heat.pdf",
+        translation_page_start=None,
+        translation_page_end=None,
+    )
+
+    output = translator._build_translated_book_html(
+        book,
+        "Hebrew",
+        [(1, "פתיחה לספר והסבר קצר"), (2, "מתכון לדוגמה\n500 גרם קמח")],
+        has_cover=True,
+    )
+
+    assert 'id="cover"' in output
+    assert 'src="./cover"' in output
+    assert 'id="contents"' in output
+    assert 'href="#page-2"' in output
+    assert 'id="page-2"' in output
+    assert 'id="bookSidebar"' in output
+    assert 'id="readingProgress"' in output
+    assert 'data-page-index="2"' in output
+    assert "IntersectionObserver" in output
+    assert "תוכן עניינים" in output
 
 
 @pytest.mark.asyncio

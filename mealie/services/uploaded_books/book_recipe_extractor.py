@@ -2,6 +2,7 @@ import asyncio
 import html
 import json
 import re
+import shutil
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -22,13 +23,18 @@ from mealie.db.models.recipe import RecipeModel
 from mealie.lang.providers import Translator
 from mealie.repos.repository_factory import AllRepositories
 from mealie.schema.group.ai_providers import AIProviderOut
+from mealie.schema.household.group_shopping_list import ShoppingListAddRecipeParamsBulk, ShoppingListCreate
 from mealie.schema.household.household import HouseholdInDB
 from mealie.schema.openai.recipe import OpenAIBookRecipeChunkParse, OpenAIBookTranslationChunkParse, OpenAIRecipe
 from mealie.schema.recipe.recipe import Recipe, create_recipe_slug
+from mealie.schema.response import PaginationQuery
 from mealie.schema.user import PrivateUser
 from mealie.services._base_service import BaseService
+from mealie.services.household_services.shopping_lists import ShoppingListService
+from mealie.services.item_image_service import ItemImageService
 from mealie.services.openai import OpenAIService
 from mealie.services.recipe.recipe_service import OpenAIRecipeService, RecipeService
+from mealie.services.uploaded_books.book_cover_service import BOOK_COVER_FILE_NAME, UploadedBookCoverService
 
 EXTRACTION_NOT_STARTED = "not_started"
 EXTRACTION_PROCESSING = "processing"
@@ -45,6 +51,25 @@ TRANSLATION_COMPLETED = "completed"
 TRANSLATION_PARTIAL_FAILED = "partial_failed"
 TRANSLATION_FAILED = "failed"
 TRANSLATION_CANCELLED = "cancelled"
+
+BOOK_SOURCE_PAGE_PATTERN = re.compile(
+    r"(?:pages?|p\.?|עמוד(?:ים)?|עמ[׳'])\s*[:#]?\s*(\d{1,5})(?:\s*[-–—]\s*(\d{1,5}))?",
+    flags=re.IGNORECASE,
+)
+
+
+def parse_book_source_page_range(
+    source: str | None,
+    fallback_start: int | None = None,
+    fallback_end: int | None = None,
+) -> tuple[int | None, int | None]:
+    match = BOOK_SOURCE_PAGE_PATTERN.search(source or "")
+    if not match:
+        return fallback_start, fallback_end if fallback_end is not None else fallback_start
+
+    page_start = int(match.group(1))
+    page_end = int(match.group(2)) if match.group(2) else page_start
+    return page_start, page_end
 
 CHUNK_PENDING = "pending"
 CHUNK_PROCESSING = "processing"
@@ -184,6 +209,20 @@ class UploadedBookRecipeExtractor(BaseService):
     def _save_book(self, book: UploadedBook) -> None:
         self.repos.session.add(book)
         self.repos.session.commit()
+
+    @staticmethod
+    def _book_metadata(book: UploadedBook) -> dict:
+        try:
+            value = json.loads(book.book_metadata_json or "{}")
+        except (TypeError, ValueError):
+            return {}
+        return value if isinstance(value, dict) else {}
+
+    def _update_book_metadata(self, book: UploadedBook, **updates) -> None:
+        metadata = self._book_metadata(book)
+        metadata.update(updates)
+        book.book_metadata_json = json.dumps(metadata, ensure_ascii=False)
+        self._save_book(book)
 
     def _current_status(self, book: UploadedBook, column) -> str | None:
         with self.repos.session.no_autoflush:
@@ -639,7 +678,10 @@ class UploadedBookRecipeExtractor(BaseService):
         message = str(error)
         patterns = [
             r"retry(?:\s|-)?after[^\d]*(\d+(?:\.\d+)?)\s*(milliseconds?|ms|seconds?|secs?|s|minutes?|mins?|m)?",
-            r"(?:retry|try again|please retry)\s+in[^\d]*(\d+(?:\.\d+)?)\s*(milliseconds?|ms|seconds?|secs?|s|minutes?|mins?|m)?",
+            (
+                r"(?:retry|try again|please retry)\s+in[^\d]*(\d+(?:\.\d+)?)\s*"
+                r"(milliseconds?|ms|seconds?|secs?|s|minutes?|mins?|m)?"
+            ),
         ]
 
         for pattern in patterns:
@@ -775,7 +817,8 @@ class UploadedBookRecipeExtractor(BaseService):
             retryable = False if provider_disabled else self._is_retryable_error(e)
             if provider_disabled:
                 self.logger.warning(
-                    f"Disabling AI provider slot {slot.label} after extraction error for book chunk {chunk.index + 1}: {e}"
+                    f"Disabling AI provider slot {slot.label} after extraction error "
+                    f"for book chunk {chunk.index + 1}: {e}"
                 )
             elif retryable:
                 self.logger.warning(
@@ -818,13 +861,34 @@ class UploadedBookRecipeExtractor(BaseService):
     def _recipe_with_book_source(self, recipe: OpenAIRecipe, book: UploadedBook, chunk: BookTextChunk) -> OpenAIRecipe:
         source = recipe.source or f"{book.name}, pages {chunk.start_page}-{chunk.end_page}"
         created_by = recipe.created_by or book.name
-        return recipe.model_copy(update={"source": source, "created_by": created_by})
+        categories = recipe.categories or ["מתכונים מספרי בישול"]
+        tags = recipe.tags or [book.name]
+        return recipe.model_copy(
+            update={
+                "source": source,
+                "created_by": created_by,
+                "categories": categories,
+                "tags": tags,
+            }
+        )
 
-    def _save_openai_recipe(self, openai_recipe: OpenAIRecipe, book: UploadedBook, chunk: BookTextChunk) -> Recipe | None:
+    def _save_openai_recipe(
+        self,
+        openai_recipe: OpenAIRecipe,
+        book: UploadedBook,
+        chunk: BookTextChunk,
+    ) -> Recipe | None:
         if not self.openai_recipe_service._has_minimum_recipe_data(openai_recipe):
             return None
 
         recipe = self.openai_recipe_service._convert_recipe(self._recipe_with_book_source(openai_recipe, book, chunk))
+        page_start, page_end = parse_book_source_page_range(recipe.source, chunk.start_page, chunk.end_page)
+        recipe.extras = {
+            **(recipe.extras or {}),
+            "uploadedBookSourceId": str(book.id),
+            "uploadedBookSourcePageStart": page_start,
+            "uploadedBookSourcePageEnd": page_end,
+        }
 
         if self._existing_recipe_for_book_chunk(recipe, book):
             return None
@@ -842,7 +906,258 @@ class UploadedBookRecipeExtractor(BaseService):
             self.logger.exception(e)
             return None
 
-    async def extract_recipes(
+    def _recipes_extracted_from_book(self, book: UploadedBook) -> list[Recipe]:
+        slugs = self.repos.session.execute(
+            sa.select(RecipeModel.slug).where(
+                RecipeModel.group_id == self.user.group_id,
+                sa.func.lower(sa.func.coalesce(RecipeModel.source, "")).startswith(
+                    book.name.lower(), autoescape=True
+                ),
+            )
+        ).scalars()
+        recipes: list[Recipe] = []
+        for slug in slugs:
+            try:
+                recipes.append(self.recipe_service.get_one(slug))
+            except Exception:
+                self.logger.exception("Failed to load extracted recipe '%s' for enrichment", slug)
+        return recipes
+
+    @staticmethod
+    def _shopping_list_extras(shopping_list) -> dict:
+        extras = getattr(shopping_list, "extras", None)
+        return extras if isinstance(extras, dict) else {}
+
+    def _existing_book_recipe_shopping_list(
+        self,
+        shopping_service: ShoppingListService,
+        book: UploadedBook,
+        recipe: Recipe,
+    ):
+        existing_lists = shopping_service.shopping_lists.page_all(PaginationQuery(page=1, per_page=-1))
+        for shopping_list in existing_lists.items:
+            extras = self._shopping_list_extras(shopping_list)
+            if (
+                str(extras.get("aiCreatedFromUploadedBookId") or "") == str(book.id)
+                and str(extras.get("aiCreatedFromRecipeId") or "") == str(recipe.id)
+            ):
+                return shopping_list
+        return None
+
+    def _unique_shopping_list_name(self, shopping_service: ShoppingListService, base_name: str) -> str:
+        existing_lists = shopping_service.shopping_lists.page_all(PaginationQuery(page=1, per_page=-1))
+        existing_names = {
+            (shopping_list.name or "").strip().casefold()
+            for shopping_list in existing_lists.items
+            if (shopping_list.name or "").strip()
+        }
+        name = base_name.strip() or "רשימת קניות"
+        suffix = 2
+        while name.casefold() in existing_names:
+            name = f"{base_name} ({suffix})"
+            suffix += 1
+        return name
+
+    async def _ensure_book_recipe_shopping_list(
+        self,
+        book: UploadedBook,
+        recipe: Recipe,
+        organize_with_ai: bool,
+        include_ai_tips: bool,
+        include_item_images: bool,
+        provider_slots: list[ProviderSlot] | None = None,
+        provider_cursor: list[int] | None = None,
+    ) -> bool:
+        shopping_service = ShoppingListService(self.repos)
+        existing = self._existing_book_recipe_shopping_list(shopping_service, book, recipe)
+        if existing:
+            shopping_list = existing
+            if organize_with_ai and shopping_list.list_items and str(
+                self._shopping_list_extras(shopping_list).get(ShoppingListService.AI_ORGANIZED_EXTRA_KEY, "")
+            ).lower() != "true":
+                shopping_list = await self._organize_shopping_list_with_slots(
+                    shopping_service,
+                    shopping_list.id,
+                    include_ai_tips,
+                    provider_slots,
+                    provider_cursor,
+                )
+            if include_item_images:
+                await ItemImageService(self.user.group_id, self.repos).ensure_shopping_list_images(shopping_list)
+            return True
+
+        shopping_list = shopping_service.create_one_list(
+            ShoppingListCreate(
+                name=self._unique_shopping_list_name(shopping_service, recipe.name or recipe.slug),
+                extras={
+                    "aiCreatedFromUploadedBook": True,
+                    "aiCreatedFromUploadedBookId": str(book.id),
+                    "aiCreatedFromRecipeId": str(recipe.id),
+                    "aiCreatedFromRecipeSlug": recipe.slug,
+                },
+            ),
+            self.user.id,
+        )
+        if not shopping_list:
+            return False
+
+        shopping_list, _items = shopping_service.add_recipe_ingredients_to_list(
+            shopping_list.id,
+            [
+                ShoppingListAddRecipeParamsBulk(
+                    recipe_id=recipe.id,
+                    recipe_increment_quantity=1,
+                    recipe_ingredients=recipe.recipe_ingredient or None,
+                )
+            ],
+        )
+        if organize_with_ai:
+            shopping_list = await self._organize_shopping_list_with_slots(
+                shopping_service,
+                shopping_list.id,
+                include_ai_tips,
+                provider_slots,
+                provider_cursor,
+            )
+        if include_item_images:
+            await ItemImageService(self.user.group_id, self.repos).ensure_shopping_list_images(shopping_list)
+        return True
+
+    async def _organize_shopping_list_with_slots(
+        self,
+        shopping_service: ShoppingListService,
+        shopping_list_id: UUID4,
+        include_ai_tips: bool,
+        provider_slots: list[ProviderSlot] | None,
+        provider_cursor: list[int] | None,
+    ):
+        if not provider_slots or provider_cursor is None:
+            shopping_list, _items = await shopping_service.organize_with_ai(
+                shopping_list_id,
+                include_ai_tips=include_ai_tips,
+            )
+            return shopping_list
+
+        last_error: Exception | None = None
+        for _attempt in range(max(len(provider_slots) * 2, 1)):
+            enabled_slots = [slot for slot in provider_slots if not slot.disabled]
+            if not enabled_slots:
+                break
+            slot = enabled_slots[provider_cursor[0] % len(enabled_slots)]
+            provider_cursor[0] += 1
+            try:
+                shopping_list, _items = await shopping_service.organize_with_ai(
+                    shopping_list_id,
+                    include_ai_tips=include_ai_tips,
+                    provider=slot.provider,
+                )
+                return shopping_list
+            except Exception as error:
+                last_error = error
+                if self._is_provider_disabled_error(error):
+                    slot.disabled = True
+                    slot.disabled_reason = self._short_error(error)
+                    continue
+                if self._is_retryable_error(error):
+                    continue
+                raise
+
+        if last_error:
+            raise last_error
+        raise RuntimeError("No usable AI provider keys remain for shopping-list organization")
+
+    async def enrich_book_recipes(
+        self,
+        book: UploadedBook,
+        *,
+        auto_recipe_images: bool = True,
+        include_item_images: bool = True,
+        include_ai_tips: bool = True,
+        create_shopping_lists: bool = True,
+        organize_shopping_lists_with_ai: bool = True,
+    ) -> dict:
+        recipes = self._recipes_extracted_from_book(book)
+        stats = {
+            "recipes": len(recipes),
+            "recipe_images_created": 0,
+            "recipe_images_failed": 0,
+            "item_images_created": 0,
+            "item_images_existing": 0,
+            "item_images_failed": 0,
+            "shopping_lists_created_or_existing": 0,
+            "shopping_lists_failed": 0,
+        }
+        item_image_service = ItemImageService(self.user.group_id, self.repos) if include_item_images else None
+        provider_slots: list[ProviderSlot] | None = None
+        provider_cursor: list[int] | None = None
+        if create_shopping_lists and organize_shopping_lists_with_ai:
+            openai_service = OpenAIService(self.repos)
+            provider_slots = self._provider_slots(openai_service)
+            provider_cursor = [0]
+
+        if item_image_service:
+            try:
+                result = await item_image_service.ensure_recipes_images(recipes)
+                stats["item_images_created"] += result.created
+                stats["item_images_existing"] += result.existing
+                stats["item_images_failed"] += result.failed
+                if result.failed == 0:
+                    for recipe in recipes:
+                        recipe.extras = {
+                            **(recipe.extras or {}),
+                            "itemImagesEnsured": True,
+                            "itemImagesEnsuredAt": datetime.now(UTC).isoformat(),
+                        }
+                        self.recipe_service.update_one(recipe.slug, recipe)
+            except Exception:
+                stats["item_images_failed"] += 1
+                self.logger.exception("Failed to add item images to recipes extracted from '%s'", book.name)
+
+        for recipe in recipes:
+            if auto_recipe_images and not recipe.image:
+                try:
+                    image_created = await self.recipe_service.attach_best_effort_image(
+                        recipe,
+                        search_queries=[
+                            recipe.name,
+                            f"{book.name} {recipe.name}",
+                            f"{recipe.name} plated dish",
+                        ],
+                    )
+                    stats["recipe_images_created" if image_created else "recipe_images_failed"] += 1
+                except Exception:
+                    stats["recipe_images_failed"] += 1
+                    self.logger.exception("Failed to add an image to extracted recipe '%s'", recipe.name)
+
+            if create_shopping_lists:
+                try:
+                    if await self._ensure_book_recipe_shopping_list(
+                        book,
+                        recipe,
+                        organize_shopping_lists_with_ai,
+                        include_ai_tips,
+                        include_item_images,
+                        provider_slots,
+                        provider_cursor,
+                    ):
+                        stats["shopping_lists_created_or_existing"] += 1
+                    else:
+                        stats["shopping_lists_failed"] += 1
+                except Exception:
+                    self.repos.session.rollback()
+                    stats["shopping_lists_failed"] += 1
+                    self.logger.exception("Failed to create a shopping list for extracted recipe '%s'", recipe.name)
+
+        self._update_book_metadata(
+            book,
+            extraction_enrichment={
+                **stats,
+                "completed_at": datetime.now(UTC).isoformat(),
+            },
+        )
+        return stats
+
+    async def extract_recipes(  # noqa: C901
         self,
         book_id: UUID4,
         uploaded_books_root: Path,
@@ -851,6 +1166,11 @@ class UploadedBookRecipeExtractor(BaseService):
         resume: bool = False,
         page_start: int | None = None,
         page_end: int | None = None,
+        auto_recipe_images: bool = True,
+        include_item_images: bool = True,
+        include_ai_tips: bool = True,
+        create_shopping_lists: bool = True,
+        organize_shopping_lists_with_ai: bool = True,
     ) -> None:
         if not await self._claim_job("extraction", book_id):
             self.logger.info(f"Uploaded book extraction job {book_id} is already running")
@@ -882,6 +1202,16 @@ class UploadedBookRecipeExtractor(BaseService):
             book.extraction_started_at = book.extraction_started_at or get_utc_now()
             book.extraction_completed_at = None
             self._save_book(book)
+            self._update_book_metadata(
+                book,
+                extraction_options={
+                    "auto_recipe_images": auto_recipe_images,
+                    "include_item_images": include_item_images,
+                    "include_ai_tips": include_ai_tips,
+                    "create_shopping_lists": create_shopping_lists,
+                    "organize_shopping_lists_with_ai": organize_shopping_lists_with_ai,
+                },
+            )
 
             pages = self._extract_pages(path, book.extension)
             if not pages:
@@ -1067,6 +1397,14 @@ class UploadedBookRecipeExtractor(BaseService):
                 return
 
             failed_chunks = sum(1 for state in chunk_states.values() if state.get("status") == CHUNK_FAILED)
+            await self.enrich_book_recipes(
+                book,
+                auto_recipe_images=auto_recipe_images,
+                include_item_images=include_item_images,
+                include_ai_tips=include_ai_tips,
+                create_shopping_lists=create_shopping_lists,
+                organize_shopping_lists_with_ai=organize_shopping_lists_with_ai,
+            )
             book.extraction_status = EXTRACTION_PARTIAL_FAILED if failed_chunks else EXTRACTION_COMPLETED
             book.extraction_completed_at = get_utc_now()
             self._save_progress(book, chunk_states, book.extraction_status)
@@ -1143,6 +1481,8 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                     "startPage": chunk.start_page,
                     "endPage": chunk.end_page,
                     "status": CHUNK_PENDING,
+                    "previousAttempts": self._state_int(previous, "attempts"),
+                    "attempts": 0,
                     "translatedChunkFile": None,
                     "nextRetrySeconds": None,
                     "nextRetryAt": None,
@@ -1289,7 +1629,8 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
             retryable = False if provider_disabled else self._is_retryable_error(e)
             if provider_disabled:
                 self.logger.warning(
-                    f"Disabling AI provider slot {slot.label} after translation error for book chunk {chunk.index + 1}: {e}"
+                    f"Disabling AI provider slot {slot.label} after translation error "
+                    f"for book chunk {chunk.index + 1}: {e}"
                 )
             elif retryable:
                 self.logger.warning(
@@ -1322,7 +1663,191 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                 wait_seconds=None,
             )
 
+        source_pages = self._source_pages_from_chunk(chunk)
+        suspicious_pages = [
+            (page_number, issue)
+            for page_number in chunk.page_numbers
+            if (
+                issue := self._translation_page_issue(
+                    page_number,
+                    source_pages.get(page_number, ""),
+                    pages.get(page_number, ""),
+                )
+            )
+        ]
+        if suspicious_pages:
+            try:
+                for page_number, _issue in suspicious_pages:
+                    repaired_page = await self._repair_translation_page(
+                        openai_service,
+                        prompt,
+                        slot,
+                        book,
+                        page_number,
+                        source_pages.get(page_number, ""),
+                        target_language,
+                    )
+                    if repaired_page is not None:
+                        pages[page_number] = repaired_page
+            except Exception as e:
+                provider_disabled = self._is_provider_disabled_error(e)
+                return ChunkTranslationResult(
+                    chunk=chunk,
+                    pages=pages,
+                    provider_label=slot.label,
+                    wait_seconds=self._retry_wait_seconds(e),
+                    error=self._short_error(e),
+                    retryable=not provider_disabled,
+                    provider_disabled=provider_disabled,
+                )
+
+            remaining_issues = [
+                issue
+                for page_number, _issue in suspicious_pages
+                if (
+                    issue := self._translation_page_issue(
+                        page_number,
+                        source_pages.get(page_number, ""),
+                        pages.get(page_number, ""),
+                    )
+                )
+            ]
+            if remaining_issues:
+                return ChunkTranslationResult(
+                    chunk=chunk,
+                    pages=pages,
+                    provider_label=slot.label,
+                    error="AI translation completeness check failed: " + "; ".join(remaining_issues[:6]),
+                    retryable=True,
+                    wait_seconds=None,
+                )
+
         return ChunkTranslationResult(chunk=chunk, pages=pages, provider_label=slot.label)
+
+    async def _repair_translation_page(
+        self,
+        openai_service: OpenAIService,
+        prompt: str,
+        slot: ProviderSlot,
+        book: UploadedBook,
+        page_number: int,
+        source_text: str,
+        target_language: str,
+    ) -> str | None:
+        repair_prompt = (
+            prompt
+            + "\n\nThis is a completeness repair for one page that was shortened or omitted previously. "
+            "Translate the entire page line by line. Preserve every paragraph, caption, credit, list item and number. "
+            "Do not summarize even if the page is legal text, an index, a caption page, or fragmented OCR."
+        )
+        message = (
+            f"Cookbook title: {book.name}\n"
+            f"Original file name: {book.original_file_name}\n"
+            f"Page range: {page_number}-{page_number}\n"
+            f"Target language: {target_language}\n\n"
+            f"Translate this single cookbook page completely:\n[Page {page_number}]\n{source_text}"
+        )
+        response = await openai_service.get_response(
+            repair_prompt,
+            message,
+            response_schema=OpenAIBookTranslationChunkParse,
+            provider=slot.provider,
+        )
+        if not response:
+            return None
+        return next((page.text for page in response.pages if page.page == page_number), None)
+
+    @staticmethod
+    def _source_pages_from_chunk(chunk: BookTextChunk) -> dict[int, str]:
+        matches = list(re.finditer(r"(?m)^\[Page (\d+)\]\n", chunk.text))
+        pages: dict[int, str] = {}
+        for index, match in enumerate(matches):
+            start = match.end()
+            end = matches[index + 1].start() if index + 1 < len(matches) else len(chunk.text)
+            page_number = int(match.group(1))
+            if page_number in chunk.page_numbers:
+                pages[page_number] = chunk.text[start:end].strip()
+        return pages
+
+    @staticmethod
+    def _translation_text_metrics(text: str) -> tuple[str, int, list[str]]:
+        normalized = re.sub(r"\s+", " ", text or "").strip()
+        words = re.findall(r"[^\W\d_]{2,}", normalized, flags=re.UNICODE)
+        numbers = [
+            re.sub(r"[.,]", "", number)
+            for number in re.findall(r"(?<!\w)\d+(?:[.,]\d+)?", normalized)
+        ]
+        return normalized, len(words), numbers
+
+    @classmethod
+    def _translation_page_issue(cls, page_number: int, source: str, translated: str) -> str | None:
+        source_text, source_word_count, source_numbers = cls._translation_text_metrics(source)
+        translated_text, translated_word_count, translated_numbers = cls._translation_text_metrics(translated)
+
+        # Empty scans, decorative pages, and OCR fragments are allowed to stay empty.
+        if source_word_count < 8 or len(source_text) < 45:
+            return None
+        if translated_word_count < 4 or len(translated_text) < 20:
+            return f"page {page_number} is empty or nearly empty"
+
+        length_ratio = len(translated_text) / max(len(source_text), 1)
+        word_ratio = translated_word_count / max(source_word_count, 1)
+        if length_ratio < 0.32 and word_ratio < 0.38:
+            return f"page {page_number} is suspiciously short ({length_ratio:.0%} of source text)"
+
+        unique_source_numbers = set(source_numbers)
+        if len(unique_source_numbers) >= 4:
+            translated_number_set = set(translated_numbers)
+            retained = len(unique_source_numbers & translated_number_set) / len(unique_source_numbers)
+            if retained < 0.55:
+                return f"page {page_number} lost too many numbers or quantities ({retained:.0%} retained)"
+
+        return None
+
+    def _audit_translated_pages(
+        self,
+        chunks: list[BookTextChunk],
+        translated_pages: list[tuple[int, str]],
+    ) -> dict:
+        source_pages: dict[int, str] = {}
+        expected_pages: set[int] = set()
+        for chunk in chunks:
+            expected_pages.update(chunk.page_numbers)
+            source_pages.update(self._source_pages_from_chunk(chunk))
+
+        translated_page_map = dict(translated_pages)
+        missing_pages = sorted(expected_pages - set(translated_page_map))
+        unexpected_pages = sorted(set(translated_page_map) - expected_pages)
+        suspicious_pages = [
+            issue
+            for page_number in sorted(expected_pages)
+            if (
+                issue := self._translation_page_issue(
+                    page_number,
+                    source_pages.get(page_number, ""),
+                    translated_page_map.get(page_number, ""),
+                )
+            )
+        ]
+        audit = {
+            "version": 1,
+            "source_pages": len(expected_pages),
+            "translated_pages": len(translated_page_map),
+            "missing_pages": missing_pages,
+            "unexpected_pages": unexpected_pages,
+            "suspicious_pages": suspicious_pages,
+            "passed": not missing_pages and not unexpected_pages and not suspicious_pages,
+        }
+        if not audit["passed"]:
+            details = []
+            if missing_pages:
+                details.append(f"missing pages: {', '.join(map(str, missing_pages[:12]))}")
+            if unexpected_pages:
+                details.append(f"unexpected pages: {', '.join(map(str, unexpected_pages[:12]))}")
+            if suspicious_pages:
+                details.append("; ".join(suspicious_pages[:8]))
+            raise ValueError("Translated book completeness audit failed: " + " | ".join(details))
+        return audit
 
     @staticmethod
     def _is_rtl_language(target_language: str) -> bool:
@@ -1330,13 +1855,34 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
         rtl_markers = ("hebrew", "עברית", "arabic", "ערבית", "farsi", "persian", "urdu", "yiddish")
         return any(marker in language for marker in rtl_markers)
 
+    @staticmethod
+    def _translated_page_heading(text: str, page_number: int, rtl: bool) -> str:
+        ignored = {
+            "white heat",
+            "basics",
+            "contents",
+            "table of contents",
+            "תוכן עניינים",
+            "יסודות",
+        }
+        for raw_line in (text or "").splitlines()[:14]:
+            line = re.sub(r"\s+", " ", raw_line).strip(" -–—|:.;")
+            if not line or line.casefold() in ignored or len(line) > 105:
+                continue
+            if len(re.findall(r"[^\W\d_]{2,}", line, flags=re.UNICODE)) < 2:
+                continue
+            return line
+        return f"עמוד {page_number}" if rtl else f"Page {page_number}"
+
     def _build_translated_book_html(
         self,
         book: UploadedBook,
         target_language: str,
         translated_pages: list[tuple[int, str]],
+        has_cover: bool = False,
     ) -> str:
-        direction = "rtl" if self._is_rtl_language(target_language) else "ltr"
+        rtl = self._is_rtl_language(target_language)
+        direction = "rtl" if rtl else "ltr"
         title = html.escape(f"{book.name} - {target_language}")
         source = html.escape(book.original_file_name)
         language = html.escape(target_language)
@@ -1349,21 +1895,71 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
         else:
             page_range = "Whole book"
         page_range = html.escape(page_range)
+        labels = {
+            "contents": "תוכן עניינים" if rtl else "Table of contents",
+            "cover": "שער" if rtl else "Cover",
+            "page": "עמוד" if rtl else "Page",
+            "of": "מתוך" if rtl else "of",
+            "previous": "הקודם" if rtl else "Previous",
+            "next": "הבא" if rtl else "Next",
+            "translated": "תורגם אל" if rtl else "Translated to",
+            "from": "מתוך" if rtl else "from",
+            "pages": "עמודים" if rtl else "pages",
+            "reading_progress": "התקדמות בקריאה" if rtl else "Reading progress",
+            "open_contents": "פתח תוכן עניינים" if rtl else "Open table of contents",
+            "close_contents": "מזער תוכן עניינים" if rtl else "Collapse table of contents",
+            "open_progress": "פתח התקדמות" if rtl else "Open reading progress",
+            "close_progress": "מזער התקדמות" if rtl else "Collapse reading progress",
+        }
         page_sections: list[str] = []
+        toc_items: list[str] = []
 
-        for page_number, text in translated_pages:
-            page_title = html.escape(f"Page {page_number}")
+        for index, (page_number, text) in enumerate(translated_pages):
+            page_heading = self._translated_page_heading(text, page_number, rtl)
+            page_title = html.escape(f"{labels['page']} {page_number}")
             page_text = html.escape(text.strip())
+            previous_link = (
+                f'<a href="#page-{translated_pages[index - 1][0]}">‹ {labels["previous"]}</a>'
+                if index > 0
+                else "<span></span>"
+            )
+            next_link = (
+                f'<a href="#page-{translated_pages[index + 1][0]}">{labels["next"]} ›</a>'
+                if index + 1 < len(translated_pages)
+                else "<span></span>"
+            )
+            toc_items.append(
+                f'<li><a href="#page-{page_number}" data-page-target="{index + 1}">'
+                f'<span>{html.escape(page_heading)}</span>'
+                f'<strong>{page_number}</strong></a></li>'
+            )
             page_sections.append(
                 "\n".join(
                     [
-                        '<section class="page">',
-                        f"<h2>{page_title}</h2>",
+                        f'<article class="book-page reading-position" id="page-{page_number}" '
+                        f'data-page-index="{index + 1}" data-page-number="{page_number}" '
+                        f'data-page-label="{page_title}">',
+                        '<header class="page-header">',
+                        f"<span>{html.escape(page_heading)}</span>",
+                        f"<strong>{page_title}</strong>",
+                        "</header>",
                         f"<pre>{page_text}</pre>",
-                        "</section>",
+                        '<footer class="page-footer">',
+                        previous_link,
+                        '<a href="#contents">' + labels["contents"] + "</a>",
+                        next_link,
+                        "</footer>",
+                        f'<div class="printed-page-number">{page_number}</div>',
+                        "</article>",
                     ]
                 )
             )
+
+        cover_markup = (
+            '<img class="cover-image" src="./cover" alt="" loading="eager">'
+            if has_cover
+            else '<div class="cover-fallback" aria-hidden="true">☰</div>'
+        )
 
         return f"""<!doctype html>
 <html lang="auto" dir="{direction}">
@@ -1374,57 +1970,438 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
   <style>
     :root {{
       color-scheme: light;
-      font-family: Arial, Helvetica, sans-serif;
-      background: #f7f2e8;
-      color: #241611;
+      font-family: Georgia, "Times New Roman", Arial, sans-serif;
+      background: #ece8df;
+      color: #211914;
+      scroll-behavior: smooth;
     }}
+    * {{ box-sizing: border-box; }}
     body {{
       margin: 0;
-      padding: 32px 18px;
-      line-height: 1.7;
+      padding: 0 18px 56px;
+      line-height: 1.75;
+      transition: padding-left 180ms ease;
     }}
-    main {{
-      max-width: 920px;
+    .book-shell {{
+      max-width: 980px;
       margin: 0 auto;
+    }}
+    .book-toolbar {{
+      align-items: center;
+      background: rgba(255, 253, 248, 0.96);
+      border-bottom: 1px solid #d9cebc;
+      display: flex;
+      gap: 18px;
+      inset-inline: 0;
+      justify-content: center;
+      padding: 10px 16px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }}
+    .book-toolbar a, .page-footer a {{ color: #8f3f1f; font-weight: 700; text-decoration: none; }}
+    .book-sidebar {{
+      background: rgba(255, 253, 248, 0.98);
+      border: 1px solid #d9cebc;
+      border-radius: 6px;
+      box-shadow: 0 8px 26px rgba(61, 45, 29, 0.16);
+      direction: {direction};
+      display: flex;
+      flex-direction: column;
+      left: 12px;
+      overflow: hidden;
+      position: fixed;
+      top: 64px;
+      bottom: 104px;
+      transition: width 180ms ease;
+      width: 320px;
+      z-index: 30;
+    }}
+    .book-sidebar.is-collapsed {{ width: 48px; }}
+    .sidebar-header {{
+      align-items: center;
+      border-bottom: 1px solid #dfd4c4;
+      display: flex;
+      flex: 0 0 auto;
+      gap: 10px;
+      min-height: 48px;
+      padding: 6px;
+    }}
+    .sidebar-title {{
+      flex: 1;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 16px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }}
+    .sidebar-toggle, .progress-toggle {{
+      align-items: center;
+      background: transparent;
+      border: 0;
+      border-radius: 4px;
+      color: #8f3f1f;
+      cursor: pointer;
+      display: inline-flex;
+      flex: 0 0 34px;
+      font-size: 24px;
+      height: 34px;
+      justify-content: center;
+      padding: 0;
+      width: 34px;
+    }}
+    .sidebar-toggle:hover, .sidebar-toggle:focus-visible,
+    .progress-toggle:hover, .progress-toggle:focus-visible {{
+      background: #f1e5d6;
+      outline: 2px solid #b95f35;
+      outline-offset: 1px;
+    }}
+    .sidebar-scroll {{
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 8px 10px 14px;
+      scrollbar-gutter: stable;
+    }}
+    .book-sidebar.is-collapsed .sidebar-title,
+    .book-sidebar.is-collapsed .sidebar-scroll {{ display: none; }}
+    .sidebar-toc {{ list-style: none; margin: 0; padding: 0; }}
+    .sidebar-toc li {{ border-bottom: 1px solid #eee4d5; }}
+    .sidebar-toc a {{
+      align-items: baseline;
+      color: #2f261f;
+      display: flex;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 13px;
+      gap: 10px;
+      justify-content: space-between;
+      padding: 8px 6px;
+      text-decoration: none;
+    }}
+    .sidebar-toc a span {{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+    .sidebar-toc a:hover, .sidebar-toc a:focus-visible {{ background: #f6eee3; }}
+    .sidebar-toc a.is-active {{
+      background: #f1dfcd;
+      border-inline-start: 3px solid #a94f29;
+      color: #7f3418;
+      font-weight: 700;
+    }}
+    .reading-progress {{
+      background: rgba(255, 253, 248, 0.98);
+      border: 1px solid #d9cebc;
+      border-radius: 6px;
+      bottom: 12px;
+      box-shadow: 0 8px 26px rgba(61, 45, 29, 0.16);
+      direction: {direction};
+      left: 12px;
+      padding: 8px 10px 10px;
+      position: fixed;
+      transition: width 180ms ease;
+      width: 320px;
+      z-index: 31;
+    }}
+    .reading-progress.is-collapsed {{ padding: 6px; width: 90px; }}
+    .progress-header {{ align-items: center; display: flex; gap: 8px; min-height: 34px; }}
+    .progress-title {{
+      flex: 1;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+    }}
+    .progress-percent {{
+      color: #8f3f1f;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      white-space: nowrap;
+    }}
+    .progress-details {{ font-family: Arial, Helvetica, sans-serif; font-size: 13px; margin-top: 5px; }}
+    .reading-progress.is-collapsed .progress-title,
+    .reading-progress.is-collapsed .progress-details {{ display: none; }}
+    .progress-track {{
+      background: #e8dfd3;
+      border-radius: 3px;
+      height: 6px;
+      margin-top: 7px;
+      overflow: hidden;
+    }}
+    .progress-fill {{ background: #a94f29; height: 100%; transition: width 180ms ease; width: 0; }}
+    @media (min-width: 1180px) {{
+      body.sidebar-expanded {{ padding-left: 350px; }}
+    }}
+    .cover-page, .contents-page, .book-page {{
       background: #fffdf8;
-      border: 1px solid #eadfca;
-      border-radius: 8px;
-      padding: clamp(18px, 4vw, 44px);
-      box-shadow: 0 8px 28px rgba(64, 42, 24, 0.08);
+      border: 1px solid #d9cebc;
+      border-radius: 6px;
+      box-shadow: 0 8px 26px rgba(61, 45, 29, 0.12);
+      margin: 28px auto;
+      min-height: min(1120px, calc(100vh - 92px));
+      overflow: hidden;
+      padding: clamp(26px, 6vw, 72px);
+      position: relative;
+      scroll-margin-top: 64px;
+    }}
+    .cover-page {{
+      align-items: center;
+      display: grid;
+      gap: 34px;
+      grid-template-columns: minmax(230px, 0.8fr) minmax(280px, 1.2fr);
+    }}
+    .cover-image {{
+      aspect-ratio: 3 / 4;
+      border: 1px solid #cfc2af;
+      box-shadow: 0 12px 28px rgba(45, 31, 18, 0.2);
+      max-height: 720px;
+      object-fit: cover;
+      width: 100%;
+    }}
+    .cover-fallback {{
+      align-items: center;
+      aspect-ratio: 3 / 4;
+      background: #ede3d4;
+      color: #8f3f1f;
+      display: flex;
+      font-size: 72px;
+      justify-content: center;
     }}
     h1 {{
-      margin: 0 0 8px;
-      font-size: clamp(28px, 5vw, 44px);
+      font-size: clamp(34px, 6vw, 64px);
+      line-height: 1.15;
+      margin: 0 0 22px;
     }}
     .meta {{
       color: #7d6d5d;
-      margin-bottom: 32px;
+      font-family: Arial, Helvetica, sans-serif;
     }}
-    .page {{
-      break-inside: avoid;
-      border-top: 1px solid #eadfca;
-      padding-top: 24px;
-      margin-top: 24px;
-    }}
-    h2 {{
-      color: #8f3f1f;
-      font-size: 18px;
-      margin: 0 0 12px;
+    .contents-page h2 {{ font-size: 36px; margin: 0 0 28px; }}
+    .toc {{ columns: 2; column-gap: 48px; list-style: none; margin: 0; padding: 0; }}
+    .toc li {{ break-inside: avoid; border-bottom: 1px dotted #cbbca7; margin-bottom: 9px; padding-bottom: 7px; }}
+    .toc a {{ color: inherit; display: flex; gap: 12px; justify-content: space-between; text-decoration: none; }}
+    .toc span {{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+    .page-header {{
+      align-items: baseline;
+      border-bottom: 1px solid #dfd4c4;
+      color: #79563e;
+      display: flex;
+      font-family: Arial, Helvetica, sans-serif;
+      gap: 16px;
+      justify-content: space-between;
+      margin-bottom: 28px;
+      padding-bottom: 12px;
     }}
     pre {{
       white-space: pre-wrap;
       word-wrap: break-word;
       font-family: inherit;
       margin: 0;
+      min-height: 760px;
+    }}
+    .page-footer {{
+      border-top: 1px solid #dfd4c4;
+      display: grid;
+      font-family: Arial, Helvetica, sans-serif;
+      grid-template-columns: 1fr 1fr 1fr;
+      margin-top: 36px;
+      padding-top: 14px;
+      text-align: center;
+    }}
+    .page-footer > :first-child {{ text-align: start; }}
+    .page-footer > :last-child {{ text-align: end; }}
+    .printed-page-number {{ bottom: 20px; color: #7d6d5d; inset-inline: 0; position: absolute; text-align: center; }}
+    @media (max-width: 720px) {{
+      body {{ padding-inline: 8px; }}
+      .book-sidebar {{ bottom: 96px; left: 8px; max-width: calc(100vw - 16px); top: 58px; }}
+      .book-sidebar:not(.is-collapsed) {{ width: min(320px, calc(100vw - 16px)); }}
+      .reading-progress {{ bottom: 8px; left: 8px; max-width: calc(100vw - 16px); }}
+      .cover-page {{ grid-template-columns: 1fr; }}
+      .cover-image, .cover-fallback {{ margin: 0 auto; max-width: 360px; }}
+      .toc {{ columns: 1; }}
+      .cover-page, .contents-page, .book-page {{ min-height: auto; padding: 24px 20px 58px; }}
+      pre {{ min-height: 0; }}
+    }}
+    @media print {{
+      @page {{ margin: 16mm; size: A4; }}
+      body {{ background: #fff; padding: 0; }}
+      .book-toolbar, .book-sidebar, .reading-progress {{ display: none; }}
+      .cover-page, .contents-page, .book-page {{
+        border: 0;
+        box-shadow: none;
+        break-after: page;
+        margin: 0;
+        min-height: 0;
+        padding: 0;
+      }}
+      .page-footer {{ display: none; }}
     }}
   </style>
 </head>
 <body>
-  <main>
-    <h1>{title}</h1>
-    <div class="meta">Translated to {language} from {source} · {page_range}</div>
+  <nav class="book-toolbar" aria-label="{labels['contents']}">
+    <a href="#cover">{labels['cover']}</a>
+    <a href="#contents">{labels['contents']}</a>
+    <span>{len(translated_pages)} {labels['pages']}</span>
+  </nav>
+  <aside class="book-sidebar" id="bookSidebar" aria-label="{labels['contents']}">
+    <div class="sidebar-header">
+      <button class="sidebar-toggle" id="sidebarToggle" type="button"
+        aria-expanded="true" title="{labels['close_contents']}">‹</button>
+      <strong class="sidebar-title">{labels['contents']}</strong>
+    </div>
+    <nav class="sidebar-scroll" id="sidebarScroll" aria-label="{labels['contents']}">
+      <ol class="sidebar-toc">{"".join(toc_items)}</ol>
+    </nav>
+  </aside>
+  <section class="reading-progress" id="readingProgress" aria-label="{labels['reading_progress']}">
+    <div class="progress-header">
+      <strong class="progress-title">{labels['reading_progress']}</strong>
+      <span class="progress-percent" id="progressPercent">0%</span>
+      <button class="progress-toggle" id="progressToggle" type="button"
+        aria-expanded="true" title="{labels['close_progress']}">−</button>
+    </div>
+    <div class="progress-details">
+      <div id="progressPage">{labels['cover']}</div>
+      <div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+    </div>
+  </section>
+  <main class="book-shell">
+    <section class="cover-page reading-position" id="cover" data-page-index="0"
+      data-page-number="0" data-page-label="{labels['cover']}">
+      {cover_markup}
+      <div>
+        <h1>{title}</h1>
+        <div class="meta">{labels['translated']} {language}<br>{labels['from']} {source}<br>{page_range}</div>
+      </div>
+    </section>
+    <section class="contents-page reading-position" id="contents" data-page-index="0"
+      data-page-number="0" data-page-label="{labels['contents']}">
+      <h2>{labels['contents']}</h2>
+      <ol class="toc">{"".join(toc_items)}</ol>
+    </section>
     {"".join(page_sections)}
   </main>
+  <script>
+    (() => {{
+      const sidebar = document.getElementById("bookSidebar");
+      const sidebarToggle = document.getElementById("sidebarToggle");
+      const sidebarScroll = document.getElementById("sidebarScroll");
+      const progress = document.getElementById("readingProgress");
+      const progressToggle = document.getElementById("progressToggle");
+      const progressPercent = document.getElementById("progressPercent");
+      const progressPage = document.getElementById("progressPage");
+      const progressFill = document.getElementById("progressFill");
+      const positions = [...document.querySelectorAll(".reading-position")];
+      const pageLinks = [...document.querySelectorAll(".sidebar-toc a[data-page-target]")];
+      const totalPages = {len(translated_pages)};
+      const pageWord = {json.dumps(labels['page'], ensure_ascii=False)};
+      const ofWord = {json.dumps(labels['of'], ensure_ascii=False)};
+      const coverLabel = {json.dumps(labels['cover'], ensure_ascii=False)};
+      const compactViewport = window.matchMedia("(max-width: 1179px)");
+
+      const readStoredBoolean = (key, fallback) => {{
+        try {{
+          const value = localStorage.getItem(key);
+          return value === null ? fallback : value === "true";
+        }} catch (_error) {{
+          return fallback;
+        }}
+      }};
+      const storeBoolean = (key, value) => {{
+        try {{ localStorage.setItem(key, String(value)); }} catch (_error) {{ /* storage is optional */ }}
+      }};
+
+      let sidebarCollapsed = readStoredBoolean("translatedBookSidebarCollapsed", compactViewport.matches);
+      let progressCollapsed = readStoredBoolean("translatedBookProgressCollapsed", false);
+
+      const applySidebarState = () => {{
+        sidebar.classList.toggle("is-collapsed", sidebarCollapsed);
+        document.body.classList.toggle("sidebar-expanded", !sidebarCollapsed);
+        sidebarToggle.textContent = sidebarCollapsed ? "›" : "‹";
+        sidebarToggle.setAttribute("aria-expanded", String(!sidebarCollapsed));
+        sidebarToggle.title = sidebarCollapsed
+          ? {json.dumps(labels['open_contents'], ensure_ascii=False)}
+          : {json.dumps(labels['close_contents'], ensure_ascii=False)};
+      }};
+      const applyProgressState = () => {{
+        progress.classList.toggle("is-collapsed", progressCollapsed);
+        progressToggle.textContent = progressCollapsed ? "+" : "−";
+        progressToggle.setAttribute("aria-expanded", String(!progressCollapsed));
+        progressToggle.title = progressCollapsed
+          ? {json.dumps(labels['open_progress'], ensure_ascii=False)}
+          : {json.dumps(labels['close_progress'], ensure_ascii=False)};
+      }};
+
+      sidebarToggle.addEventListener("click", () => {{
+        sidebarCollapsed = !sidebarCollapsed;
+        storeBoolean("translatedBookSidebarCollapsed", sidebarCollapsed);
+        applySidebarState();
+      }});
+      progressToggle.addEventListener("click", () => {{
+        progressCollapsed = !progressCollapsed;
+        storeBoolean("translatedBookProgressCollapsed", progressCollapsed);
+        applyProgressState();
+      }});
+
+      const updateReadingPosition = (position) => {{
+        const pageIndex = Number(position.dataset.pageIndex || 0);
+        const pageNumber = position.dataset.pageNumber || "0";
+        const pageLabel = position.dataset.pageLabel || coverLabel;
+        const percent = pageIndex > 0 && totalPages > 0
+          ? Math.min(100, Math.max(1, Math.round((pageIndex / totalPages) * 100)))
+          : 0;
+        progressPercent.textContent = `${{percent}}%`;
+        progressFill.style.width = `${{percent}}%`;
+        progressPage.textContent = pageIndex > 0
+          ? `${{pageWord}} ${{pageNumber}} · ${{pageIndex}} ${{ofWord}} ${{totalPages}}`
+          : pageLabel;
+
+        pageLinks.forEach((link) => {{
+          link.classList.toggle("is-active", Number(link.dataset.pageTarget) === pageIndex);
+        }});
+        const activeLink = pageLinks.find((link) => Number(link.dataset.pageTarget) === pageIndex);
+        if (activeLink && !sidebarCollapsed) {{
+          const top = activeLink.offsetTop;
+          const bottom = top + activeLink.offsetHeight;
+          if (top < sidebarScroll.scrollTop) sidebarScroll.scrollTo({{ top, behavior: "smooth" }});
+          else if (bottom > sidebarScroll.scrollTop + sidebarScroll.clientHeight) {{
+            sidebarScroll.scrollTo({{ top: bottom - sidebarScroll.clientHeight, behavior: "smooth" }});
+          }}
+        }}
+      }};
+
+      const observer = new IntersectionObserver((entries) => {{
+        const visible = entries.filter((entry) => entry.isIntersecting);
+        if (!visible.length) return;
+        visible.sort((a, b) => b.intersectionRatio - a.intersectionRatio);
+        updateReadingPosition(visible[0].target);
+      }}, {{ rootMargin: "-20% 0px -55% 0px", threshold: [0, 0.01, 0.25] }});
+      positions.forEach((position) => observer.observe(position));
+
+      pageLinks.forEach((link) => {{
+        link.addEventListener("click", (event) => {{
+          const targetSelector = link.getAttribute("href");
+          const target = targetSelector ? document.querySelector(targetSelector) : null;
+          if (target) {{
+            event.preventDefault();
+            const top = target.getBoundingClientRect().top + window.scrollY - 64;
+            window.scrollTo({{ top: Math.max(0, top), behavior: "instant" }});
+            history.pushState(null, "", targetSelector);
+            updateReadingPosition(target);
+          }}
+          if (compactViewport.matches) {{
+            sidebarCollapsed = true;
+            storeBoolean("translatedBookSidebarCollapsed", true);
+            applySidebarState();
+          }}
+        }});
+      }});
+
+      applySidebarState();
+      applyProgressState();
+      const initialPosition = document.querySelector(location.hash + ".reading-position") || positions[0];
+      if (initialPosition) updateReadingPosition(initialPosition);
+    }})();
+  </script>
 </body>
 </html>
 """
@@ -1435,9 +2412,20 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
         uploaded_books_root: Path,
         target_language: str,
         html_content: str,
+        translation_audit: dict,
     ) -> UploadedBook:
-        translated_book_id = uuid4()
-        file_name = f"{translated_book_id}.html"
+        translated_book = None
+        if book.translated_book_id:
+            translated_book = self.repos.session.execute(
+                sa.select(UploadedBook).where(
+                    UploadedBook.id == book.translated_book_id,
+                    UploadedBook.group_id == book.group_id,
+                    UploadedBook.is_translated_book.is_(True),
+                )
+            ).scalar_one_or_none()
+
+        translated_book_id = translated_book.id if translated_book else uuid4()
+        file_name = translated_book.file_name if translated_book else f"{translated_book_id}.html"
         root = uploaded_books_root.joinpath(str(book.group_id)).resolve()
         target_dir = root.joinpath(str(translated_book_id)).resolve()
         if not target_dir.is_relative_to(root):
@@ -1449,32 +2437,57 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
             raise ValueError("Invalid translated book file path")
         target_path.write_text(html_content, encoding="utf-8")
 
-        translated_book = UploadedBook(
-            group_id=book.group_id,
-            household_id=book.household_id,
-            user_id=book.user_id,
-            name=f"{book.name} ({target_language})",
-            file_name=file_name,
-            original_file_name=f"{book.name} - {target_language}.html",
-            extension=".html",
-            content_type="text/html; charset=utf-8",
-            size=target_path.stat().st_size,
-            is_translated_book=True,
-            translated_from_book_id=book.id,
-            translation_language=target_language,
-            translation_status=TRANSLATION_COMPLETED,
-            translation_page_start=book.translation_page_start,
-            translation_page_end=book.translation_page_end,
-            translation_completed_at=get_utc_now(),
-            session=self.repos.session,
-        )
-        translated_book.id = translated_book_id
+        source_cover = UploadedBookCoverService.cover_path(uploaded_books_root, book)
+        if source_cover.exists():
+            shutil.copy2(source_cover, target_dir.joinpath(BOOK_COVER_FILE_NAME))
+
+        try:
+            source_metadata = json.loads(book.book_metadata_json or "{}")
+        except (TypeError, ValueError):
+            source_metadata = {}
+        if not isinstance(source_metadata, dict):
+            source_metadata = {}
+        translated_metadata = {
+            **source_metadata,
+            "translated_from_book_id": str(book.id),
+            "translation_language": target_language,
+            "translation_audit": translation_audit,
+        }
+        if source_cover.exists():
+            translated_metadata["cover_file_name"] = BOOK_COVER_FILE_NAME
+
+        values = {
+            "group_id": book.group_id,
+            "household_id": book.household_id,
+            "user_id": book.user_id,
+            "name": f"{book.name} ({target_language})",
+            "file_name": file_name,
+            "original_file_name": f"{book.name} - {target_language}.html",
+            "extension": ".html",
+            "content_type": "text/html; charset=utf-8",
+            "size": target_path.stat().st_size,
+            "book_metadata_json": json.dumps(translated_metadata, ensure_ascii=False),
+            "is_translated_book": True,
+            "translated_from_book_id": book.id,
+            "translation_language": target_language,
+            "translation_status": TRANSLATION_COMPLETED,
+            "translation_page_start": book.translation_page_start,
+            "translation_page_end": book.translation_page_end,
+            "translation_completed_at": get_utc_now(),
+        }
+        if translated_book:
+            for key, value in values.items():
+                setattr(translated_book, key, value)
+        else:
+            translated_book = UploadedBook(**values, session=self.repos.session)
+            translated_book.id = translated_book_id
+        assert translated_book is not None
         self.repos.session.add(translated_book)
         self.repos.session.commit()
         self.repos.session.refresh(translated_book)
         return translated_book
 
-    async def translate_book(
+    async def translate_book(  # noqa: C901
         self,
         book_id: UUID4,
         uploaded_books_root: Path,
@@ -1674,7 +2687,11 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                                     )
                                     self._save_translation_progress(book, chunk_states)
                             else:
-                                translated_chunk_file = self._write_translated_chunk(work_dir, result.chunk, result.pages)
+                                translated_chunk_file = self._write_translated_chunk(
+                                    work_dir,
+                                    result.chunk,
+                                    result.pages,
+                                )
                                 state.update(
                                     {
                                         "status": CHUNK_COMPLETED,
@@ -1714,8 +2731,22 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                     translated_pages.extend(self._read_translated_chunk_pages(work_dir, file_name))
 
             translated_pages = sorted(dict(translated_pages).items())
-            html_content = self._build_translated_book_html(book, target_language, translated_pages)
-            translated_book = self._create_translated_book(book, uploaded_books_root, target_language, html_content)
+            translation_audit = self._audit_translated_pages(chunks, translated_pages)
+            cover_service = UploadedBookCoverService(self.repos)
+            has_cover = await cover_service.ensure_cover(book, uploaded_books_root)
+            html_content = self._build_translated_book_html(
+                book,
+                target_language,
+                translated_pages,
+                has_cover=has_cover,
+            )
+            translated_book = self._create_translated_book(
+                book,
+                uploaded_books_root,
+                target_language,
+                html_content,
+                translation_audit,
+            )
 
             book.translated_book_id = translated_book.id
             book.translation_status = TRANSLATION_COMPLETED

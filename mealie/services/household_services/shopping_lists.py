@@ -8,6 +8,7 @@ from pydantic import UUID4
 from mealie.core.exceptions import UnexpectedNone
 from mealie.repos.all_repositories import get_repositories
 from mealie.repos.repository_factory import AllRepositories
+from mealie.schema.group.ai_providers import AIProviderOut
 from mealie.schema.household.group_shopping_list import (
     ShoppingListAddRecipeParamsBulk,
     ShoppingListCreate,
@@ -122,6 +123,7 @@ class ShoppingListService:
         self,
         list_id: UUID4,
         include_ai_tips: bool = False,
+        provider: AIProviderOut | None = None,
     ) -> tuple[ShoppingListOut, ShoppingListItemsCollectionOut]:
         shopping_list = self.shopping_lists.get_one(list_id)
         if shopping_list is None:
@@ -152,6 +154,7 @@ class ShoppingListService:
             prompt,
             message,
             response_schema=OpenAIShoppingListOrganization,
+            provider=provider,
         )
         if not response:
             raise ValueError("AI returned an empty response")
@@ -195,7 +198,10 @@ class ShoppingListService:
                 item.label_id = label.id
             update_items.append(item.cast(ShoppingListItemUpdateBulk, id=item.id))
 
-        updated_items = cast(list[ShoppingListItemOut], self.list_items.update_many(update_items) if update_items else [])
+        updated_items = cast(
+            list[ShoppingListItemOut],
+            self.list_items.update_many(update_items) if update_items else [],
+        )
 
         updated_list = cast(ShoppingListOut, self.shopping_lists.get_one(list_id))
         extras = dict(updated_list.extras or {})

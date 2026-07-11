@@ -62,6 +62,11 @@ export interface UploadedBookExtractRequest {
   translateLanguage?: string;
   pageStart?: number | null;
   pageEnd?: number | null;
+  autoRecipeImages?: boolean;
+  includeItemImages?: boolean;
+  includeAiTips?: boolean;
+  createShoppingLists?: boolean;
+  organizeShoppingListsWithAi?: boolean;
 }
 
 export interface UploadedBookTranslateRequest {
@@ -69,6 +74,20 @@ export interface UploadedBookTranslateRequest {
   targetLanguage: string;
   pageStart?: number | null;
   pageEnd?: number | null;
+}
+
+export interface UploadedBookRecipeSummary {
+  id: string;
+  slug: string;
+  name: string;
+  source?: string | null;
+}
+
+export interface UploadedBookRecipeDeleteResponse {
+  deletedCount: number;
+  remainingCount: number;
+  skippedCount: number;
+  deletedRecipeIds: string[];
 }
 
 export interface UploadedBookClassification {

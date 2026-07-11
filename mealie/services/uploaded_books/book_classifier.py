@@ -15,6 +15,7 @@ from mealie.schema.user import PrivateUser
 from mealie.services._base_service import BaseService
 from mealie.services.openai import OpenAIService
 
+from .book_cover_service import UploadedBookCoverService
 from .book_recipe_extractor import UploadedBookRecipeExtractor
 
 
@@ -110,6 +111,10 @@ class UploadedBookClassifier(BaseService):
             book.book_metadata_json = json.dumps(existing, ensure_ascii=False)
             book.classification_status = "completed"
             book.classification_error = None
+            try:
+                await UploadedBookCoverService(self.repos).ensure_cover(book, uploaded_books_root)
+            except Exception:
+                self.logger.exception("Failed to cache a cover for uploaded book %s", book_id)
         except Exception as exc:
             self.logger.exception("Failed to classify uploaded book %s", book_id)
             book.classification_status = "failed"

@@ -126,6 +126,12 @@
       </v-card-text>
     </BaseDialog>
 
+    <UploadedBookRecipeDeleteDialog
+      v-model="bookRecipeDeleteDialog"
+      :book="bookRecipeDeleteTarget"
+      @deleted="handleBookRecipesDeleted"
+    />
+
     <!-- Cookbook Page -->
     <!-- Page Title -->
     <v-container class="lg-container">
@@ -295,6 +301,24 @@
             variant="outlined"
             class="cookbook-library__book"
           >
+            <div class="cookbook-library__cover">
+              <v-img
+                v-if="book.bookMetadata?.cover_file_name"
+                :src="api.uploadedBooks.coverUrl(book.id)"
+                :alt="book.name"
+                cover
+                height="260"
+              >
+                <template #error>
+                  <div class="cookbook-library__cover-fallback">
+                    <v-icon :icon="bookIcon(book)" size="72" />
+                  </div>
+                </template>
+              </v-img>
+              <div v-else class="cookbook-library__cover-fallback">
+                <v-icon :icon="bookIcon(book)" size="72" />
+              </div>
+            </div>
             <v-card-item>
               <template #prepend>
                 <v-avatar color="surface-variant" rounded="sm">
@@ -362,6 +386,16 @@
                 @click="classifyUploadedBook(book)"
               >
                 <v-icon :icon="$globals.icons.robot" />
+              </v-btn>
+              <v-btn
+                v-if="bookRecipeSource(book)?.extractionRecipesCreated"
+                icon
+                variant="text"
+                color="warning"
+                :title="$t('cookbook.delete-book-recipes')"
+                @click="openBookRecipeDeleteDialog(book)"
+              >
+                <v-icon :icon="$globals.icons.broom" />
               </v-btn>
               <v-btn icon variant="text" color="error" :title="$t('general.delete')" @click="confirmUploadedBookDelete(book)">
                 <v-icon :icon="$globals.icons.delete" />
@@ -440,6 +474,8 @@ const refreshingBookIds = ref(new Set<string>());
 const uploadedBookDeleteDialog = ref(false);
 const uploadedBookDeleteTarget = ref<UploadedBook | null>(null);
 const uploadedBookDeleting = ref(false);
+const bookRecipeDeleteDialog = ref(false);
+const bookRecipeDeleteTarget = ref<UploadedBook | null>(null);
 let classificationRefreshTimer: number | null = null;
 
 const aiBookPresetOptions = computed(() => [
@@ -466,6 +502,13 @@ function bookClassification(book: UploadedBook): UploadedBookClassification | un
 
 function isGeneratedBook(book: UploadedBook) {
   return book.bookMetadata?.generated_by_ai === true;
+}
+
+function bookRecipeSource(book: UploadedBook) {
+  if (!book.isTranslatedBook) {
+    return book;
+  }
+  return uploadedBooks.value.find(candidate => candidate.id === book.translatedFromBookId) || null;
 }
 
 function bookLabels(book: UploadedBook) {
@@ -578,6 +621,19 @@ async function refreshAIBook(book: UploadedBook) {
 function confirmUploadedBookDelete(book: UploadedBook) {
   uploadedBookDeleteTarget.value = book;
   uploadedBookDeleteDialog.value = true;
+}
+
+function openBookRecipeDeleteDialog(book: UploadedBook) {
+  bookRecipeDeleteTarget.value = bookRecipeSource(book) || book;
+  bookRecipeDeleteDialog.value = true;
+}
+
+function handleBookRecipesDeleted(bookId: string, _deletedCount: number, remainingCount: number) {
+  const book = uploadedBooks.value.find(item => item.id === bookId);
+  if (book) {
+    book.extractionRecipesCreated = remainingCount;
+  }
+  bookRecipeDeleteTarget.value = null;
 }
 
 async function deleteUploadedBook() {
@@ -696,6 +752,22 @@ onBeforeUnmount(() => {
   flex-direction: column;
   min-height: 250px;
   border-radius: 8px;
+}
+
+.cookbook-library__cover {
+  aspect-ratio: 4 / 3;
+  background: rgb(var(--v-theme-surface-variant));
+  overflow: hidden;
+  width: 100%;
+}
+
+.cookbook-library__cover-fallback {
+  align-items: center;
+  color: rgba(var(--v-theme-on-surface), 0.54);
+  display: flex;
+  height: 260px;
+  justify-content: center;
+  width: 100%;
 }
 
 .cookbook-library__book .v-card-actions {

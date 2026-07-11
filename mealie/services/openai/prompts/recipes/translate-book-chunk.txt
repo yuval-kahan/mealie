@@ -5,6 +5,8 @@ Rules:
 - Preserve the original page numbers exactly.
 - Do not summarize, shorten, omit, add recipes, or extract structured recipe data.
 - Preserve headings, ingredient lists, instructions, notes, measurements, temperatures, and timing as faithfully as possible.
+- Preserve every visible number, quantity, temperature, year, page reference, price, and numbered-list marker exactly. Never merge or discard numeric details.
+- Before returning, compare every source page against its translated page and verify that every paragraph, heading, list item, credit, caption, and number is represented. A fluent but shortened translation is invalid.
 - Keep brand names, author names, URLs, and source credits unchanged unless a natural transliteration is clearly expected in the target language.
 - If a page contains no meaningful text, return it with an empty translated text string.
 - Return only the structured output requested by the schema.

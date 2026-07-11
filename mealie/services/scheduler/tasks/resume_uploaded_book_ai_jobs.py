@@ -1,4 +1,5 @@
 import asyncio
+import json
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -86,6 +87,15 @@ async def _run_uploaded_book_ai_job(operation: str, book_id: UUID) -> None:
 
             if operation == "extraction":
                 service = UploadedBookRecipeExtractor(repos, private_user, household, translator)
+                try:
+                    book_metadata = json.loads(book.book_metadata_json or "{}")
+                except (TypeError, ValueError):
+                    book_metadata = {}
+                extraction_options = (
+                    book_metadata.get("extraction_options", {}) if isinstance(book_metadata, dict) else {}
+                )
+                if not isinstance(extraction_options, dict):
+                    extraction_options = {}
                 await service.extract_recipes(
                     book.id,
                     uploaded_books_root,
@@ -94,6 +104,13 @@ async def _run_uploaded_book_ai_job(operation: str, book_id: UUID) -> None:
                     resume=True,
                     page_start=book.extraction_page_start,
                     page_end=book.extraction_page_end,
+                    auto_recipe_images=extraction_options.get("auto_recipe_images", True),
+                    include_item_images=extraction_options.get("include_item_images", True),
+                    include_ai_tips=extraction_options.get("include_ai_tips", True),
+                    create_shopping_lists=extraction_options.get("create_shopping_lists", True),
+                    organize_shopping_lists_with_ai=extraction_options.get(
+                        "organize_shopping_lists_with_ai", True
+                    ),
                 )
             else:
                 service = UploadedBookTranslator(repos, private_user, household, translator)

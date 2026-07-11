@@ -1,5 +1,12 @@
 import { BaseAPI } from "../base/base-clients";
-import type { AICookbookGenerateRequest, UploadedBook, UploadedBookExtractRequest, UploadedBookTranslateRequest } from "~/lib/api/types/uploaded-book";
+import type {
+  AICookbookGenerateRequest,
+  UploadedBook,
+  UploadedBookExtractRequest,
+  UploadedBookRecipeDeleteResponse,
+  UploadedBookRecipeSummary,
+  UploadedBookTranslateRequest,
+} from "~/lib/api/types/uploaded-book";
 
 const prefix = "/api";
 
@@ -14,6 +21,11 @@ const routes = {
   generate: `${prefix}/households/uploaded-books/generate`,
   refreshAi: (id: string) => `${prefix}/households/uploaded-books/${id}/refresh-ai`,
   uploadedBookFile: (id: string) => `${prefix}/households/uploaded-books/${id}/file`,
+  uploadedBookCover: (id: string) => `${prefix}/households/uploaded-books/${id}/cover`,
+  openUploadedBook: (id: string) => `${prefix}/households/uploaded-books/${id}/open`,
+  openUploadedBookSource: `${prefix}/households/uploaded-books/source/open`,
+  uploadedBookRecipes: (id: string) => `${prefix}/households/uploaded-books/${id}/recipes`,
+  deleteUploadedBookRecipes: (id: string) => `${prefix}/households/uploaded-books/${id}/recipes/delete`,
 };
 
 export class UploadedBooksAPI extends BaseAPI {
@@ -65,7 +77,35 @@ export class UploadedBooksAPI extends BaseAPI {
     return await this.requests.delete<unknown>(routes.uploadedBook(id));
   }
 
+  async getRecipes(id: string) {
+    return await this.requests.get<UploadedBookRecipeSummary[]>(routes.uploadedBookRecipes(id));
+  }
+
+  async deleteRecipes(id: string, recipeIds: string[]) {
+    return await this.requests.post<UploadedBookRecipeDeleteResponse, { recipeIds: string[] }>(
+      routes.deleteUploadedBookRecipes(id),
+      { recipeIds },
+    );
+  }
+
   fileUrl(id: string) {
     return routes.uploadedBookFile(id);
+  }
+
+  coverUrl(id: string) {
+    return routes.uploadedBookCover(id);
+  }
+
+  openUrl(id: string, page?: number | null) {
+    const params = page && page > 0 ? `?page=${page}` : "";
+    return `${routes.openUploadedBook(id)}${params}`;
+  }
+
+  openSourceUrl(source: string, page?: number | null) {
+    const params = new URLSearchParams({ source });
+    if (page && page > 0) {
+      params.set("page", String(page));
+    }
+    return `${routes.openUploadedBookSource}?${params.toString()}`;
   }
 }

@@ -11,7 +11,7 @@
       :key="category.name"
       label
       class="mr-1 mt-1"
-      color="accent"
+      :color="color"
       variant="flat"
       :size="small ? 'small' : 'default'"
       dark
@@ -37,6 +37,7 @@ interface Props {
   limit?: number;
   small?: boolean;
   maxWidth?: string | null;
+  color?: string;
 }
 const props = withDefaults(defineProps<Props>(), {
   truncate: false,
@@ -46,6 +47,7 @@ const props = withDefaults(defineProps<Props>(), {
   limit: 999,
   small: false,
   maxWidth: null,
+  color: "accent",
 });
 
 defineEmits(["item-selected"]);

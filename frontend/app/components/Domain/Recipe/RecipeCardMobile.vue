@@ -74,6 +74,16 @@
               <RecipeChips
                 class="recipe-mobile-card-tags-list"
                 :truncate="true"
+                :items="categories"
+                :title="false"
+                small
+                color="primary"
+                url-prefix="categories"
+                v-bind="$attrs"
+              />
+              <RecipeChips
+                class="recipe-mobile-card-tags-list"
+                :truncate="true"
                 :items="tags"
                 :title="false"
                 small
@@ -240,6 +250,7 @@ interface Props {
   rating?: number;
   image?: string;
   tags?: Array<any>;
+  categories?: Array<any>;
   recipeId: string;
   vertical?: boolean;
   isFlat?: boolean;
@@ -251,6 +262,7 @@ const props = withDefaults(defineProps<Props>(), {
   rating: 0,
   image: "abc123",
   tags: () => [],
+  categories: () => [],
   vertical: false,
   isFlat: false,
   height: 150,

@@ -3,31 +3,43 @@ import shutil
 from pathlib import Path
 from uuid import uuid4
 
+import sqlalchemy as sa
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import UUID4
 from sqlalchemy import select
-from starlette.responses import FileResponse
+from starlette.responses import FileResponse, RedirectResponse
 
 from mealie.core.dependencies.dependencies import get_current_user
 from mealie.db.models._model_utils.datetime import get_utc_now
 from mealie.db.models.household.uploaded_book import UploadedBook
+from mealie.db.models.recipe import RecipeModel
+from mealie.db.models.recipe.api_extras import ApiExtras
 from mealie.routes._base import controller
 from mealie.routes._base.base_controllers import BasePublicController
 from mealie.schema.cookbook.uploaded_book import (
     AICookbookGenerateRequest,
     UploadedBookExtractRequest,
     UploadedBookOut,
+    UploadedBookRecipeDeleteRequest,
+    UploadedBookRecipeDeleteResponse,
+    UploadedBookRecipeSummary,
     UploadedBookTranslateRequest,
 )
 from mealie.schema.household.household import HouseholdInDB
 from mealie.schema.user import PrivateUser
+from mealie.services.recipe.recipe_service import RecipeService
 from mealie.services.uploaded_books import (
     AICookbookBuilder,
     UploadedBookClassifier,
+    UploadedBookCoverService,
     UploadedBookRecipeExtractor,
     UploadedBookTranslator,
 )
-from mealie.services.uploaded_books.book_recipe_extractor import EXTRACTION_CANCELLED, TRANSLATION_CANCELLED
+from mealie.services.uploaded_books.book_recipe_extractor import (
+    EXTRACTION_CANCELLED,
+    TRANSLATION_CANCELLED,
+    parse_book_source_page_range,
+)
 
 router = APIRouter(prefix="/households/uploaded-books", tags=["Households: Uploaded Books"])
 
@@ -172,6 +184,104 @@ class UploadedBooksController(BasePublicController):
             raise HTTPException(status.HTTP_404_NOT_FOUND)
 
         return book
+
+    def _preferred_reading_book(self, book: UploadedBook, page: int | None = None) -> UploadedBook:
+        if book.is_translated_book or not book.translated_book_id:
+            return book
+
+        translated_book = (
+            self.session.execute(
+                select(UploadedBook).where(
+                    UploadedBook.id == book.translated_book_id,
+                    UploadedBook.group_id == self.group_id,
+                    UploadedBook.is_translated_book.is_(True),
+                    UploadedBook.translation_status == "completed",
+                )
+            )
+            .scalars()
+            .one_or_none()
+        )
+        if translated_book is None or not self._book_file_path(translated_book).exists():
+            return book
+
+        if page is not None:
+            if translated_book.translation_page_start and page < translated_book.translation_page_start:
+                return book
+            if translated_book.translation_page_end and page > translated_book.translation_page_end:
+                return book
+
+        return translated_book
+
+    def _book_open_redirect(self, book: UploadedBook, page: int | None = None) -> RedirectResponse:
+        target_book = self._preferred_reading_book(book, page)
+        target_url = f"/api/households/uploaded-books/{target_book.id}/file"
+        if page is not None:
+            if target_book.is_translated_book and target_book.extension in {".htm", ".html"}:
+                target_url += f"#page-{page}"
+            elif target_book.extension == ".pdf":
+                target_url += f"#page={page}"
+        return RedirectResponse(target_url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+
+    def _book_from_recipe_source(self, source: str) -> UploadedBook | None:
+        normalized_source = source.strip().casefold()
+        if not normalized_source:
+            return None
+
+        books = (
+            self.session.execute(
+                select(UploadedBook).where(
+                    UploadedBook.group_id == self.group_id,
+                    UploadedBook.is_translated_book.is_(False),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        ranked_books: list[tuple[int, UploadedBook]] = []
+        for book in books:
+            possible_names = {
+                (book.name or "").strip().casefold(),
+                get_book_stem(book.original_file_name or "", book.extension or "").strip().casefold(),
+            }
+            score = 0
+            for name in possible_names:
+                if not name:
+                    continue
+                if normalized_source.startswith(name):
+                    score = max(score, 10_000 + len(name))
+                elif name in normalized_source:
+                    score = max(score, len(name))
+            if score:
+                ranked_books.append((score, book))
+
+        return max(ranked_books, key=lambda item: item[0])[1] if ranked_books else None
+
+    def _book_recipe_models(self, book: UploadedBook) -> list[RecipeModel]:
+        source_prefix = (book.name or "").strip().lower()
+        linked_by_extra = RecipeModel.extras.any(
+            sa.and_(
+                ApiExtras.key_name == "uploadedBookSourceId",
+                ApiExtras.value == str(book.id),
+            )
+        )
+        linked_by_source = sa.func.lower(sa.func.coalesce(RecipeModel.source, "")).startswith(
+            source_prefix,
+            autoescape=True,
+        )
+        return list(
+            self.session.execute(
+                select(RecipeModel)
+                .where(
+                    RecipeModel.group_id == self.group_id,
+                    RecipeModel.household_id == self.household_id,
+                    sa.or_(linked_by_extra, linked_by_source),
+                )
+                .order_by(RecipeModel.name)
+            )
+            .scalars()
+            .unique()
+            .all()
+        )
 
     def _books_to_delete(self, book: UploadedBook) -> list[UploadedBook]:
         books_by_id = {book.id: book}
@@ -327,6 +437,11 @@ class UploadedBooksController(BasePublicController):
             resume,
             data.page_start,
             data.page_end,
+            data.auto_recipe_images,
+            data.include_item_images,
+            data.include_ai_tips,
+            data.create_shopping_lists,
+            data.organize_shopping_lists_with_ai,
         )
 
         return UploadedBookOut.model_validate(book)
@@ -500,6 +615,62 @@ class UploadedBooksController(BasePublicController):
 
         return UploadedBookOut.model_validate(book)
 
+    @router.get("/{book_id}/recipes", response_model=list[UploadedBookRecipeSummary])
+    def get_extracted_book_recipes(self, book_id: UUID4) -> list[UploadedBookRecipeSummary]:
+        book = self._get_book_or_404(book_id)
+        return [UploadedBookRecipeSummary.model_validate(recipe) for recipe in self._book_recipe_models(book)]
+
+    @router.post("/{book_id}/recipes/delete", response_model=UploadedBookRecipeDeleteResponse)
+    def delete_extracted_book_recipes(
+        self,
+        book_id: UUID4,
+        payload: UploadedBookRecipeDeleteRequest,
+    ) -> UploadedBookRecipeDeleteResponse:
+        book = self._get_book_or_404(book_id)
+        self._assert_book_not_processing(book)
+        requested_ids = set(payload.recipe_ids)
+        book_recipes = self._book_recipe_models(book)
+        selected_recipes = [recipe for recipe in book_recipes if recipe.id in requested_ids]
+        skipped_count = len(requested_ids) - len(selected_recipes)
+
+        if selected_recipes:
+            recipe_service = RecipeService(self.repos, self.user, self.household, self.translator)
+            recipe_service.delete_many([recipe.slug for recipe in selected_recipes])
+
+        remaining_count = max(0, len(book_recipes) - len(selected_recipes))
+        book.extraction_recipes_created = remaining_count
+        self.session.add(book)
+        self.session.commit()
+
+        return UploadedBookRecipeDeleteResponse(
+            deleted_count=len(selected_recipes),
+            remaining_count=remaining_count,
+            skipped_count=skipped_count,
+            deleted_recipe_ids=[recipe.id for recipe in selected_recipes],
+        )
+
+    @router.get("/source/open", response_class=RedirectResponse)
+    def open_book_from_recipe_source(
+        self,
+        source: str,
+        page: int | None = None,
+    ) -> RedirectResponse:
+        if page is not None and page < 1:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Page must be greater than zero")
+
+        book = self._book_from_recipe_source(source)
+        if book is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Uploaded cookbook was not found")
+
+        parsed_page, _ = parse_book_source_page_range(source)
+        return self._book_open_redirect(book, page or parsed_page)
+
+    @router.get("/{book_id}/open", response_class=RedirectResponse)
+    def open_book_at_page(self, book_id: UUID4, page: int | None = None) -> RedirectResponse:
+        if page is not None and page < 1:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Page must be greater than zero")
+        return self._book_open_redirect(self._get_book_or_404(book_id), page)
+
     @router.get("/{book_id}/file", response_class=FileResponse)
     def get_book_file(self, book_id: UUID4) -> FileResponse:
         book = self._get_book_or_404(book_id)
@@ -516,4 +687,17 @@ class UploadedBooksController(BasePublicController):
             if book.extension in INLINE_BOOK_EXTENSIONS or (book.is_translated_book and book.extension == ".html")
             else "attachment",
             headers={"X-Content-Type-Options": "nosniff"},
+        )
+
+    @router.get("/{book_id}/cover", response_class=FileResponse)
+    def get_book_cover(self, book_id: UUID4) -> FileResponse:
+        book = self._get_book_or_404(book_id)
+        path = UploadedBookCoverService.cover_path(self.folders.DATA_DIR.joinpath("uploaded-books"), book)
+        if not path.exists():
+            raise HTTPException(status.HTTP_404_NOT_FOUND)
+        return FileResponse(
+            path,
+            media_type="image/webp",
+            content_disposition_type="inline",
+            headers={"Cache-Control": "public, max-age=86400", "X-Content-Type-Options": "nosniff"},
         )
