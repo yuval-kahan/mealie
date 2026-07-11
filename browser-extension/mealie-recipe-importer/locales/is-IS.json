@@ -33,7 +33,7 @@
     "mealie-url": "Mealie-slóð",
     "extract-mode": "Hvað á að sækja",
     "interface-language": "Tungumál viðmóts",
-    "automatic-language": "Sjálfvirkt (tungumál vafra)",
+    "automatic-language": "Sjálfvirkt (tungumál Mealie-vefsins, síðan tungumál vafrans)",
     "translation-language": "Tungumál þýðingar"
   },
   "mode": {

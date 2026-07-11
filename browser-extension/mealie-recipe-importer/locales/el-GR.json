@@ -33,7 +33,7 @@
     "mealie-url": "Διεύθυνση Mealie",
     "extract-mode": "Τι να εξαχθεί",
     "interface-language": "Γλώσσα διεπαφής",
-    "automatic-language": "Αυτόματη (γλώσσα προγράμματος περιήγησης)",
+    "automatic-language": "Αυτόματο (γλώσσα ιστότοπου Mealie, μετά γλώσσα προγράμματος περιήγησης)",
     "translation-language": "Γλώσσα μετάφρασης"
   },
   "mode": {

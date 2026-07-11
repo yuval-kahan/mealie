@@ -124,6 +124,7 @@
 </template>
 
 <script setup lang="ts">
+import { useUserApi } from "~/composables/api/api-client";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import RecipeRating from "~/components/Domain/Recipe/RecipeRating.vue";
 import RecipeLastMade from "~/components/Domain/Recipe/RecipeLastMade.vue";

@@ -33,7 +33,7 @@
     "mealie-url": "Mealie 주소",
     "extract-mode": "추출 대상",
     "interface-language": "인터페이스 언어",
-    "automatic-language": "자동 (브라우저 언어)",
+    "automatic-language": "자동 (Mealie 사이트 언어, 이후 브라우저 언어)",
     "translation-language": "번역 언어"
   },
   "mode": {

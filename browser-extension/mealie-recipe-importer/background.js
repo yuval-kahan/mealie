@@ -3,13 +3,14 @@ importScripts("i18n.js");
 const BRIDGE_REQUEST = "MEALIE_EXTENSION_IMPORT_RECIPE_URL";
 const MAX_EXTRACTED_TEXT_LENGTH = 180000;
 const AUTH_COOKIE_NAME = "mealie.access_token";
+const SITE_LOCALE_COOKIE_NAME = "i18n_redirected";
 const extensionI18n = globalThis.MealieExtensionI18n;
 
 void updateActionTitle();
 chrome.runtime.onInstalled.addListener(updateActionTitle);
 chrome.runtime.onStartup.addListener(updateActionTitle);
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName === "sync" && changes.interfaceLanguage) {
+  if (areaName === "sync" && (changes.interfaceLanguage || changes.mealieUrl)) {
     void updateActionTitle();
   }
 });
@@ -68,9 +69,31 @@ async function importRecipeFromUrl(payload) {
 }
 
 async function updateActionTitle() {
-  const stored = await chrome.storage.sync.get("interfaceLanguage");
-  const translator = await extensionI18n.create(stored.interfaceLanguage);
+  const stored = await chrome.storage.sync.get(["interfaceLanguage", "mealieUrl"]);
+  const preferred = stored.interfaceLanguage === extensionI18n.AUTOMATIC_LOCALE
+    ? await findMealieLocale(stored.mealieUrl) || extensionI18n.AUTOMATIC_LOCALE
+    : stored.interfaceLanguage;
+  const translator = await extensionI18n.create(preferred);
   await chrome.action.setTitle({ title: translator.t("extension.action-title") });
+}
+
+async function findMealieLocale(mealieUrl) {
+  let origin = "";
+  try {
+    origin = new URL(normalizeBaseUrl(mealieUrl || "http://localhost:3000")).origin;
+  }
+  catch {
+    return null;
+  }
+
+  try {
+    const cookie = await chrome.cookies?.get({ url: origin, name: SITE_LOCALE_COOKIE_NAME });
+    const locale = decodeURIComponent(cookie?.value || "");
+    return extensionI18n.LOCALE_CODES.includes(locale) ? locale : null;
+  }
+  catch {
+    return null;
+  }
 }
 
 function aiProviderStatusMessage(payload, t) {

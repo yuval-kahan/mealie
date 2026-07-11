@@ -12,7 +12,7 @@
     "mealie-url": "Mealie address",
     "extract-mode": "What to extract",
     "interface-language": "Interface language",
-    "automatic-language": "Automatic (browser language)",
+    "automatic-language": "Automatic (Mealie site language, then browser language)",
     "translation-language": "Translation language"
   },
   "mode": {

@@ -9,9 +9,9 @@
     can-submit
     keep-open
     :loading="loading"
-    :submit-disabled="loading || selectedRecipeIds.length === 0"
+    :submit-disabled="loading || selectedRecipeIds.length === 0 || (!deleteRecipes && !deleteShoppingLists)"
     :submit-icon="$globals.icons.delete"
-    :submit-text="$t('cookbook.delete-selected-recipes', { count: selectedRecipeIds.length })"
+    :submit-text="deleteSubmitText"
     disable-submit-on-enter
     @submit="deleteSelectedRecipes"
     @close="resetDialog"
@@ -23,6 +23,23 @@
       <v-alert type="warning" variant="tonal" density="compact" class="mb-4">
         {{ $t("cookbook.delete-book-recipes-warning") }}
       </v-alert>
+
+      <div class="d-flex flex-wrap ga-4 mb-4">
+        <v-checkbox
+          v-model="deleteRecipes"
+          :label="`${$t('general.delete')} ${$t('general.recipes')}`"
+          color="error"
+          density="compact"
+          hide-details
+        />
+        <v-checkbox
+          v-model="deleteShoppingLists"
+          :label="`${$t('general.delete')} ${$t('shopping-list.shopping-lists')}`"
+          color="error"
+          density="compact"
+          hide-details
+        />
+      </div>
 
       <div class="d-flex flex-wrap align-center ga-2 mb-3">
         <v-btn
@@ -121,6 +138,8 @@ const selectedRecipeIds = ref<string[]>([]);
 const search = ref("");
 const loadingRecipes = ref(false);
 const deletingRecipes = ref(false);
+const deleteRecipes = ref(true);
+const deleteShoppingLists = ref(true);
 const loadError = ref("");
 let loadRequestId = 0;
 
@@ -129,6 +148,16 @@ const dialog = computed({
   set: value => emit("update:modelValue", value),
 });
 const loading = computed(() => loadingRecipes.value || deletingRecipes.value);
+const deleteSubmitText = computed(() => {
+  const targets: string[] = [];
+  if (deleteRecipes.value) {
+    targets.push(i18n.t("general.recipes"));
+  }
+  if (deleteShoppingLists.value) {
+    targets.push(i18n.t("shopping-list.shopping-lists"));
+  }
+  return `${i18n.t("general.delete")} ${selectedRecipeIds.value.length} ${targets.join(" + ")}`;
+});
 const remainingCount = computed(() => Math.max(0, recipes.value.length - selectedRecipeIds.value.length));
 const filteredRecipes = computed(() => {
   const query = search.value.trim().toLocaleLowerCase();
@@ -186,7 +215,11 @@ async function deleteSelectedRecipes() {
   }
   deletingRecipes.value = true;
   const bookId = props.book.id;
-  const { data, error } = await api.uploadedBooks.deleteRecipes(bookId, selectedRecipeIds.value).finally(() => {
+  const { data, error } = await api.uploadedBooks.deleteRecipes(bookId, {
+    recipeIds: selectedRecipeIds.value,
+    deleteRecipes: deleteRecipes.value,
+    deleteShoppingLists: deleteShoppingLists.value,
+  }).finally(() => {
     deletingRecipes.value = false;
   });
   if (error || !data) {
@@ -194,7 +227,10 @@ async function deleteSelectedRecipes() {
     return;
   }
 
-  alert.success(i18n.t("cookbook.delete-book-recipes-success", { count: data.deletedCount }));
+  alert.success([
+    `${data.deletedCount} ${i18n.t("general.recipes")}`,
+    `${data.deletedShoppingListCount} ${i18n.t("shopping-list.shopping-lists")}`,
+  ].join(" / "));
   emit("deleted", bookId, data.deletedCount, data.remainingCount);
   dialog.value = false;
 }
@@ -206,6 +242,8 @@ function resetDialog() {
   selectedRecipeIds.value = [];
   search.value = "";
   loadError.value = "";
+  deleteRecipes.value = true;
+  deleteShoppingLists.value = true;
 }
 </script>
 

@@ -4,6 +4,7 @@ import type {
   UploadedBook,
   UploadedBookExtractRequest,
   UploadedBookRecipeDeleteResponse,
+  UploadedBookRecipeDeleteRequest,
   UploadedBookRecipeSummary,
   UploadedBookTranslateRequest,
 } from "~/lib/api/types/uploaded-book";
@@ -81,10 +82,10 @@ export class UploadedBooksAPI extends BaseAPI {
     return await this.requests.get<UploadedBookRecipeSummary[]>(routes.uploadedBookRecipes(id));
   }
 
-  async deleteRecipes(id: string, recipeIds: string[]) {
-    return await this.requests.post<UploadedBookRecipeDeleteResponse, { recipeIds: string[] }>(
+  async deleteRecipes(id: string, payload: UploadedBookRecipeDeleteRequest) {
+    return await this.requests.post<UploadedBookRecipeDeleteResponse, UploadedBookRecipeDeleteRequest>(
       routes.deleteUploadedBookRecipes(id),
-      { recipeIds },
+      payload,
     );
   }
 

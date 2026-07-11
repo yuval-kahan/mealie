@@ -85,9 +85,17 @@ export interface UploadedBookRecipeSummary {
 
 export interface UploadedBookRecipeDeleteResponse {
   deletedCount: number;
+  deletedShoppingListCount: number;
   remainingCount: number;
   skippedCount: number;
   deletedRecipeIds: string[];
+  deletedShoppingListIds: string[];
+}
+
+export interface UploadedBookRecipeDeleteRequest {
+  recipeIds: string[];
+  deleteRecipes: boolean;
+  deleteShoppingLists: boolean;
 }
 
 export interface UploadedBookClassification {

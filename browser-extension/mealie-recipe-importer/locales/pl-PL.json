@@ -33,7 +33,7 @@
     "mealie-url": "Adres Mealie",
     "extract-mode": "Co wyodrębnić",
     "interface-language": "Język interfejsu",
-    "automatic-language": "Automatyczny (język przeglądarki)",
+    "automatic-language": "Automatyczny (język witryny Mealie, następnie język przeglądarki)",
     "translation-language": "Język tłumaczenia"
   },
   "mode": {

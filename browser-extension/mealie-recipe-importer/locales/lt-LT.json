@@ -12,7 +12,7 @@
     "mealie-url": "Mealie adresas",
     "extract-mode": "Ką ištraukti",
     "interface-language": "Sąsajos kalba",
-    "automatic-language": "Automatinė (naršyklės kalba)",
+    "automatic-language": "Automatinė (Mealie svetainės kalba, tada naršyklės kalba)",
     "translation-language": "Vertimo kalba"
   },
   "mode": {

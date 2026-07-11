@@ -22,6 +22,7 @@ const DEFAULT_SETTINGS = {
 
 const MAX_EXTRACTED_TEXT_LENGTH = 180000;
 const AUTH_COOKIE_NAME = "mealie.access_token";
+const SITE_LOCALE_COOKIE_NAME = "i18n_redirected";
 const extensionI18n = globalThis.MealieExtensionI18n;
 
 const elements = {
@@ -52,7 +53,7 @@ init();
 
 async function init() {
   const settings = await loadSettings();
-  await applyInterfaceLanguage(settings.interfaceLanguage);
+  await applyPreferredInterfaceLanguage(settings);
   populateInterfaceLanguageOptions();
   populateLanguageOptions();
   applySettings(settings);
@@ -164,10 +165,17 @@ async function applyInterfaceLanguage(preferred) {
   await chrome.action?.setTitle?.({ title: translator.t("extension.action-title") });
 }
 
+async function applyPreferredInterfaceLanguage(settings) {
+  const preferred = settings.interfaceLanguage === extensionI18n.AUTOMATIC_LOCALE
+    ? await findMealieLocale(settings.mealieUrl) || extensionI18n.AUTOMATIC_LOCALE
+    : settings.interfaceLanguage;
+  await applyInterfaceLanguage(preferred);
+}
+
 async function handleInterfaceLanguageChange() {
   const targetLanguage = elements.translateLanguage.value;
   await saveSettingsFromForm();
-  await applyInterfaceLanguage(elements.interfaceLanguage.value);
+  await applyPreferredInterfaceLanguage(currentSettings());
   populateInterfaceLanguageOptions();
   populateLanguageOptions();
   elements.translateLanguage.value = targetLanguage || DEFAULT_SETTINGS.translateLanguage;
@@ -203,6 +211,25 @@ function updateModeText() {
 
 function normalizeBaseUrl(value) {
   return String(value || "").trim().replace(/\/+$/, "");
+}
+
+async function findMealieLocale(mealieUrl) {
+  let origin = "";
+  try {
+    origin = new URL(normalizeBaseUrl(mealieUrl)).origin;
+  }
+  catch {
+    return null;
+  }
+
+  try {
+    const cookie = await chrome.cookies?.get({ url: origin, name: SITE_LOCALE_COOKIE_NAME });
+    const locale = decodeURIComponent(cookie?.value || "");
+    return extensionI18n.LOCALE_CODES.includes(locale) ? locale : null;
+  }
+  catch {
+    return null;
+  }
 }
 
 async function findMealieAuthToken(mealieUrl) {
@@ -276,6 +303,15 @@ function scheduleMealieStatusCheck() {
 async function checkMealieStatus() {
   clearTimeout(statusCheckTimer);
   const settings = currentSettings();
+  if (settings.interfaceLanguage === extensionI18n.AUTOMATIC_LOCALE) {
+    const previousLocale = translator.locale;
+    await applyPreferredInterfaceLanguage(settings);
+    if (translator.locale !== previousLocale) {
+      populateInterfaceLanguageOptions();
+      populateLanguageOptions();
+      applySettings(settings);
+    }
+  }
   mealieSiteReady = false;
   elements.connectMealie.hidden = true;
   updateActionState();

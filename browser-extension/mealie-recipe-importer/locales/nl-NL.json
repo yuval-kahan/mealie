@@ -33,7 +33,7 @@
     "mealie-url": "Mealie-adres",
     "extract-mode": "Wat moet er worden geëxtraheerd",
     "interface-language": "Interfacetaal",
-    "automatic-language": "Automatisch (browsertaal)",
+    "automatic-language": "Automatisch (Mealie-taal, daarna browsertaal)",
     "translation-language": "Vertaaltaal"
   },
   "mode": {

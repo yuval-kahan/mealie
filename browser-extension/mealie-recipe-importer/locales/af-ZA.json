@@ -33,7 +33,7 @@
     "mealie-url": "Mealie-adres",
     "extract-mode": "Wat om te onttrek",
     "interface-language": "Koppelvlaktaal",
-    "automatic-language": "Outomaties (blaaier-taal)",
+    "automatic-language": "Outomaties (Mealie-werftaal, dan blaaier-taal)",
     "translation-language": "Vertaaltaal"
   },
   "mode": {

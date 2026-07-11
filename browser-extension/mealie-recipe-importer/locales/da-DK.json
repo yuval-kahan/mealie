@@ -33,7 +33,7 @@
     "mealie-url": "Mealie-adresse",
     "extract-mode": "Hvad skal udtrækkes",
     "interface-language": "Grænsefladesprog",
-    "automatic-language": "Automatisk (browser-sprog)",
+    "automatic-language": "Automatisk (Mealie-sidens sprog, derefter browsersprog)",
     "translation-language": "Oversættelsessprog"
   },
   "mode": {

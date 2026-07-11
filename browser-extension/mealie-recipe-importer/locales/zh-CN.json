@@ -33,7 +33,7 @@
     "mealie-url": "Mealie 地址",
     "extract-mode": "提取内容",
     "interface-language": "界面语言",
-    "automatic-language": "自动（浏览器语言）",
+    "automatic-language": "自动（Mealie 站点语言，随后为浏览器语言）",
     "translation-language": "翻译语言"
   },
   "mode": {

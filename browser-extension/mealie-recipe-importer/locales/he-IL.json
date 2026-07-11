@@ -33,7 +33,7 @@
     "mealie-url": "כתובת Mealie",
     "extract-mode": "מה לחלץ",
     "interface-language": "שפת ממשק",
-    "automatic-language": "אוטומטי (שפת הדפדפן)",
+    "automatic-language": "אוטומטי (שפת אתר Mealie, ולאחר מכן שפת הדפדפן)",
     "translation-language": "שפת תרגום"
   },
   "mode": {

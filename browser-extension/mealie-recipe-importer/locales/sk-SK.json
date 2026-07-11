@@ -33,7 +33,7 @@
     "mealie-url": "Adresa Mealie",
     "extract-mode": "Čo extrahovať",
     "interface-language": "Jazyk rozhrania",
-    "automatic-language": "Automaticky (jazyk prehliadača)",
+    "automatic-language": "Automaticky (jazyk stránky Mealie, následne jazyk prehliadača)",
     "translation-language": "Jazyk prekladu"
   },
   "mode": {

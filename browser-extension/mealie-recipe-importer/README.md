@@ -23,7 +23,7 @@ Why this exists:
 3. Set the Mealie URL, usually `http://localhost:3000`.
 4. Make sure you are logged in to Mealie in the same browser.
 5. Choose whether to auto-detect the page type, extract a recipe, or extract an article.
-6. Keep the interface language on **Automatic** to follow the browser, or select one of Mealie's existing 42 locales.
+6. Keep the interface language on **Automatic** to follow the Mealie site language, with the browser language as a fallback, or select one of Mealie's existing 42 locales.
 7. Choose a target translation language from the same locales supported by Mealie.
 8. Choose whether to create a shopping list, organize it with AI, and add AI tips / ingredient-variety notes.
 9. Click the primary **Send to AI** action in the selected interface language.
@@ -32,6 +32,7 @@ Why this exists:
 
 - The popup, status messages, errors, result links, preview labels, and extraction metadata are translated into exactly the same 42 locales that already exist in Mealie.
 - No extension-only language is added. The locale lists are checked for exact parity with `frontend/app/lang/messages`.
+- Automatic mode follows Mealie's locale cookie first and the browser language second. A manual popup selection changes only the extension.
 - Arabic and Hebrew switch the complete popup to RTL automatically.
 - Chrome manifest metadata is generated for the 37 locale codes supported by the Chrome Web Store. Afrikaans, Galician, Icelandic, and regional French variants remain fully available inside the popup through the runtime locale selector; Chrome uses its closest supported manifest locale for store metadata.
 - Runtime messages fall back to `en-US` only if a locale file cannot be loaded.

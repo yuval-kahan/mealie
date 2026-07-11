@@ -99,13 +99,23 @@ class UploadedBookRecipeSummary(MealieModel):
 
 class UploadedBookRecipeDeleteRequest(MealieModel):
     recipe_ids: list[UUID4] = Field(default_factory=list, max_length=5000)
+    delete_recipes: bool = True
+    delete_shopping_lists: bool = True
+
+    @model_validator(mode="after")
+    def validate_delete_targets(self):
+        if not self.delete_recipes and not self.delete_shopping_lists:
+            raise ValueError("At least one delete target must be selected")
+        return self
 
 
 class UploadedBookRecipeDeleteResponse(MealieModel):
     deleted_count: int = 0
+    deleted_shopping_list_count: int = 0
     remaining_count: int = 0
     skipped_count: int = 0
     deleted_recipe_ids: list[UUID4] = Field(default_factory=list)
+    deleted_shopping_list_ids: list[UUID4] = Field(default_factory=list)
 
 
 class AICookbookGenerateRequest(MealieModel):

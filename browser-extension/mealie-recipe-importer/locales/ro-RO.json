@@ -33,7 +33,7 @@
     "mealie-url": "Adresă Mealie",
     "extract-mode": "Ce să extragi",
     "interface-language": "Limba interfeței",
-    "automatic-language": "Automat (limba browserului)",
+    "automatic-language": "Automat (limba site-ului Mealie, apoi limba browserului)",
     "translation-language": "Limba de traducere"
   },
   "mode": {

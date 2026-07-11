@@ -33,7 +33,7 @@
     "mealie-url": "Mealie cím",
     "extract-mode": "Mit szeretne kinyerni",
     "interface-language": "Felület nyelve",
-    "automatic-language": "Automatikus (böngésző nyelve)",
+    "automatic-language": "Automatikus (Mealie oldal nyelve, majd a böngésző nyelve)",
     "translation-language": "Fordítás nyelve"
   },
   "mode": {

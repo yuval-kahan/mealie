@@ -33,7 +33,7 @@
     "mealie-url": "Mealieアドレス",
     "extract-mode": "抽出対象",
     "interface-language": "インターフェース言語",
-    "automatic-language": "自動（ブラウザの言語）",
+    "automatic-language": "自動（Mealieサイトの言語、次にブラウザの言語）",
     "translation-language": "翻訳言語"
   },
   "mode": {

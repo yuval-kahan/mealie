@@ -33,7 +33,7 @@
     "mealie-url": "Mealie adrese",
     "extract-mode": "Ko ekstrahēt",
     "interface-language": "Interfeisa valoda",
-    "automatic-language": "Automātiski (pārlūkprogrammas valoda)",
+    "automatic-language": "Automātiski (Mealie vietnes valoda, pēc tam pārlūkprogrammas valoda)",
     "translation-language": "Tulkošanas valoda"
   },
   "mode": {

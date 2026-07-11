@@ -33,7 +33,7 @@
     "mealie-url": "Mealie-Adresse",
     "extract-mode": "Was soll extrahiert werden",
     "interface-language": "Sprache der Benutzeroberfläche",
-    "automatic-language": "Automatisch (Browsersprache)",
+    "automatic-language": "Automatisch (Mealie-Seitensprache, dann Browsersprache)",
     "translation-language": "Übersetzungssprache"
   },
   "mode": {

@@ -33,7 +33,7 @@
     "mealie-url": "Địa chỉ Mealie",
     "extract-mode": "Nội dung cần trích xuất",
     "interface-language": "Ngôn ngữ giao diện",
-    "automatic-language": "Tự động (ngôn ngữ trình duyệt)",
+    "automatic-language": "Tự động (ngôn ngữ trang Mealie, sau đó là ngôn ngữ trình duyệt)",
     "translation-language": "Ngôn ngữ dịch"
   },
   "mode": {

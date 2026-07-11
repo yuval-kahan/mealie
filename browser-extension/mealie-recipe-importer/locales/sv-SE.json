@@ -33,7 +33,7 @@
     "mealie-url": "Mealie-adress",
     "extract-mode": "Vad som ska extraheras",
     "interface-language": "Gränssnittsspråk",
-    "automatic-language": "Automatiskt (webbläsarspråk)",
+    "automatic-language": "Automatiskt (Mealies webbplatsspråk, därefter webbläsarspråk)",
     "translation-language": "Översättningsspråk"
   },
   "mode": {

@@ -33,7 +33,7 @@
     "mealie-url": "Адреса Mealie",
     "extract-mode": "Що витягувати",
     "interface-language": "Мова інтерфейсу",
-    "automatic-language": "Автоматично (мова браузера)",
+    "automatic-language": "Автоматично (мова сайту Mealie, потім мова браузера)",
     "translation-language": "Мова перекладу"
   },
   "mode": {

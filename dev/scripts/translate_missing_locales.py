@@ -73,6 +73,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("messages_dir", type=Path)
     parser.add_argument("--source-locale", default="en-US")
     parser.add_argument("--locales", nargs="*")
+    parser.add_argument(
+        "--keys",
+        nargs="*",
+        help="Force translation of only these flattened message keys",
+    )
     parser.add_argument("--batch-size", type=int, default=70)
     parser.add_argument("--max-workers", type=int, default=0)
     parser.add_argument("--audit-only", action="store_true")
@@ -320,6 +325,10 @@ def main() -> None:
     source_path = args.messages_dir / f"{args.source_locale}.json"
     source_nested = json.loads(source_path.read_text(encoding="utf-8"))
     source_flat = flatten(source_nested)
+    selected_keys = set(args.keys or [])
+    unknown_keys = selected_keys - set(source_flat)
+    if unknown_keys:
+        raise ValueError(f"Unknown source keys: {sorted(unknown_keys)}")
     if args.locales:
         locale_paths = [args.messages_dir / f"{locale}.json" for locale in args.locales]
     else:
@@ -334,7 +343,10 @@ def main() -> None:
         missing = [
             (key, value)
             for key, value in source_flat.items()
-            if needs_translation(key, value, target_flat, path.stem, args.translate_identical)
+            if (not selected_keys or key in selected_keys)
+            and (
+                key in selected_keys or needs_translation(key, value, target_flat, path.stem, args.translate_identical)
+            )
         ]
         LOGGER.info("%s: %s missing keys", path.stem, len(missing))
         audits.append((path, target, missing))

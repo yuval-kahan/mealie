@@ -33,7 +33,7 @@
     "mealie-url": "Mealien osoite",
     "extract-mode": "Mitä poimitaan",
     "interface-language": "Käyttöliittymän kieli",
-    "automatic-language": "Automaattinen (selaimen kieli)",
+    "automatic-language": "Automaattinen (Mealie-sivuston kieli, sitten selaimen kieli)",
     "translation-language": "Käännöskieli"
   },
   "mode": {

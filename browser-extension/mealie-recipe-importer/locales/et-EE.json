@@ -33,7 +33,7 @@
     "mealie-url": "Mealie aadress",
     "extract-mode": "Mida ekstraktida",
     "interface-language": "Liidese keel",
-    "automatic-language": "Automaatne (brauseri keel)",
+    "automatic-language": "Automaatne (Mealie saidi keel, seejärel brauseri keel)",
     "translation-language": "Tõlke keel"
   },
   "mode": {

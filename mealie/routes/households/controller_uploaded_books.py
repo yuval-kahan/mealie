@@ -26,7 +26,9 @@ from mealie.schema.cookbook.uploaded_book import (
     UploadedBookTranslateRequest,
 )
 from mealie.schema.household.household import HouseholdInDB
+from mealie.schema.response.pagination import PaginationQuery
 from mealie.schema.user import PrivateUser
+from mealie.services.household_services.shopping_lists import ShoppingListService
 from mealie.services.recipe.recipe_service import RecipeService
 from mealie.services.uploaded_books import (
     AICookbookBuilder,
@@ -632,21 +634,42 @@ class UploadedBooksController(BasePublicController):
         book_recipes = self._book_recipe_models(book)
         selected_recipes = [recipe for recipe in book_recipes if recipe.id in requested_ids]
         skipped_count = len(requested_ids) - len(selected_recipes)
+        selected_recipe_ids = {str(recipe.id) for recipe in selected_recipes}
 
-        if selected_recipes:
+        shopping_service = None
+        selected_shopping_list_ids = []
+        if payload.delete_shopping_lists and selected_recipe_ids:
+            shopping_service = ShoppingListService(self.repos)
+            shopping_lists = shopping_service.shopping_lists.page_all(PaginationQuery(page=1, per_page=-1))
+            selected_shopping_list_ids = [
+                shopping_list.id
+                for shopping_list in shopping_lists.items
+                if str((shopping_list.extras or {}).get("aiCreatedFromUploadedBookId") or "") == str(book.id)
+                and str((shopping_list.extras or {}).get("aiCreatedFromRecipeId") or "") in selected_recipe_ids
+            ]
+
+        if payload.delete_recipes and selected_recipes:
             recipe_service = RecipeService(self.repos, self.user, self.household, self.translator)
             recipe_service.delete_many([recipe.slug for recipe in selected_recipes])
 
-        remaining_count = max(0, len(book_recipes) - len(selected_recipes))
-        book.extraction_recipes_created = remaining_count
-        self.session.add(book)
-        self.session.commit()
+        deleted_shopping_lists = []
+        if shopping_service and selected_shopping_list_ids:
+            deleted_shopping_lists = shopping_service.shopping_lists.delete_many(selected_shopping_list_ids)
+
+        remaining_count = len(book_recipes)
+        if payload.delete_recipes:
+            remaining_count = max(0, len(book_recipes) - len(selected_recipes))
+            book.extraction_recipes_created = remaining_count
+            self.session.add(book)
+            self.session.commit()
 
         return UploadedBookRecipeDeleteResponse(
-            deleted_count=len(selected_recipes),
+            deleted_count=len(selected_recipes) if payload.delete_recipes else 0,
+            deleted_shopping_list_count=len(deleted_shopping_lists),
             remaining_count=remaining_count,
             skipped_count=skipped_count,
-            deleted_recipe_ids=[recipe.id for recipe in selected_recipes],
+            deleted_recipe_ids=[recipe.id for recipe in selected_recipes] if payload.delete_recipes else [],
+            deleted_shopping_list_ids=[shopping_list.id for shopping_list in deleted_shopping_lists],
         )
 
     @router.get("/source/open", response_class=RedirectResponse)

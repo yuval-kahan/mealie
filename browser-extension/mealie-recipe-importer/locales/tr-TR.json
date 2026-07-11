@@ -33,7 +33,7 @@
     "mealie-url": "Mealie adresi",
     "extract-mode": "Ne ayıklanacak",
     "interface-language": "Arayüz dili",
-    "automatic-language": "Otomatik (tarayıcı dili)",
+    "automatic-language": "Otomatik (Mealie site dili, ardından tarayıcı dili)",
     "translation-language": "Çeviri dili"
   },
   "mode": {

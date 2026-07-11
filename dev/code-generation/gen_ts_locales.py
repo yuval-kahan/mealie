@@ -7,14 +7,14 @@ from pathlib import Path
 import dotenv
 import requests
 from jinja2 import Template
+from mealie.lang.locale_config import LOCALE_CONFIG, LocalePluralFoodHandling, LocaleTextDirection
+from mealie.schema._mealie import MealieModel
 from pydantic import ConfigDict
 from requests import Response
 from utils import CodeDest, CodeKeys, inject_inline, log
 
-from mealie.lang.locale_config import LOCALE_CONFIG, LocalePluralFoodHandling, LocaleTextDirection
-from mealie.schema._mealie import MealieModel
-
 BASE = pathlib.Path(__file__).parent.parent.parent
+PLACEHOLDER_RE = re.compile(r"\{[^{}]+\}")
 
 API_KEY = dotenv.get_key(BASE / ".env", "CROWDIN_API_KEY") or os.environ.get("CROWDIN_API_KEY", "")
 
@@ -183,6 +183,34 @@ def _get_local_progress() -> dict[str, int]:
     return {locale["value"]: locale["progress"] for locale in locales}
 
 
+def _flatten_messages(value: dict, prefix: str = "") -> dict[str, object]:
+    flattened: dict[str, object] = {}
+    for key, item in value.items():
+        path = f"{prefix}.{key}" if prefix else key
+        if isinstance(item, dict):
+            flattened.update(_flatten_messages(item, path))
+        else:
+            flattened[path] = item
+    return flattened
+
+
+def _get_local_message_progress() -> dict[str, int]:
+    source = _flatten_messages(json.loads((locales_dir / "en-US.json").read_text(encoding="utf-8")))
+    expected_keys = set(source)
+    progress: dict[str, int] = {}
+    for locale_path in locales_dir.glob("*.json"):
+        target = _flatten_messages(json.loads(locale_path.read_text(encoding="utf-8")))
+        completed = sum(
+            1
+            for key in expected_keys
+            if isinstance(target.get(key), str)
+            and target[key].strip()
+            and set(PLACEHOLDER_RE.findall(str(source[key]))) == set(PLACEHOLDER_RE.findall(target[key]))
+        )
+        progress[locale_path.stem] = round(completed / len(expected_keys) * 100)
+    return progress
+
+
 def get_languages() -> list[TargetLanguage]:
     if API_KEY:
         api = CrowdinApi(None)
@@ -193,6 +221,8 @@ def get_languages() -> list[TargetLanguage]:
         log.warning("DOUBLE CHECK the output!!! Do not overwrite with bad local locale data!")
         models = _get_local_models()
         progress = _get_local_progress()
+
+    local_message_progress = _get_local_message_progress()
 
     models.insert(
         0,
@@ -214,7 +244,10 @@ def get_languages() -> list[TargetLanguage]:
             model.name = locale_data.name
             model.dir = locale_data.dir
             model.plural_food_handling = locale_data.plural_food_handling
-            model.progress = progress.get(model.id, model.progress)
+            model.progress = local_message_progress.get(
+                model.locale,
+                progress.get(model.id, model.progress),
+            )
 
     models.sort(key=lambda x: x.locale, reverse=True)
     return models
