@@ -48,6 +48,8 @@ let lastExtraction = null;
 let isBusy = false;
 let mealieSiteReady = false;
 let statusCheckTimer = null;
+let statusCheckController = null;
+let statusCheckRunId = 0;
 let translator = null;
 
 init();
@@ -299,15 +301,29 @@ function authHeaders(authToken) {
 
 function scheduleMealieStatusCheck() {
   clearTimeout(statusCheckTimer);
-  statusCheckTimer = setTimeout(checkMealieStatus, 500);
+  statusCheckController?.abort();
+  statusCheckController = null;
+  statusCheckRunId += 1;
+  statusCheckTimer = setTimeout(() => {
+    statusCheckTimer = null;
+    void checkMealieStatus();
+  }, 500);
 }
 
 async function checkMealieStatus() {
   clearTimeout(statusCheckTimer);
+  statusCheckTimer = null;
+  statusCheckController?.abort();
+  const controller = new AbortController();
+  const runId = ++statusCheckRunId;
+  statusCheckController = controller;
   const settings = currentSettings();
   if (settings.interfaceLanguage === extensionI18n.AUTOMATIC_LOCALE) {
     const previousLocale = translator.locale;
     await applyPreferredInterfaceLanguage(settings);
+    if (runId !== statusCheckRunId) {
+      return false;
+    }
     if (translator.locale !== previousLocale) {
       populateInterfaceLanguageOptions();
       populateLanguageOptions();
@@ -320,6 +336,9 @@ async function checkMealieStatus() {
 
   try {
     const authToken = await findMealieAuthToken(settings.mealieUrl);
+    if (controller.signal.aborted || runId !== statusCheckRunId) {
+      return false;
+    }
     if (!authToken) {
       setStatus(translator.t("status.open-and-login"), "error");
       elements.connectMealie.hidden = false;
@@ -329,8 +348,12 @@ async function checkMealieStatus() {
     const response = await fetch(`${settings.mealieUrl}/api/recipes/create/browser-page/status`, {
       credentials: "include",
       headers: authHeaders(authToken),
+      signal: controller.signal,
     });
     const payload = await safeJson(response);
+    if (controller.signal.aborted || runId !== statusCheckRunId) {
+      return false;
+    }
 
     if (response.status === 401 || response.status === 403) {
       setStatus(translator.t("status.login-required"), "error");
@@ -352,13 +375,19 @@ async function checkMealieStatus() {
     setStatus("");
     return true;
   }
-  catch {
+  catch (error) {
+    if (error?.name === "AbortError") {
+      return false;
+    }
     setStatus(translator.t("status.connection-failed"), "error");
     elements.connectMealie.hidden = false;
     return false;
   }
   finally {
-    updateActionState();
+    if (runId === statusCheckRunId) {
+      statusCheckController = null;
+      updateActionState();
+    }
   }
 }
 

@@ -113,7 +113,24 @@
         v-for="section in visibleSections"
         :key="section.key"
       >
-        <v-list-subheader class="app-organizer-sidebar__section-title">
+        <v-list-subheader
+          class="app-organizer-sidebar__section-title"
+          role="button"
+          tabindex="0"
+          :aria-controls="`organizer-sidebar-section-${section.key}`"
+          :aria-expanded="isSectionExpanded(section.key)"
+          :aria-label="sectionToggleLabel(section)"
+          :title="sectionToggleLabel(section)"
+          @click="toggleSection(section.key)"
+          @keydown.enter.prevent="toggleSection(section.key)"
+          @keydown.space.prevent="toggleSection(section.key)"
+        >
+          <v-icon
+            class="app-organizer-sidebar__section-toggle me-1"
+            size="small"
+          >
+            {{ isSectionExpanded(section.key) ? $globals.icons.chevronDown : collapsedSectionIcon }}
+          </v-icon>
           <v-icon
             class="me-2"
             size="small"
@@ -130,123 +147,126 @@
           </v-chip>
         </v-list-subheader>
 
-        <v-text-field
-          v-if="sectionSupportsSearch(section.key)"
-          v-model="sectionSearches[section.key]"
-          class="app-organizer-sidebar__section-search mx-2 mb-1"
-          density="compact"
-          variant="outlined"
-          hide-details
-          clearable
-          :label="$t('search.search')"
-          :prepend-inner-icon="$globals.icons.search"
-        />
-
-        <div
-          :class="{
-            'app-organizer-sidebar__section-scroll': sectionSupportsSearch(section.key),
-          }"
-        >
-          <template
-            v-for="nav in filteredSectionLinks(section)"
-            :key="section.key + '-' + (nav.key || nav.title)"
+        <v-expand-transition>
+          <div
+            v-show="isSectionExpanded(section.key)"
+            :id="`organizer-sidebar-section-${section.key}`"
+            class="app-organizer-sidebar__section-body"
           >
-            <v-list-group
-              v-if="nav.children?.length"
-              :key="section.key + '-' + (nav.key || nav.title) + '-group'"
-              v-model="state.dropDowns[section.key + '-' + nav.title]"
-              :prepend-icon="nav.icon"
-              color="primary"
-              fluid
-            >
-              <template #activator="{ props: hoverProps }">
+            <v-text-field
+              v-model="sectionSearches[section.key]"
+              class="app-organizer-sidebar__section-search mx-2 mb-1"
+              density="compact"
+              variant="outlined"
+              hide-details
+              clearable
+              :label="$t('search.search')"
+              :prepend-inner-icon="$globals.icons.search"
+            />
+
+            <div class="app-organizer-sidebar__section-scroll">
+              <template
+                v-for="nav in filteredSectionLinks(section)"
+                :key="section.key + '-' + (nav.key || nav.title)"
+              >
+                <v-list-group
+                  v-if="nav.children?.length"
+                  :key="section.key + '-' + (nav.key || nav.title) + '-group'"
+                  v-model="state.dropDowns[section.key + '-' + nav.title]"
+                  :prepend-icon="nav.icon"
+                  color="primary"
+                  fluid
+                >
+                  <template #activator="{ props: hoverProps }">
+                    <v-list-item
+                      v-bind="hoverProps"
+                      :prepend-icon="nav.icon"
+                      :title="nav.title"
+                    />
+                  </template>
+
+                  <v-list-item
+                    v-for="child in nav.children"
+                    :key="section.key + '-' + (child.key || child.title)"
+                    exact
+                    :href="child.href"
+                    :rel="child.href ? 'noopener' : undefined"
+                    :target="child.href ? '_blank' : undefined"
+                    :to="child.href ? undefined : child.to"
+                    class="ms-2"
+                    :prepend-icon="child.icon"
+                    :title="child.title"
+                    @click="handleNavClick(child)"
+                  >
+                    <template
+                      v-if="child.actions?.length"
+                      #append
+                    >
+                      <div class="app-organizer-sidebar__item-actions">
+                        <v-btn
+                          v-for="action in child.actions"
+                          :key="action.key || action.title"
+                          icon
+                          size="x-small"
+                          variant="text"
+                          :title="action.title"
+                          :aria-label="action.title"
+                          :loading="action.loading"
+                          :disabled="action.disabled"
+                          @click.stop.prevent="handleNavActionClick(action)"
+                        >
+                          <v-icon size="small">
+                            {{ action.icon }}
+                          </v-icon>
+                        </v-btn>
+                      </div>
+                    </template>
+                  </v-list-item>
+                </v-list-group>
+
                 <v-list-item
-                  v-bind="hoverProps"
+                  v-else
+                  :key="section.key + '-' + (nav.key || nav.title) + '-item'"
+                  exact
+                  link
+                  :href="nav.href"
+                  :rel="nav.href ? 'noopener' : undefined"
+                  :target="nav.href ? '_blank' : undefined"
+                  :to="nav.href ? undefined : nav.to"
                   :prepend-icon="nav.icon"
                   :title="nav.title"
-                />
-              </template>
-
-              <v-list-item
-                v-for="child in nav.children"
-                :key="section.key + '-' + (child.key || child.title)"
-                exact
-                :href="child.href"
-                :rel="child.href ? 'noopener' : undefined"
-                :target="child.href ? '_blank' : undefined"
-                :to="child.href ? undefined : child.to"
-                class="ms-2"
-                :prepend-icon="child.icon"
-                :title="child.title"
-                @click="handleNavClick(child)"
-              >
-                <template
-                  v-if="child.actions?.length"
-                  #append
+                  @click="handleNavClick(nav)"
                 >
-                  <div class="app-organizer-sidebar__item-actions">
-                    <v-btn
-                      v-for="action in child.actions"
-                      :key="action.key || action.title"
-                      icon
-                      size="x-small"
-                      variant="text"
-                      :title="action.title"
-                      :aria-label="action.title"
-                      :loading="action.loading"
-                      :disabled="action.disabled"
-                      @click.stop.prevent="handleNavActionClick(action)"
-                    >
-                      <v-icon size="small">
-                        {{ action.icon }}
-                      </v-icon>
-                    </v-btn>
-                  </div>
-                </template>
-              </v-list-item>
-            </v-list-group>
-
-            <v-list-item
-              v-else
-              :key="section.key + '-' + (nav.key || nav.title) + '-item'"
-              exact
-              link
-              :href="nav.href"
-              :rel="nav.href ? 'noopener' : undefined"
-              :target="nav.href ? '_blank' : undefined"
-              :to="nav.href ? undefined : nav.to"
-              :prepend-icon="nav.icon"
-              :title="nav.title"
-              @click="handleNavClick(nav)"
-            >
-              <template v-if="nav.actions?.length" #append>
-                <div class="app-organizer-sidebar__item-actions">
-                  <v-btn
-                    v-for="action in nav.actions"
-                    :key="action.key || action.title"
-                    icon
-                    size="x-small"
-                    variant="text"
-                    :title="action.title"
-                    :aria-label="action.title"
-                    :loading="action.loading"
-                    :disabled="action.disabled"
-                    @click.stop.prevent="handleNavActionClick(action)"
-                  >
-                    <v-icon size="small">
-                      {{ action.icon }}
-                    </v-icon>
-                  </v-btn>
-                </div>
+                  <template v-if="nav.actions?.length" #append>
+                    <div class="app-organizer-sidebar__item-actions">
+                      <v-btn
+                        v-for="action in nav.actions"
+                        :key="action.key || action.title"
+                        icon
+                        size="x-small"
+                        variant="text"
+                        :title="action.title"
+                        :aria-label="action.title"
+                        :loading="action.loading"
+                        :disabled="action.disabled"
+                        @click.stop.prevent="handleNavActionClick(action)"
+                      >
+                        <v-icon size="small">
+                          {{ action.icon }}
+                        </v-icon>
+                      </v-btn>
+                    </div>
+                  </template>
+                </v-list-item>
               </template>
-            </v-list-item>
-          </template>
-          <v-list-item
-            v-if="sectionSupportsSearch(section.key) && !filteredSectionLinks(section).length"
-            :title="$t('search.no-results')"
-            disabled
-          />
-        </div>
+              <v-list-item
+                v-if="!filteredSectionLinks(section).length"
+                :title="$t('search.no-results')"
+                disabled
+              />
+            </div>
+          </div>
+        </v-expand-transition>
       </template>
     </v-list>
 
@@ -319,18 +339,30 @@ const state = reactive({
   dropDowns: {} as Record<string, boolean>,
 });
 const sectionSearches = reactive<Partial<Record<OrganizerSidebarSectionKey, string>>>({
+  shoppingLists: "",
+  cookbooks: "",
+  translatedBooks: "",
   categories: "",
   tags: "",
 });
-
-function sectionSupportsSearch(key: OrganizerSidebarSectionKey) {
-  return key === "categories" || key === "tags";
-}
+const expandedSections = useLocalStorage<Partial<Record<OrganizerSidebarSectionKey, boolean>>>(
+  "organizer-sidebar-expanded-sections",
+  {},
+  { listenToStorageChanges: false },
+);
+const collapsedSectionIcon = computed(() => isRtl.value ? $globals.icons.chevronLeft : $globals.icons.chevronRight);
 
 function filteredSectionLinks(section: OrganizerSidebarSection) {
   const query = (sectionSearches[section.key] || "").trim().toLocaleLowerCase();
   if (!query) return section.links;
-  return section.links.filter(link => link.title.toLocaleLowerCase().includes(query));
+  return section.links.flatMap((link) => {
+    if (link.title.toLocaleLowerCase().includes(query)) {
+      return [link];
+    }
+
+    const matchingChildren = link.children?.filter(child => child.title.toLocaleLowerCase().includes(query)) || [];
+    return matchingChildren.length ? [{ ...link, children: matchingChildren }] : [];
+  });
 }
 
 const preferenceKeyBySection: Record<OrganizerSidebarSectionKey, OrganizerVisibilityPreferenceKey> = {
@@ -423,6 +455,24 @@ function toggleCollapsed() {
   collapsed.value = !collapsed.value;
 }
 
+function isSectionExpanded(key: OrganizerSidebarSectionKey) {
+  return expandedSections.value[key] ?? true;
+}
+
+function toggleSection(key: OrganizerSidebarSectionKey) {
+  expandedSections.value = {
+    ...expandedSections.value,
+    [key]: !isSectionExpanded(key),
+  };
+}
+
+function sectionToggleLabel(section: OrganizerSidebarSection) {
+  const action = isSectionExpanded(section.key)
+    ? i18n.t("sidebar.collapse-organizer-navigation")
+    : i18n.t("sidebar.expand-organizer-navigation");
+  return `${action}: ${section.title}`;
+}
+
 function handleNavClick(nav: SideBarLink) {
   nav.onClick?.();
 }
@@ -492,8 +542,21 @@ watch(
 
 .app-organizer-sidebar__section-title {
   align-items: center;
+  cursor: pointer;
   display: flex;
   gap: 4px;
+  min-height: 36px;
+  user-select: none;
+}
+
+.app-organizer-sidebar__section-title:hover,
+.app-organizer-sidebar__section-title:focus-visible {
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  outline: none;
+}
+
+.app-organizer-sidebar__section-toggle {
+  flex: 0 0 auto;
 }
 
 .app-organizer-sidebar__section-search {
@@ -501,7 +564,8 @@ watch(
 }
 
 .app-organizer-sidebar__section-scroll {
-  max-height: min(30vh, 280px);
+  max-height: min(28vh, 260px);
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;

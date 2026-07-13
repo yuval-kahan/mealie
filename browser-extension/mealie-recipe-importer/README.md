@@ -27,6 +27,9 @@ Why this exists:
 7. Choose a target translation language from the same locales supported by Mealie.
 8. Choose whether to create a shopping list, organize it with AI, and add AI tips / ingredient-variety notes.
 9. Click the primary **Send to AI** action in the selected interface language.
+10. Use **Save website** independently when you only want AI to record the current food-shopping site and its product range.
+
+Version `0.2.2` uses a wider, more compact popup layout so the independent **Save website** action remains visible without scrolling in the normal state.
 
 ## Languages
 
