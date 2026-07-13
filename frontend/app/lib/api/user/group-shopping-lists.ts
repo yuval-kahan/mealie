@@ -17,10 +17,16 @@ export interface ShoppingListItemImagesEnsureResponse {
   failed: number;
 }
 
+export interface ShoppingListMergeRequest {
+  sourceListIds: string[];
+  name?: string | null;
+}
+
 const prefix = "/api";
 
 const routes = {
   shoppingLists: `${prefix}/households/shopping/lists`,
+  shoppingListsMerge: `${prefix}/households/shopping/lists/merge`,
   shoppingListsId: (id: string) => `${prefix}/households/shopping/lists/${id}`,
   shoppingListIdOrganizeAi: (id: string) => `${prefix}/households/shopping/lists/${id}/organize-ai`,
   shoppingListIdItemImagesEnsure: (id: string) => `${prefix}/households/shopping/lists/${id}/item-images/ensure`,
@@ -47,6 +53,16 @@ export class ShoppingListsApi extends BaseCRUDAPI<ShoppingListCreate, ShoppingLi
 
   async updateLabelSettings(itemId: string, listSettings: ShoppingListMultiPurposeLabelUpdate[]) {
     return await this.requests.put(routes.shoppingListIdUpdateLabelSettings(itemId), listSettings);
+  }
+
+  async merge(data: ShoppingListMergeRequest) {
+    return await this.requests.post<ShoppingListOut>(routes.shoppingListsMerge, data);
+  }
+
+  async deleteMany(ids: string[]) {
+    const query = new URLSearchParams();
+    ids.forEach(id => query.append("ids", id));
+    return await this.requests.delete<ShoppingListOut[]>(`${routes.shoppingLists}?${query.toString()}`);
   }
 
   async organizeWithAi(itemId: string, includeAiTips = false) {

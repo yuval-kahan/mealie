@@ -149,6 +149,92 @@ class OpenAIRecipeTextParse(OpenAIBase):
     )
 
 
+class OpenAIRecipeIngredientScale(OpenAIBase):
+    matched: bool = Field(
+        ...,
+        description="True only when one supplied ingredient and a positive requested quantity are unambiguous.",
+    )
+    ingredient_index: int | None = Field(
+        None,
+        ge=0,
+        description="Exact ingredient_index from the supplied candidate list that the user wants to scale from.",
+    )
+    target_quantity_in_recipe_unit: float | None = Field(
+        None,
+        gt=0,
+        description="Requested quantity converted into the selected ingredient's existing recipe unit.",
+    )
+    interpreted_ingredient: str = Field(
+        "",
+        description="Short ingredient name inferred from the user's request, in the user's language.",
+    )
+    reason: str = Field(
+        "",
+        description="A short explanation when matched is false.",
+    )
+
+
+class OpenAIRecipeIngredientAdjustmentItem(OpenAIBase):
+    ingredient_index: int = Field(
+        ...,
+        ge=0,
+        description=(
+            "Exact ingredient_index from the supplied ingredient list. "
+            "Return every supplied index exactly once."
+        ),
+    )
+    title: str | None = Field(
+        None,
+        description="Ingredient section title, preserved from the supplied item when present.",
+    )
+    quantity: float | None = Field(
+        None,
+        ge=0,
+        description="Adjusted numeric quantity. Use null for non-numeric quantities such as a pinch or as needed.",
+    )
+    unit: str | None = Field(
+        None,
+        description="Adjusted unit in the recipe's language. Use null when there is no unit.",
+    )
+    food: str | None = Field(
+        None,
+        description="Ingredient name in the recipe's language.",
+    )
+    note: str = Field(
+        "",
+        description=(
+            "Preparation detail, non-numeric quantity wording, or other text that belongs with this ingredient."
+        ),
+    )
+    recommended_variety: str | None = Field(
+        None,
+        description="Preserve or update the useful recommended type when one exists.",
+    )
+    original_text: str | None = Field(
+        None,
+        description="Complete adjusted ingredient text, preserving useful wording from the original ingredient.",
+    )
+
+
+class OpenAIRecipeIngredientAdjustment(OpenAIBase):
+    adjusted: bool = Field(
+        ...,
+        description=(
+            "True only when the request can be applied to the complete supplied ingredient list without guessing."
+        ),
+    )
+    reason: str = Field(
+        "",
+        description="Short explanation when adjusted is false, or a concise summary of the change when true.",
+    )
+    ingredients: list[OpenAIRecipeIngredientAdjustmentItem] = Field(
+        default_factory=list,
+        description=(
+            "The complete replacement list, with every supplied ingredient_index exactly once and in the same order."
+        ),
+    )
+
+
 class OpenAIBookRecipeChunkParse(OpenAIBase):
     recipes: list[OpenAIRecipe] = Field(
         default_factory=list,

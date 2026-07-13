@@ -449,7 +449,9 @@ const usedIngredients = ref<RecipeIngredient[]>([]);
 
 const showTitleEditor = ref<{ [key: string]: boolean }>({});
 const instructionCopyText = computed(() => formatRecipeInstructionsForCopy(props.recipe));
-const ingredientsAndInstructionsCopyText = computed(() => formatRecipeIngredientsAndInstructionsForCopy(props.recipe));
+const ingredientsAndInstructionsCopyText = computed(() =>
+  formatRecipeIngredientsAndInstructionsForCopy(props.recipe, props.scale),
+);
 
 // ===============================================================
 // UI State Helpers

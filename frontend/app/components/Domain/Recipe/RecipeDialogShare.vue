@@ -130,8 +130,12 @@ interface Props {
   recipeId: string;
   name: string;
   recipe?: Recipe | null;
+  recipeScale?: number;
 }
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  recipe: null,
+  recipeScale: 1,
+});
 
 const dialog = defineModel<boolean>({ default: false });
 
@@ -195,7 +199,9 @@ const { copy, copied, isSupported } = useClipboard();
 const { formatRecipeIngredientsAndInstructionsForCopy } = useRecipeCopy();
 
 function getRecipeText() {
-  const recipeText = props.recipe ? formatRecipeIngredientsAndInstructionsForCopy(props.recipe) : "";
+  const recipeText = props.recipe
+    ? formatRecipeIngredientsAndInstructionsForCopy(props.recipe, props.recipeScale)
+    : "";
   return recipeText || i18n.t("recipe.share-recipe-message", [props.name]);
 }
 

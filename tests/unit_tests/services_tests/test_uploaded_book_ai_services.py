@@ -1,10 +1,14 @@
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
-import mealie.services.uploaded_books.ai_cookbook_builder as cookbook_builder_module
 import pytest
+from fastapi import BackgroundTasks
+
+import mealie.services.uploaded_books.ai_cookbook_builder as cookbook_builder_module
+import mealie.services.uploaded_books.book_classifier as book_classifier_module
 from mealie.routes.households.controller_uploaded_books import UploadedBooksController
 from mealie.schema.cookbook.uploaded_book import UploadedBookRecipeDeleteRequest
 from mealie.schema.group.ai_providers import AIProviderOut
@@ -222,3 +226,71 @@ async def test_ai_cookbook_planning_uses_bounded_batches(monkeypatch):
     assert [slug for chapter in plan.chapters for slug in chapter.recipe_slugs] == [
         recipe.slug for recipe in recipes
     ]
+
+
+@pytest.mark.asyncio
+async def test_translated_book_classification_uses_target_language(monkeypatch, tmp_path):
+    classify = AsyncMock()
+
+    class FakeClassifier:
+        def __init__(self, *_args) -> None:
+            pass
+
+        async def classify(self, *args, **kwargs) -> None:
+            await classify(*args, **kwargs)
+
+    monkeypatch.setattr(book_classifier_module, "UploadedBookClassifier", FakeClassifier)
+    translator = object.__new__(UploadedBookTranslator)
+    translator.repos = MagicMock()
+    translator.user = MagicMock()
+    translator.household = MagicMock()
+    translator.translator = MagicMock()
+    translated_book = SimpleNamespace(id=uuid4())
+
+    await translator._classify_translated_book(translated_book, tmp_path, "Hebrew")
+
+    classify.assert_awaited_once_with(
+        translated_book.id,
+        tmp_path,
+        response_language="Hebrew",
+    )
+
+
+def test_manual_classification_of_translated_book_uses_translation_language(monkeypatch, tmp_path):
+    controller = object.__new__(UploadedBooksController)
+    book = SimpleNamespace(
+        id=uuid4(),
+        classification_status="not_started",
+        classification_error=None,
+        is_translated_book=True,
+        translation_language="Hebrew",
+    )
+    controller._get_book_or_404 = lambda _book_id: book
+    controller.session = MagicMock()
+    controller._folders = SimpleNamespace(DATA_DIR=Path(tmp_path))
+    controller._repos = MagicMock()
+    controller.user = MagicMock()
+    controller.translator = MagicMock()
+    background_tasks = BackgroundTasks()
+
+    class FakeClassifier:
+        def __init__(self, *_args) -> None:
+            pass
+
+        async def classify(self, *_args) -> None:
+            pass
+
+    monkeypatch.setattr(
+        "mealie.routes.households.controller_uploaded_books.UploadedBookClassifier",
+        FakeClassifier,
+    )
+    monkeypatch.setattr(
+        "mealie.routes.households.controller_uploaded_books.UploadedBookOut.model_validate",
+        classmethod(lambda _cls, value: value),
+    )
+
+    result = controller.classify_book(book.id, background_tasks)
+
+    assert result is book
+    assert len(background_tasks.tasks) == 1
+    assert background_tasks.tasks[0].args[-1] == "Hebrew"

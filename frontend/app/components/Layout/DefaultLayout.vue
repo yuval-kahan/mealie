@@ -1044,6 +1044,10 @@ const emptyCategoryIds = ref<Set<string>>(new Set());
 const emptyTagIds = ref<Set<string>>(new Set());
 let uploadedBookRefreshTimer: ReturnType<typeof setInterval> | null = null;
 const uploadedBookRefreshInFlight = ref(false);
+let organizerRefreshPromise: Promise<void> | null = null;
+let organizerRefreshQueued = false;
+let shoppingListsRefreshPromise: Promise<void> | null = null;
+let shoppingListsRefreshQueued = false;
 const router = useRouter();
 const MANUAL_DRAFT_RECIPE_PREFIX = "__mealie_manual_draft__";
 const ORGANIZERS_UPDATED_EVENT = "mealie:organizers-updated";
@@ -1171,6 +1175,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener(ORGANIZERS_UPDATED_EVENT, handleOrganizersUpdated);
   clearUploadedBookRefreshTimer();
+  organizerRefreshQueued = false;
+  shoppingListsRefreshQueued = false;
 });
 
 watch(
@@ -1311,22 +1317,37 @@ async function refreshEmptyOrganizerItems() {
 }
 
 async function refreshOrganizerNavigationData() {
-  const tasks: Promise<unknown>[] = [refreshEmptyOrganizerItems()];
+  organizerRefreshQueued = true;
+  if (!organizerRefreshPromise) {
+    organizerRefreshPromise = (async () => {
+      try {
+        while (organizerRefreshQueued) {
+          organizerRefreshQueued = false;
+          const tasks: Promise<unknown>[] = [refreshEmptyOrganizerItems()];
 
-  if (ownCategoryStore.value) {
-    tasks.push(ownCategoryStore.value.actions.refresh());
+          if (ownCategoryStore.value) {
+            tasks.push(ownCategoryStore.value.actions.refresh());
+          }
+
+          if (ownTagStore.value) {
+            tasks.push(ownTagStore.value.actions.refresh());
+          }
+
+          await Promise.allSettled(tasks);
+        }
+      }
+      finally {
+        organizerRefreshPromise = null;
+      }
+    })();
   }
 
-  if (ownTagStore.value) {
-    tasks.push(ownTagStore.value.actions.refresh());
-  }
-
-  await Promise.allSettled(tasks);
+  await organizerRefreshPromise;
 }
 
 function handleOrganizersUpdated() {
-  refreshShoppingLists();
-  refreshOrganizerNavigationData();
+  void refreshShoppingLists();
+  void refreshOrganizerNavigationData();
 }
 
 function clearRecipeSearchSession() {
@@ -1536,13 +1557,28 @@ async function refreshUploadedBooks() {
 }
 
 async function refreshShoppingLists() {
-  if (!loggedIn.value || !isOwnGroup.value || !auth.user.value) {
-    shoppingLists.value = [];
-    return;
+  shoppingListsRefreshQueued = true;
+  if (!shoppingListsRefreshPromise) {
+    shoppingListsRefreshPromise = (async () => {
+      try {
+        while (shoppingListsRefreshQueued) {
+          shoppingListsRefreshQueued = false;
+          if (!loggedIn.value || !isOwnGroup.value || !auth.user.value) {
+            shoppingLists.value = [];
+            continue;
+          }
+
+          const { data } = await api.shopping.lists.getAll(1, -1, { orderBy: "name", orderDirection: "asc" });
+          shoppingLists.value = data?.items || [];
+        }
+      }
+      finally {
+        shoppingListsRefreshPromise = null;
+      }
+    })();
   }
 
-  const { data } = await api.shopping.lists.getAll(1, -1, { orderBy: "name", orderDirection: "asc" });
-  shoppingLists.value = data?.items || [];
+  await shoppingListsRefreshPromise;
 }
 
 function setShoppingListCopying(id: string, copying: boolean) {
@@ -2017,7 +2053,10 @@ async function handleUploadedBookRecipesDeleted(bookId: string, _deletedCount: n
     book.extractionRecipesCreated = remainingCount;
   }
   selectedUploadedBook.value = null;
-  await refreshUploadedBooks();
+  await Promise.all([
+    refreshUploadedBooks(),
+    refreshOrganizerNavigationData(),
+  ]);
 }
 
 async function startSelectedUploadedBookExtraction() {

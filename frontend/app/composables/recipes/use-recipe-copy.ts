@@ -15,7 +15,16 @@ export function useRecipeCopy() {
       .trim();
   }
 
-  function formatRecipeIngredient(ingredient: RecipeIngredient) {
+  function formatScaledQuantity(quantity: RecipeIngredient["quantity"], scale: number) {
+    const numericQuantity = Number(quantity);
+    if (!Number.isFinite(numericQuantity) || numericQuantity === 0) {
+      return "";
+    }
+
+    return String(Number((numericQuantity * scale).toFixed(6)));
+  }
+
+  function formatRecipeIngredient(ingredient: RecipeIngredient, scale = 1) {
     if (ingredient.title) {
       return `${ingredient.title}:`;
     }
@@ -24,7 +33,7 @@ export function useRecipeCopy() {
       return `- ${ingredient.referencedRecipe.name}`;
     }
 
-    const quantity = ingredient.quantity ? String(ingredient.quantity) : "";
+    const quantity = formatScaledQuantity(ingredient.quantity, scale);
     const unit = ingredient.unit?.abbreviation || ingredient.unit?.name || "";
     const food = ingredient.food?.name || "";
     const note = cleanRecipeText(ingredient.note);
@@ -33,7 +42,7 @@ export function useRecipeCopy() {
     return `- ${[line, note].filter(Boolean).join(" - ")}`;
   }
 
-  function formatRecipeForCopy(recipe: Recipe, fallbackName = "") {
+  function formatRecipeForCopy(recipe: Recipe, fallbackName = "", scale = 1) {
     const lines: string[] = [recipe.name || fallbackName];
     const description = cleanRecipeText(recipe.description);
     const source = cleanRecipeText(recipe.source || recipe.orgURL);
@@ -54,7 +63,7 @@ export function useRecipeCopy() {
       lines.push(`${i18n.t("recipe.recipe-yield")}: ${recipe.recipeYield}`);
     }
 
-    const ingredientsText = formatRecipeIngredientsForCopy(recipe);
+    const ingredientsText = formatRecipeIngredientsForCopy(recipe, scale);
     if (ingredientsText) {
       lines.push("", ingredientsText);
     }
@@ -77,14 +86,14 @@ export function useRecipeCopy() {
     return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
   }
 
-  function formatRecipeIngredientsForCopy(recipe: Recipe) {
+  function formatRecipeIngredientsForCopy(recipe: Recipe, scale = 1) {
     if (!recipe.recipeIngredient?.length) {
       return "";
     }
 
     const lines: string[] = [i18n.t("recipe.ingredients")];
     recipe.recipeIngredient.forEach((ingredient) => {
-      const formattedIngredient = formatRecipeIngredient(ingredient);
+      const formattedIngredient = formatRecipeIngredient(ingredient, scale);
       if (formattedIngredient) {
         lines.push(formattedIngredient);
       }
@@ -113,15 +122,15 @@ export function useRecipeCopy() {
     return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
   }
 
-  function formatRecipeIngredientsAndInstructionsForCopy(recipe: Recipe) {
+  function formatRecipeIngredientsAndInstructionsForCopy(recipe: Recipe, scale = 1) {
     return [
-      formatRecipeIngredientsForCopy(recipe),
+      formatRecipeIngredientsForCopy(recipe, scale),
       formatRecipeInstructionsForCopy(recipe),
     ].filter(Boolean).join("\n\n").trim();
   }
 
-  function copyRecipeText(recipe: Recipe, fallbackName = "") {
-    copyText(formatRecipeForCopy(recipe, fallbackName));
+  function copyRecipeText(recipe: Recipe, fallbackName = "", scale = 1) {
+    copyText(formatRecipeForCopy(recipe, fallbackName, scale));
   }
 
   return {

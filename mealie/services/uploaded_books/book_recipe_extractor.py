@@ -967,6 +967,7 @@ class UploadedBookRecipeExtractor(BaseService):
         include_item_images: bool,
         provider_slots: list[ProviderSlot] | None = None,
         provider_cursor: list[int] | None = None,
+        target_language: str | None = None,
     ) -> bool:
         shopping_service = ShoppingListService(self.repos)
         existing = self._existing_book_recipe_shopping_list(shopping_service, book, recipe)
@@ -981,6 +982,7 @@ class UploadedBookRecipeExtractor(BaseService):
                     include_ai_tips,
                     provider_slots,
                     provider_cursor,
+                    target_language,
                 )
             if include_item_images:
                 await ItemImageService(self.user.group_id, self.repos).ensure_shopping_list_images(shopping_list)
@@ -1018,6 +1020,7 @@ class UploadedBookRecipeExtractor(BaseService):
                 include_ai_tips,
                 provider_slots,
                 provider_cursor,
+                target_language,
             )
         if include_item_images:
             await ItemImageService(self.user.group_id, self.repos).ensure_shopping_list_images(shopping_list)
@@ -1030,11 +1033,13 @@ class UploadedBookRecipeExtractor(BaseService):
         include_ai_tips: bool,
         provider_slots: list[ProviderSlot] | None,
         provider_cursor: list[int] | None,
+        target_language: str | None = None,
     ):
         if not provider_slots or provider_cursor is None:
             shopping_list, _items = await shopping_service.organize_with_ai(
                 shopping_list_id,
                 include_ai_tips=include_ai_tips,
+                target_language=target_language,
             )
             return shopping_list
 
@@ -1050,6 +1055,7 @@ class UploadedBookRecipeExtractor(BaseService):
                     shopping_list_id,
                     include_ai_tips=include_ai_tips,
                     provider=slot.provider,
+                    target_language=target_language,
                 )
                 return shopping_list
             except Exception as error:
@@ -1139,6 +1145,7 @@ class UploadedBookRecipeExtractor(BaseService):
                         include_item_images,
                         provider_slots,
                         provider_cursor,
+                        getattr(book, "extraction_translate_language", None),
                     ):
                         stats["shopping_lists_created_or_existing"] += 1
                     else:
@@ -2487,6 +2494,22 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
         self.repos.session.refresh(translated_book)
         return translated_book
 
+    async def _classify_translated_book(
+        self,
+        translated_book: UploadedBook,
+        uploaded_books_root: Path,
+        target_language: str,
+    ) -> None:
+        # Imported here to avoid a module cycle: the classifier uses this extractor for sampling.
+        from .book_classifier import UploadedBookClassifier
+
+        classifier = UploadedBookClassifier(self.repos, self.user, self.household, self.translator)
+        await classifier.classify(
+            translated_book.id,
+            uploaded_books_root,
+            response_language=target_language,
+        )
+
     async def translate_book(  # noqa: C901
         self,
         book_id: UUID4,
@@ -2746,6 +2769,11 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                 target_language,
                 html_content,
                 translation_audit,
+            )
+            await self._classify_translated_book(
+                translated_book,
+                uploaded_books_root,
+                target_language,
             )
 
             book.translated_book_id = translated_book.id

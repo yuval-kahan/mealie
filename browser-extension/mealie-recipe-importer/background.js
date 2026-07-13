@@ -364,14 +364,15 @@ function normalizeBaseUrl(value) {
   return String(value || "").trim().replace(/\/+$/, "");
 }
 
-function translationLanguageForRequest(targetLanguage, pageLanguage) {
+function translationLanguageForRequest(targetLanguage, _pageLanguage) {
   const target = languagePrimary(targetLanguage);
   if (!target) {
     return null;
   }
 
-  const source = languagePrimary(pageLanguage);
-  return source && source === target ? null : targetLanguage;
+  // Always forward the user-selected output language. A same-language source
+  // still needs an explicit constraint so the model does not default to English.
+  return String(targetLanguage).trim().replace("_", "-");
 }
 
 function languagePrimary(value) {

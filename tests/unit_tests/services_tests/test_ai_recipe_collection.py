@@ -2,10 +2,24 @@ import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
-import mealie.services.recipe.recipe_service as recipe_service_module
 import pytest
+
+import mealie.services.recipe.recipe_service as recipe_service_module
 from mealie.schema.openai.recipe_search import OpenAIRecipeSearchItem, OpenAIRecipeSearchResponse
 from mealie.services.recipe.recipe_service import OpenAIRecipeService
+
+
+def test_ai_recipe_target_language_instruction_uses_the_locale_name_and_is_mandatory():
+    instruction = OpenAIRecipeService._target_language_instruction("he_IL")
+
+    assert "Hebrew" in instruction
+    assert "he-IL" in instruction
+    assert "mandatory" in instruction
+    assert "every user-facing recipe value" in instruction
+
+
+def test_ai_recipe_target_language_instruction_is_empty_without_a_requested_language():
+    assert OpenAIRecipeService._target_language_instruction(None) == ""
 
 
 @pytest.mark.asyncio

@@ -28,6 +28,7 @@ from mealie.core import exceptions
 from mealie.core.dependencies.dependencies import get_temporary_path
 from mealie.db.models.recipe.ai_search_index import RecipeAISearchIndex
 from mealie.db.models.recipe.ingredient import RecipeIngredientModel
+from mealie.lang.locale_config import LOCALE_CONFIG
 from mealie.lang.providers import Translator
 from mealie.pkgs import cache, safehttp
 from mealie.repos.all_repositories import get_repositories
@@ -1089,6 +1090,24 @@ class OpenAIRecipeService(RecipeServiceBase):
     _AI_COLLECTION_BATCH_SIZE = 60
 
     @staticmethod
+    def _target_language_instruction(translate_language: str | None) -> str:
+        """Build an unambiguous, mandatory output-language instruction for the model."""
+        requested = (translate_language or "").strip().replace("_", "-")
+        if not requested:
+            return ""
+
+        locale = LOCALE_CONFIG.get(requested)
+        language = f"{locale.name} (locale {locale.key})" if locale else requested
+        return (
+            " OUTPUT LANGUAGE REQUIREMENT (mandatory): Return every user-facing recipe value in "
+            f"{language}. This includes the name, description, yield, times, ingredient text and section titles, "
+            "instruction text and section titles, notes, categories, tags, tools, source, and creator fields. "
+            "Do not return English or the source language for those fields unless a URL, a proper name, a brand, "
+            "or a literal product name should remain unchanged. Apply this requirement even when the source page "
+            "is already written in the requested language."
+        )
+
+    @staticmethod
     def _compact_text(value: Any, max_length: int = 240) -> str:
         text = " ".join(str(value or "").split())
         if len(text) <= max_length:
@@ -1639,8 +1658,7 @@ class OpenAIRecipeService(RecipeServiceBase):
             "There should be exactly one recipe."
         )
 
-        if translate_language:
-            message += f" Please translate the recipe to {translate_language}."
+        message += self._target_language_instruction(translate_language)
         if include_ai_tips:
             message += " Add concise AI cooking tips and practical recommended ingredient varieties when useful."
         if notes and notes.strip():
@@ -1682,8 +1700,7 @@ class OpenAIRecipeService(RecipeServiceBase):
         prompt = openai_service.get_prompt("recipes.parse-recipe-text")
         message = "Please analyze the pasted text below and create a recipe only if it contains usable recipe data."
 
-        if translate_language:
-            message += f" Please translate the recipe to {translate_language}."
+        message += self._target_language_instruction(translate_language)
         if include_ai_tips:
             message += (
                 " The user wants AI tips: add concise practical cooking notes and recommended ingredient varieties "

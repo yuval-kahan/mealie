@@ -18,6 +18,7 @@ from mealie.schema.household.group_shopping_list import (
     ShoppingListItemsCollectionOut,
     ShoppingListItemUpdate,
     ShoppingListItemUpdateBulk,
+    ShoppingListMergeRequest,
     ShoppingListMultiPurposeLabelUpdate,
     ShoppingListOut,
     ShoppingListPagination,
@@ -305,6 +306,43 @@ class ShoppingListController(BaseCrudController):
         )
 
         return shopping_list
+
+    @router.post("/merge", response_model=ShoppingListOut, status_code=201)
+    def merge_lists(self, data: ShoppingListMergeRequest):
+        try:
+            shopping_list, item_changes = self.service.merge_lists(data, self.user.id)
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+        publish_list_item_events(self.publish_event, item_changes)
+        self.publish_event(
+            event_type=EventTypes.shopping_list_created,
+            document_data=EventShoppingListData(operation=EventOperation.create, shopping_list_id=shopping_list.id),
+            group_id=shopping_list.group_id,
+            household_id=shopping_list.household_id,
+            message=self.t("notifications.generic-created", name=shopping_list.name),
+        )
+        return shopping_list
+
+    @router.delete("", response_model=list[ShoppingListOut])
+    def delete_many(self, ids: list[UUID4] = Query(...)):
+        unique_ids = list(dict.fromkeys(ids))
+        shopping_lists = [self.mixins.delete_one(item_id) for item_id in unique_ids]
+        for shopping_list in shopping_lists:
+            if not shopping_list:
+                continue
+            self.publish_event(
+                event_type=EventTypes.shopping_list_deleted,
+                document_data=EventShoppingListData(
+                    operation=EventOperation.delete,
+                    shopping_list_id=shopping_list.id,
+                ),
+                group_id=shopping_list.group_id,
+                household_id=shopping_list.household_id,
+                message=self.t("notifications.generic-deleted", name=shopping_list.name),
+            )
+
+        return shopping_lists
 
     @router.post("/{item_id}/item-images/ensure", response_model=ShoppingListItemImagesEnsureResponse)
     async def ensure_shopping_list_item_images(self, item_id: UUID4) -> ShoppingListItemImagesEnsureResponse:

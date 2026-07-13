@@ -382,7 +382,13 @@ class UploadedBooksController(BasePublicController):
         self.session.refresh(book)
 
         classifier = UploadedBookClassifier(self.repos, self.user, self.household, self.translator)
-        bg_tasks.add_task(classifier.classify, book.id, self.folders.DATA_DIR.joinpath("uploaded-books"))
+        response_language = book.translation_language if book.is_translated_book else None
+        bg_tasks.add_task(
+            classifier.classify,
+            book.id,
+            self.folders.DATA_DIR.joinpath("uploaded-books"),
+            response_language,
+        )
         return UploadedBookOut.model_validate(book)
 
     @router.post("/{book_id}/extract-recipes", response_model=UploadedBookOut, status_code=status.HTTP_202_ACCEPTED)

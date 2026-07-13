@@ -17,6 +17,17 @@ def set_spa_contents():
     spa.__contents = "<!DOCTYPE html><html><head></head><body></body></html>"
 
 
+@pytest.mark.asyncio
+async def test_spa_static_files_returns_index_for_client_route(tmp_path):
+    (tmp_path / "index.html").write_text("<!doctype html><title>Mealie</title>", encoding="utf-8")
+    static_files = spa.SPAStaticFiles(directory=tmp_path, html=True)
+    scope = {"type": "http", "method": "GET", "path": "/g/home", "headers": []}
+
+    response = await static_files.get_response("g/home", scope)
+
+    assert response.status_code == 200
+
+
 def set_group_is_private(unique_user: TestUser, *, is_private: bool):
     group = unique_user.repos.groups.get_by_slug_or_id(unique_user.group_id)
     assert group and group.preferences

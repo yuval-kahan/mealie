@@ -1,4 +1,5 @@
 import asyncio
+import math
 from collections import defaultdict
 from collections.abc import AsyncIterable
 from contextlib import suppress
@@ -42,6 +43,7 @@ from mealie.schema.household.group_shopping_list import (
     ShoppingListCreate,
 )
 from mealie.schema.make_dependable import make_dependable
+from mealie.schema.openai.recipe import OpenAIRecipeIngredientAdjustment, OpenAIRecipeIngredientScale
 from mealie.schema.recipe import Recipe, ScrapeRecipe, ScrapeRecipeData
 from mealie.schema.recipe.recipe import (
     CreateRecipe,
@@ -51,6 +53,7 @@ from mealie.schema.recipe.recipe import (
 )
 from mealie.schema.recipe.recipe_ai_search import RecipeAISearchRequest, RecipeAISearchResponse
 from mealie.schema.recipe.recipe_asset import RecipeAsset
+from mealie.schema.recipe.recipe_ingredient import RecipeIngredient
 from mealie.schema.recipe.recipe_scraper import ScrapeRecipeTest
 from mealie.schema.recipe.recipe_suggestion import RecipeSuggestionQuery, RecipeSuggestionResponse
 from mealie.schema.recipe.request_helpers import (
@@ -76,6 +79,7 @@ from mealie.services.event_bus_service.event_types import (
 )
 from mealie.services.household_services.shopping_lists import ShoppingListService
 from mealie.services.item_image_service import ItemImageEnsureResult, ItemImageService
+from mealie.services.openai import OpenAIService
 from mealie.services.recipe.recipe_data_service import (
     InvalidDomainError,
     NotAnImageError,
@@ -124,6 +128,15 @@ class CreateRecipeFromText(MealieModel):
     include_item_images: bool = True
 
 
+class RecipeIngredientsAdjustWithAIRequest(MealieModel):
+    text: str = Field(..., min_length=2, max_length=4000)
+
+
+class RecipeIngredientsAdjustWithAIResponse(MealieModel):
+    ingredients: list[RecipeIngredient]
+    adjustment_note: str = ""
+
+
 class CreateRecipeFromBrowserPage(CreateRecipeFromText):
     source_url: str | None = None
     source_title: str | None = None
@@ -136,6 +149,7 @@ class CreateRecipeAIShoppingList(MealieModel):
     include_ai_tips: bool = True
     organize_shopping_list_with_ai: bool = True
     include_item_images: bool = True
+    translate_language: str | None = None
 
 
 class CreateRecipeFromBrowserPageResponse(MealieModel):
@@ -158,6 +172,19 @@ class CreateRecipeFromBrowserPageStatus(MealieModel):
     ai_enabled: bool
     provider_count: int = 0
     default_provider_configured: bool = False
+
+
+class RecipeIngredientScaleFromTextRequest(MealieModel):
+    text: str = Field(..., min_length=2, max_length=500)
+
+
+class RecipeIngredientScaleFromTextResponse(MealieModel):
+    ingredient_index: int
+    ingredient_name: str
+    original_quantity: float
+    target_quantity: float
+    unit: str = ""
+    scale: float
 
 
 @controller(router)
@@ -757,6 +784,7 @@ class RecipeController(BaseRecipeController):
             include_ai_tips=data.include_ai_tips,
             organize_shopping_list_with_ai=data.organize_shopping_list_with_ai,
             include_item_images=data.include_item_images,
+            target_language=data.translate_language,
             extras={
                 "aiCreatedFromBrowserExtension": True,
                 "sourceUrl": data.source_url,
@@ -771,6 +799,7 @@ class RecipeController(BaseRecipeController):
         organize_shopping_list_with_ai: bool,
         include_item_images: bool = True,
         extras: dict[str, object | None] | None = None,
+        target_language: str | None = None,
     ) -> CreateRecipeFromBrowserPageResponse:
         shopping_service = ShoppingListService(self.repos)
 
@@ -810,6 +839,7 @@ class RecipeController(BaseRecipeController):
                     shopping_list, _items = await shopping_service.organize_with_ai(
                         shopping_list.id,
                         include_ai_tips=include_ai_tips,
+                        target_language=target_language,
                     )
                     response.shopping_list_id = shopping_list.id
                     response.shopping_list_name = shopping_list.name
@@ -857,6 +887,7 @@ class RecipeController(BaseRecipeController):
             organize_shopping_list_with_ai=data.organize_shopping_list_with_ai,
             include_item_images=data.include_item_images,
             extras={"aiCreatedFromRecipeAction": True},
+            target_language=data.translate_language,
         )
 
     @router.post(
@@ -910,6 +941,209 @@ class RecipeController(BaseRecipeController):
 
         result = await self._ensure_recipe_item_images(recipe)
         return self._item_image_result_response(result)
+
+    @router.post("/{slug}/scale-from-text", response_model=RecipeIngredientScaleFromTextResponse)
+    async def scale_recipe_from_ingredient_text(
+        self,
+        slug: str,
+        data: RecipeIngredientScaleFromTextRequest,
+    ) -> RecipeIngredientScaleFromTextResponse:
+        """Interpret a natural-language quantity and return a validated proportional recipe scale."""
+
+        if not self._ai_enabled():
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("OpenAI services are not enabled"),
+            )
+
+        recipe = self.service.get_one(slug)
+        candidates: list[dict] = []
+        ingredients_by_index = {}
+        for index, ingredient in enumerate(recipe.recipe_ingredient or []):
+            quantity = float(ingredient.quantity or 0)
+            if not math.isfinite(quantity) or quantity <= 0 or ingredient.title:
+                continue
+
+            name = (
+                ingredient.food.name
+                if ingredient.food and ingredient.food.name
+                else ingredient.display or ingredient.note
+            )
+            name = str(name or "").strip()
+            if not name:
+                continue
+
+            unit = ingredient.unit.name if ingredient.unit and ingredient.unit.name else ""
+            candidates.append(
+                {
+                    "ingredient_index": index,
+                    "name": name,
+                    "quantity": quantity,
+                    "unit": unit,
+                }
+            )
+            ingredients_by_index[index] = (name, quantity, unit)
+
+        if not candidates:
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("This recipe has no scalable structured ingredients"),
+            )
+
+        openai_service = OpenAIService(self.repos)
+        prompt = openai_service.get_prompt("recipes.scale-recipe-from-ingredient")
+        message = orjson.dumps(
+            {
+                "user_request": data.text.strip(),
+                "ingredient_candidates": candidates,
+            }
+        ).decode()
+        try:
+            response = await openai_service.get_response(
+                prompt,
+                message,
+                response_schema=OpenAIRecipeIngredientScale,
+            )
+        except Exception as exc:
+            self.logger.exception("Failed to interpret recipe ingredient scale for %s", slug)
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("AI could not interpret the requested ingredient quantity"),
+            ) from exc
+
+        if not response or not response.matched:
+            reason = response.reason.strip() if response else "AI returned no result"
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("AI could not match the requested ingredient", reason),
+            )
+
+        selected = ingredients_by_index.get(response.ingredient_index)
+        if not selected:
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("AI could not match the requested ingredient"),
+            )
+
+        ingredient_name, original_quantity, unit = selected
+        if response.target_quantity_in_recipe_unit is None:
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("AI did not return a valid ingredient quantity"),
+            )
+
+        target_quantity = float(response.target_quantity_in_recipe_unit)
+        scale = target_quantity / original_quantity
+        if not math.isfinite(scale) or scale < 0.001 or scale > 1000:
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("The requested ingredient scale is outside the supported range"),
+            )
+
+        return RecipeIngredientScaleFromTextResponse(
+            ingredient_index=response.ingredient_index,
+            ingredient_name=ingredient_name,
+            original_quantity=original_quantity,
+            target_quantity=target_quantity,
+            unit=unit,
+            scale=scale,
+        )
+
+    @router.post("/{slug}/ingredients/adjust-with-ai", response_model=RecipeIngredientsAdjustWithAIResponse)
+    async def adjust_recipe_ingredients_with_ai(
+        self,
+        slug: str,
+        data: RecipeIngredientsAdjustWithAIRequest,
+    ) -> RecipeIngredientsAdjustWithAIResponse:
+        """Rebuild a complete ingredient list from a free-text adjustment request."""
+
+        if not self._ai_enabled():
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("OpenAI services are not enabled"),
+            )
+
+        recipe = self.service.get_one(slug)
+        original_ingredients = recipe.recipe_ingredient or []
+        if not original_ingredients:
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("This recipe has no ingredients to adjust"),
+            )
+
+        candidates: list[dict[str, object]] = []
+        for index, ingredient in enumerate(original_ingredients):
+            candidates.append(
+                {
+                    "ingredient_index": index,
+                    "title": ingredient.title,
+                    "quantity": ingredient.quantity,
+                    "unit": ingredient.unit.name if ingredient.unit and ingredient.unit.name else None,
+                    "food": ingredient.food.name if ingredient.food and ingredient.food.name else None,
+                    "note": ingredient.note or "",
+                    "recommended_variety": ingredient.recommended_variety or None,
+                    "original_text": ingredient.original_text or ingredient.display or "",
+                }
+            )
+
+        openai_service = OpenAIService(self.repos)
+        prompt = openai_service.get_prompt("recipes.adjust-ingredients")
+        message = orjson.dumps(
+            {
+                "user_request": data.text.strip(),
+                "ingredient_candidates": candidates,
+            }
+        ).decode()
+        try:
+            response = await openai_service.get_response(
+                prompt,
+                message,
+                response_schema=OpenAIRecipeIngredientAdjustment,
+            )
+        except Exception as exc:
+            self.logger.exception("Failed to adjust recipe ingredients with AI for %s", slug)
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("AI could not adjust the recipe ingredients"),
+            ) from exc
+
+        if not response or not response.adjusted:
+            reason = response.reason.strip() if response else "AI returned no result"
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("AI could not apply the ingredient adjustment", reason),
+            )
+
+        adjusted_by_index = {item.ingredient_index: item for item in response.ingredients}
+        expected_indexes = set(range(len(original_ingredients)))
+        if len(adjusted_by_index) != len(response.ingredients) or set(adjusted_by_index) != expected_indexes:
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("AI did not return a complete ingredient list"),
+            )
+
+        adjusted_ingredients: list[RecipeIngredient] = []
+        for index, original in enumerate(original_ingredients):
+            adjusted = adjusted_by_index[index]
+            payload = original.model_dump(mode="json")
+            payload.update(
+                {
+                    "title": adjusted.title if adjusted.title is not None else original.title,
+                    "quantity": adjusted.quantity,
+                    "unit": adjusted.unit,
+                    "food": adjusted.food,
+                    "note": adjusted.note,
+                    "recommended_variety": adjusted.recommended_variety or "",
+                    "original_text": adjusted.original_text or original.original_text,
+                    "display": "",
+                }
+            )
+            adjusted_ingredients.append(RecipeIngredient.model_validate(payload))
+
+        return RecipeIngredientsAdjustWithAIResponse(
+            ingredients=adjusted_ingredients,
+            adjustment_note=response.reason.strip(),
+        )
 
     @router.post("/ai-search", response_model=RecipeAISearchResponse)
     async def search_recipes_with_ai(self, data: RecipeAISearchRequest) -> RecipeAISearchResponse:

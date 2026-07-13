@@ -473,6 +473,7 @@ async function saveParsedIngredients(ingredients: NoUndefinedField<RecipeIngredi
 async function deleteRecipe() {
   const { data } = await api.recipes.deleteOne(recipe.value.slug);
   if (data?.slug) {
+    window.dispatchEvent(new CustomEvent("mealie:organizers-updated"));
     router.push(`/g/${groupSlug.value}`);
   }
 }

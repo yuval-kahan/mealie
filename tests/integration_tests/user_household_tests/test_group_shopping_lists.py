@@ -112,6 +112,115 @@ def test_shopping_lists_delete_one(
     assert response.status_code == 404
 
 
+def test_shopping_lists_merge_and_bulk_delete(api_client: TestClient, unique_user: TestUser):
+    database = unique_user.repos
+    label = database.group_multi_purpose_labels.create(
+        {"name": random_string(10), "group_id": unique_user.group_id}
+    )
+    food = database.ingredient_foods.create(
+        SaveIngredientFood(name=random_string(10), group_id=unique_user.group_id, label_id=label.id)
+    )
+
+    source_lists = []
+    for index, quantity in enumerate((300, 500, 200)):
+        response = api_client.post(
+            api_routes.households_shopping_lists,
+            json={"name": f"{random_string(10)}-{index}"},
+            headers=unique_user.token,
+        )
+        source = utils.assert_deserialize(response, 201)
+        source_lists.append(source)
+
+        response = api_client.post(
+            api_routes.households_shopping_items,
+            json={
+                "shoppingListId": source["id"],
+                "foodId": str(food.id),
+                "labelId": str(label.id),
+                "quantity": quantity,
+                "checked": index == 0,
+            },
+            headers=unique_user.token,
+        )
+        utils.assert_deserialize(response, 201)
+
+    merged_name = f"{random_string(10)} merged"
+    response = api_client.post(
+        api_routes.households_shopping_lists_merge,
+        json={
+            "sourceListIds": [source["id"] for source in source_lists],
+            "name": merged_name,
+        },
+        headers=unique_user.token,
+    )
+    merged = utils.assert_deserialize(response, 201)
+
+    assert merged["name"] == merged_name
+    assert merged["extras"]["isMergedList"] == "true"
+    assert len(merged["listItems"]) == 1
+    assert merged["listItems"][0]["quantity"] == 1000
+    assert merged["listItems"][0]["labelId"] == str(label.id)
+    assert merged["listItems"][0]["checked"] is False
+
+    # Merging is non-destructive: each source list remains independently available.
+    for source in source_lists:
+        response = api_client.get(
+            api_routes.households_shopping_lists_item_id(source["id"]),
+            headers=unique_user.token,
+        )
+        source_after_merge = utils.assert_deserialize(response, 200)
+        assert len(source_after_merge["listItems"]) == 1
+
+    response = api_client.delete(
+        api_routes.households_shopping_lists,
+        params=[("ids", merged["id"]), ("ids", source_lists[0]["id"])],
+        headers=unique_user.token,
+    )
+    deleted = utils.assert_deserialize(response, 200)
+    assert {shopping_list["id"] for shopping_list in deleted} == {merged["id"], source_lists[0]["id"]}
+
+    for source in source_lists[1:]:
+        response = api_client.get(
+            api_routes.households_shopping_lists_item_id(source["id"]),
+            headers=unique_user.token,
+        )
+        assert response.status_code == 200
+
+
+def test_shopping_list_merge_preserves_distinct_unparsed_items(api_client: TestClient, unique_user: TestUser):
+    source_ids: list[str] = []
+    for index, note in enumerate(("legacy flour item", "legacy tomato item")):
+        response = api_client.post(
+            api_routes.households_shopping_lists,
+            json={"name": f"{random_string(10)} legacy {index}"},
+            headers=unique_user.token,
+        )
+        source = utils.assert_deserialize(response, 201)
+        source_ids.append(source["id"])
+
+        response = api_client.post(
+            api_routes.households_shopping_items,
+            json={
+                "shoppingListId": source["id"],
+                "note": note,
+                "quantity": 1,
+            },
+            headers=unique_user.token,
+        )
+        utils.assert_deserialize(response, 201)
+
+    response = api_client.post(
+        api_routes.households_shopping_lists_merge,
+        json={
+            "sourceListIds": source_ids,
+            "name": f"{random_string(10)} legacy merged",
+        },
+        headers=unique_user.token,
+    )
+    merged = utils.assert_deserialize(response, 201)
+    assert sorted(item["note"] for item in merged["listItems"]) == ["legacy flour item", "legacy tomato item"]
+
+
 def test_shopping_lists_add_recipe(
     api_client: TestClient,
     unique_user: TestUser,

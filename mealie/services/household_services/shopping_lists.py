@@ -1,4 +1,5 @@
 import json
+from collections.abc import Iterable, Iterator
 from datetime import UTC, datetime
 from typing import cast
 
@@ -6,6 +7,7 @@ from fastapi import HTTPException, status
 from pydantic import UUID4
 
 from mealie.core.exceptions import UnexpectedNone
+from mealie.lang.locale_config import LOCALE_CONFIG
 from mealie.repos.all_repositories import get_repositories
 from mealie.repos.repository_factory import AllRepositories
 from mealie.schema.group.ai_providers import AIProviderOut
@@ -20,9 +22,11 @@ from mealie.schema.household.group_shopping_list import (
     ShoppingListItemsCollectionOut,
     ShoppingListItemUpdate,
     ShoppingListItemUpdateBulk,
+    ShoppingListMergeRequest,
     ShoppingListMultiPurposeLabelCreate,
     ShoppingListOut,
     ShoppingListSave,
+    ShoppingListSummary,
 )
 from mealie.schema.labels.multi_purpose_label import MultiPurposeLabelCreate
 from mealie.schema.openai.shopping_list import OpenAIShoppingListOrganization
@@ -43,6 +47,9 @@ class ShoppingListService:
     DEFAULT_FOOD_FUZZY_MATCH_THRESHOLD = 80
     AI_ORGANIZED_EXTRA_KEY = "aiOrganized"
     AI_ORGANIZED_AT_EXTRA_KEY = "aiOrganizedAt"
+    MERGED_LIST_EXTRA_KEY = "isMergedList"
+    MERGED_SOURCE_IDS_EXTRA_KEY = "mergedFromListIds"
+    MERGED_SOURCE_NAMES_EXTRA_KEY = "mergedFromListNames"
     AI_LABEL_COLORS = {
         "ירקות ופירות": "#4CAF50",
         "מוצרי חלב וביצים": "#42A5F5",
@@ -55,6 +62,35 @@ class ShoppingListService:
         "ניקיון וחד פעמי": "#78909C",
         "שונות": "#959595",
     }
+
+    @staticmethod
+    def _target_language_instruction(target_language: str | None) -> str:
+        """Build a clear output-language contract for AI-generated list metadata."""
+        requested = (target_language or "").strip().replace("_", "-")
+        if not requested:
+            return ""
+
+        locale = LOCALE_CONFIG.get(requested)
+        language = f"{locale.name} (locale {locale.key})" if locale else requested
+        return (
+            "\n\nOUTPUT LANGUAGE REQUIREMENT (mandatory): Return every generated grocery "
+            f"category name and every recommended shopping note in {language}. Keep existing item "
+            "names unchanged; only translate AI-generated category names and notes."
+        )
+
+    @staticmethod
+    def _fallback_ai_category(target_language: str | None) -> str:
+        primary_language = (target_language or "").strip().replace("_", "-").split("-", 1)[0].lower()
+        return {
+            "he": "שונות",
+            "ar": "متفرقات",
+            "de": "Sonstiges",
+            "es": "Otros",
+            "fr": "Autres",
+            "it": "Altro",
+            "pt": "Outros",
+            "ru": "Другое",
+        }.get(primary_language, "Other")
 
     def __init__(self, repos: AllRepositories):
         self.repos = repos
@@ -124,6 +160,7 @@ class ShoppingListService:
         list_id: UUID4,
         include_ai_tips: bool = False,
         provider: AIProviderOut | None = None,
+        target_language: str | None = None,
     ) -> tuple[ShoppingListOut, ShoppingListItemsCollectionOut]:
         shopping_list = self.shopping_lists.get_one(list_id)
         if shopping_list is None:
@@ -148,6 +185,7 @@ class ShoppingListService:
             f"Add AI shopping notes JSON boolean: {json.dumps(include_ai_tips)}\n\n"
             f"Existing categories JSON:\n{json.dumps(existing_categories, ensure_ascii=False)}\n\n"
             f"Shopping list items JSON:\n{json.dumps(items_payload, ensure_ascii=False)}"
+            f"{self._target_language_instruction(target_language)}"
         )
 
         response = await openai_service.get_response(
@@ -167,7 +205,9 @@ class ShoppingListService:
             if item_id not in valid_items_by_id:
                 continue
 
-            category_name = self._normalize_ai_label_name(assignment.category) or "שונות"
+            category_name = self._normalize_ai_label_name(assignment.category) or self._fallback_ai_category(
+                target_language
+            )
             category_by_item_id[item_id] = category_name
             if include_ai_tips and assignment.recommended_note:
                 recommended_note = " ".join(assignment.recommended_note.split()).strip()
@@ -177,7 +217,9 @@ class ShoppingListService:
         # Make sure every item receives a stable category even if the model omitted one.
         for item_id, item in valid_items_by_id.items():
             if item_id not in category_by_item_id:
-                category_by_item_id[item_id] = item.label.name if item.label else "שונות"
+                category_by_item_id[item_id] = item.label.name if item.label else self._fallback_ai_category(
+                    target_language
+                )
 
         labels_by_key = self._get_or_create_ai_labels(list(category_by_item_id.values()))
 
@@ -241,8 +283,20 @@ class ShoppingListService:
             if not uc.can_convert(item1_unit.standard_unit, item2_unit.standard_unit):
                 return False
 
-        # if foods match, we can merge, otherwise compare the notes
-        return bool(item1.food_id) or item1.note == item2.note
+        # Structured foods have already matched by ID. For legacy/unparsed items,
+        # require an actual text identity so two empty records are never folded
+        # together merely because both have no food ID and an empty note.
+        if item1.food_id:
+            return True
+
+        note1 = (item1.note or "").strip().casefold()
+        note2 = (item2.note or "").strip().casefold()
+        if note1 or note2:
+            return note1 == note2
+
+        display1 = (item1.display or "").strip().casefold()
+        display2 = (item2.display or "").strip().casefold()
+        return bool(display1 and display1 == display2)
 
     def merge_items(
         self,
@@ -325,45 +379,92 @@ class ShoppingListService:
         food_search = self.data_matcher.find_food_match(item.display)
         return food_search.label_id if food_search else None
 
+    @staticmethod
+    def _item_merge_bucket(item: ShoppingListItemBase) -> tuple[str, str, str] | None:
+        """Return a narrow merge bucket so consolidation stays close to linear."""
+        if item.checked:
+            return None
+
+        if item.food_id:
+            identity_type = "food"
+            identity = str(item.food_id)
+        else:
+            note = (item.note or "").strip().casefold()
+            display = (item.display or "").strip().casefold()
+            if note:
+                identity_type = "note"
+                identity = note
+            elif display:
+                identity_type = "display"
+                identity = display
+            else:
+                return None
+
+        return str(item.shopping_list_id), identity_type, identity
+
+    def _consolidate_create_items(
+        self,
+        create_items: Iterable[ShoppingListItemCreate],
+    ) -> list[ShoppingListItemCreate]:
+        consolidated: list[ShoppingListItemCreate] = []
+        bucket_indexes: dict[tuple[str, str, str], list[int]] = {}
+
+        for create_item in create_items:
+            bucket = self._item_merge_bucket(create_item)
+            if bucket is not None:
+                for index in bucket_indexes.get(bucket, []):
+                    filtered_item = consolidated[index]
+                    if not self.can_merge(create_item, filtered_item):
+                        continue
+
+                    consolidated[index] = self.merge_items(create_item, filtered_item).cast(
+                        ShoppingListItemCreate
+                    )
+                    break
+                else:
+                    bucket_indexes.setdefault(bucket, []).append(len(consolidated))
+                    consolidated.append(create_item)
+                continue
+
+            consolidated.append(create_item)
+
+        return consolidated
+
     def bulk_create_items(
-        self, create_items: list[ShoppingListItemCreate], auto_find_labels=True
+        self, create_items: Iterable[ShoppingListItemCreate], auto_find_labels=True
     ) -> ShoppingListItemsCollectionOut:
         """
         Create a list of items, merging into existing ones where possible.
         Optionally try to find a label for each item if one isn't provided using the item's food data or display name.
         """
 
-        # consolidate items to be created
-        consolidated_create_items: list[ShoppingListItemCreate] = []
-        for create_item in create_items:
-            merged = False
-            for i, filtered_item in enumerate(consolidated_create_items):
-                if not self.can_merge(create_item, filtered_item):
-                    continue
-
-                consolidated_create_items[i] = self.merge_items(create_item, filtered_item).cast(ShoppingListItemCreate)
-                merged = True
-                break
-
-            if not merged:
-                consolidated_create_items.append(create_item)
-
-        create_items = consolidated_create_items
+        create_items = self._consolidate_create_items(create_items)
         filtered_create_items: list[ShoppingListItemCreate] = []
 
         # check to see if we can merge into any existing items
         update_items: list[ShoppingListItemUpdateBulk] = []
-        existing_items_map: dict[UUID4, list[ShoppingListItemOut]] = {}
+        existing_items_map: dict[UUID4, dict[tuple[str, str, str], list[ShoppingListItemOut]]] = {}
         for create_item in create_items:
             if create_item.shopping_list_id not in existing_items_map:
                 query = PaginationQuery(
                     per_page=-1, query_filter=f"shopping_list_id={create_item.shopping_list_id} AND checked=false"
                 )
                 items_data = self.list_items.page_all(query)
-                existing_items_map[create_item.shopping_list_id] = items_data.items
+                existing_item_buckets: dict[tuple[str, str, str], list[ShoppingListItemOut]] = {}
+                for existing_item in items_data.items:
+                    bucket = self._item_merge_bucket(existing_item)
+                    if bucket is not None:
+                        existing_item_buckets.setdefault(bucket, []).append(existing_item)
+                existing_items_map[create_item.shopping_list_id] = existing_item_buckets
 
             merged = False
-            for existing_item in existing_items_map[create_item.shopping_list_id]:
+            create_bucket = self._item_merge_bucket(create_item)
+            existing_candidates = (
+                existing_items_map[create_item.shopping_list_id].get(create_bucket, [])
+                if create_bucket is not None
+                else []
+            )
+            for existing_item in existing_candidates:
                 if not self.can_merge(existing_item, create_item):
                     continue
 
@@ -493,6 +594,80 @@ class ShoppingListService:
             self.remove_unused_recipe_references(list_id)
 
         return ShoppingListItemsCollectionOut(created_items=[], updated_items=[], deleted_items=deleted_items)
+
+    @classmethod
+    def is_merged_list(cls, shopping_list: ShoppingListCreate) -> bool:
+        value = (shopping_list.extras or {}).get(cls.MERGED_LIST_EXTRA_KEY)
+        return value is True or str(value).lower() == "true"
+
+    def merge_lists(
+        self,
+        data: ShoppingListMergeRequest,
+        owner_id: UUID4,
+    ) -> tuple[ShoppingListOut, ShoppingListItemsCollectionOut]:
+        source_names: list[str] = []
+        for source_id in data.source_list_ids:
+            source = cast(
+                ShoppingListSummary | None,
+                self.shopping_lists.get_one(source_id, override_schema=ShoppingListSummary),
+            )
+            if source is None:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Shopping list not found")
+            if self.is_merged_list(source):
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    detail="A merged shopping list cannot be used as a merge source",
+                )
+            source_names.append((source.name or "").strip() or str(source.id))
+
+        merged_name = (data.name or "").strip() or f"Merged: {' + '.join(source_names)}"
+        merged_list = self.create_one_list(
+            ShoppingListCreate(
+                name=merged_name,
+                extras={
+                    self.MERGED_LIST_EXTRA_KEY: "true",
+                    self.MERGED_SOURCE_IDS_EXTRA_KEY: json.dumps(
+                        [str(source_id) for source_id in data.source_list_ids]
+                    ),
+                    self.MERGED_SOURCE_NAMES_EXTRA_KEY: json.dumps(source_names, ensure_ascii=False),
+                },
+            ),
+            owner_id,
+        )
+
+        def copied_items() -> Iterator[ShoppingListItemCreate]:
+            for source_id in data.source_list_ids:
+                source = self.shopping_lists.get_one(source_id)
+                if source is None:
+                    raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Shopping list not found")
+
+                for item in source.list_items:
+                    # A merged list is a fresh checklist; source checked states remain untouched.
+                    yield ShoppingListItemCreate(
+                        shopping_list_id=merged_list.id,
+                        checked=False,
+                        position=item.position,
+                        quantity=item.quantity,
+                        food_id=item.food_id,
+                        label_id=item.label_id,
+                        unit_id=item.unit_id,
+                        note=item.note,
+                        recommended_variety=item.recommended_variety,
+                        display=item.display if not (item.food_id or item.unit_id or item.note) else "",
+                        extras=dict(item.extras or {}),
+                        recipe_references=[
+                            ShoppingListItemRecipeRefCreate(
+                                recipe_id=reference.recipe_id,
+                                recipe_quantity=reference.recipe_quantity,
+                                recipe_scale=reference.recipe_scale,
+                                recipe_note=reference.recipe_note,
+                            )
+                            for reference in item.recipe_references
+                        ],
+                    )
+
+        item_changes = self.bulk_create_items(copied_items(), auto_find_labels=False)
+        return cast(ShoppingListOut, self.shopping_lists.get_one(merged_list.id)), item_changes
 
     def get_shopping_list_items_from_recipe(
         self,

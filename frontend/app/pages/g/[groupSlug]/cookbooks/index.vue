@@ -301,7 +301,16 @@
             variant="outlined"
             class="cookbook-library__book"
           >
-            <div class="cookbook-library__cover">
+            <div
+              class="cookbook-library__cover cookbook-library__cover--interactive"
+              role="button"
+              tabindex="0"
+              :title="$t('cookbook.open-book')"
+              :aria-label="`${$t('cookbook.open-book')}: ${book.name}`"
+              @click="openUploadedBook(book)"
+              @keydown.enter.prevent="openUploadedBook(book)"
+              @keydown.space.prevent="openUploadedBook(book)"
+            >
               <v-img
                 v-if="book.bookMetadata?.cover_file_name"
                 :src="api.uploadedBooks.coverUrl(book.id)"
@@ -317,6 +326,9 @@
               </v-img>
               <div v-else class="cookbook-library__cover-fallback">
                 <v-icon :icon="bookIcon(book)" size="72" />
+              </div>
+              <div class="cookbook-library__cover-action" aria-hidden="true">
+                <v-icon :icon="$globals.icons.openInNew" size="36" />
               </div>
             </div>
             <v-card-item>
@@ -634,6 +646,7 @@ function handleBookRecipesDeleted(bookId: string, _deletedCount: number, remaini
     book.extractionRecipesCreated = remainingCount;
   }
   bookRecipeDeleteTarget.value = null;
+  window.dispatchEvent(new CustomEvent("mealie:organizers-updated"));
 }
 
 async function deleteUploadedBook() {
@@ -752,13 +765,52 @@ onBeforeUnmount(() => {
   flex-direction: column;
   min-height: 250px;
   border-radius: 8px;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    transform 0.16s ease;
+}
+
+.cookbook-library__book:hover,
+.cookbook-library__book:focus-within {
+  border-color: rgba(var(--v-theme-primary), 0.65);
+  box-shadow: 0 5px 16px rgba(var(--v-theme-on-surface), 0.14);
+  transform: translateY(-2px);
 }
 
 .cookbook-library__cover {
   aspect-ratio: 4 / 3;
   background: rgb(var(--v-theme-surface-variant));
   overflow: hidden;
+  position: relative;
   width: 100%;
+}
+
+.cookbook-library__cover--interactive {
+  cursor: pointer;
+  outline: none;
+}
+
+.cookbook-library__cover--interactive:focus-visible {
+  box-shadow: inset 0 0 0 3px rgb(var(--v-theme-primary));
+}
+
+.cookbook-library__cover-action {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.48);
+  color: white;
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  transition: opacity 0.16s ease;
+}
+
+.cookbook-library__book:hover .cookbook-library__cover-action,
+.cookbook-library__cover--interactive:focus-visible .cookbook-library__cover-action {
+  opacity: 1;
 }
 
 .cookbook-library__cover-fallback {

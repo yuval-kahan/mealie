@@ -415,6 +415,7 @@ class ArticlesController(BaseUserController):
                     shopping_list, _items = await shopping_service.organize_with_ai(
                         shopping_list.id,
                         include_ai_tips=data.include_ai_tips,
+                        target_language=data.translate_language,
                     )
                     response.shopping_list_id = shopping_list.id
                     response.shopping_list_name = shopping_list.name

@@ -415,6 +415,7 @@ async function deleteSelected() {
   await api.bulk.bulkDelete({ recipes });
 
   await refreshRecipes();
+  window.dispatchEvent(new CustomEvent("mealie:organizers-updated"));
   resetAll();
 }
 

@@ -1,5 +1,11 @@
 <template>
-  <RecipeDialogShare v-model="shareDialog" :recipe-id="recipeId" :name="name" :recipe="recipeRef" />
+  <RecipeDialogShare
+    v-model="shareDialog"
+    :recipe-id="recipeId"
+    :name="name"
+    :recipe="recipeRef"
+    :recipe-scale="recipeScale"
+  />
   <RecipeDialogPrintPreferences v-model="printPreferencesDialog" :recipe="recipeRef" />
   <BaseDialog
     v-model="recipeDeleteDialog"
@@ -452,6 +458,7 @@ async function deleteRecipe() {
 
   if (data?.slug) {
     alert.success(i18n.t("events.recipe-deleted") as string);
+    window.dispatchEvent(new CustomEvent("mealie:organizers-updated"));
     emit("deleted", props.slug);
     if (props.redirectOnDelete) {
       router.push(`/g/${groupSlug.value}`);
@@ -534,7 +541,7 @@ async function copyRecipe() {
     return;
   }
 
-  copyRecipeText(recipeRef.value, props.name);
+  copyRecipeText(recipeRef.value, props.name, props.recipeScale);
 }
 
 async function createAIShoppingList() {

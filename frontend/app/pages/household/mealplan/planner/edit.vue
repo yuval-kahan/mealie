@@ -7,19 +7,13 @@
       :submit-text="newMeal.existing ? $t('general.update') : $t('general.create')"
       color="primary"
       :icon="$globals.icons.foods"
+      width="720"
+      max-width="96vw"
+      keep-open
+      :loading="dialog.loading"
       :submit-disabled="isCreateDisabled"
       can-submit
-      @submit="
-        () => {
-          if (newMeal.existing) {
-            actions.updateOne({ ...newMeal, date: newMealDateString });
-          }
-          else {
-            actions.createOne({ ...newMeal, date: newMealDateString });
-          }
-          resetDialog();
-        }
-      "
+      @submit="submitMealPlan"
       @close="resetDialog()"
     >
       <v-card-text class="pb-2">
@@ -41,20 +35,84 @@
             item-title="text"
             item-value="value"
           />
-          <v-autocomplete
-            v-if="!dialog.note"
-            v-model="newMeal.recipeId"
-            v-model:search="search.query.value"
-            :label="$t('meal-plan.meal-recipe')"
-            :items="search.data.value"
-            :custom-filter="normalizeFilter"
-            :loading="search.loading.value"
-            cache-items
-            item-title="name"
-            item-value="id"
-            :return-object="false"
-            :rules="[requiredRule]"
-          />
+          <template v-if="!dialog.note">
+            <v-row dense>
+              <v-col cols="12" sm="6">
+                <v-autocomplete
+                  v-model="selectedMealCategorySlugs"
+                  :items="mealPlanCategories"
+                  :label="$t('category.categories')"
+                  :prepend-inner-icon="$globals.icons.categories"
+                  :custom-filter="normalizeFilter"
+                  item-title="name"
+                  item-value="slug"
+                  multiple
+                  chips
+                  closable-chips
+                  clearable
+                  hide-details
+                  variant="outlined"
+                  density="comfortable"
+                />
+              </v-col>
+              <v-col cols="12" sm="6">
+                <v-autocomplete
+                  v-model="selectedMealTagSlugs"
+                  :items="mealPlanTags"
+                  :label="$t('tag.tags')"
+                  :prepend-inner-icon="$globals.icons.tags"
+                  :custom-filter="normalizeFilter"
+                  item-title="name"
+                  item-value="slug"
+                  multiple
+                  chips
+                  closable-chips
+                  clearable
+                  hide-details
+                  variant="outlined"
+                  density="comfortable"
+                />
+              </v-col>
+            </v-row>
+            <v-autocomplete
+              v-if="newMeal.existing"
+              v-model="newMeal.recipeId"
+              v-model:search="search.query.value"
+              :label="$t('meal-plan.meal-recipe')"
+              :items="mealPlanRecipeOptions"
+              :custom-filter="normalizeFilter"
+              :loading="search.loading.value"
+              :prepend-inner-icon="$globals.icons.search"
+              :no-data-text="$t('search.no-results')"
+              clearable
+              item-title="name"
+              item-value="id"
+              :return-object="false"
+              :rules="[requiredRule]"
+              @update:model-value="rememberSingleMealRecipe"
+            />
+            <v-autocomplete
+              v-else
+              v-model="selectedMealRecipeIds"
+              v-model:search="search.query.value"
+              :label="$t('meal-plan.meal-recipe')"
+              :items="mealPlanRecipeOptions"
+              :custom-filter="normalizeFilter"
+              :loading="search.loading.value"
+              :prepend-inner-icon="$globals.icons.search"
+              :no-data-text="$t('search.no-results')"
+              clearable
+              multiple
+              chips
+              closable-chips
+              hide-selected
+              item-title="name"
+              item-value="id"
+              :return-object="false"
+              :rules="[requiredRule]"
+              @update:model-value="rememberSelectedMealRecipes"
+            />
+          </template>
           <template v-else>
             <v-text-field v-model="newMeal.title" :rules="[requiredRule]" :label="$t('meal-plan.meal-title')" />
             <v-textarea v-model="newMeal.text" rows="2" :label="$t('meal-plan.meal-note')" />
@@ -246,10 +304,13 @@ import type { useMealplans } from "~/composables/use-group-mealplan";
 import { usePlanTypeOptions, getEntryTypeText } from "~/composables/use-group-mealplan";
 import RecipeCardImage from "~/components/Domain/Recipe/RecipeCardImage.vue";
 import type { PlanEntryType, UpdatePlanEntry } from "~/lib/api/types/meal-plan";
+import type { Recipe } from "~/lib/api/types/recipe";
 import { useUserApi } from "~/composables/api";
 import { useHouseholdSelf } from "~/composables/use-households";
 import { normalizeFilter } from "~/composables/use-utils";
 import { useRecipeSearch } from "~/composables/recipes/use-recipe-search";
+import { useCategoryStore, useTagStore } from "~/composables/store";
+import { alert } from "~/composables/use-toast";
 
 const props = defineProps<{
   mealplans: MealsByDate[];
@@ -260,6 +321,7 @@ const api = useUserApi();
 const auth = useMealieAuth();
 const route = useRoute();
 const router = useRouter();
+const i18n = useI18n();
 const { household } = useHouseholdSelf();
 const requiredRule = (value: any) => !!value || "Required.";
 
@@ -324,9 +386,16 @@ const dialog = reactive({
   note: false,
 });
 
+const selectedMealRecipeIds = ref<string[]>([]);
+const selectedMealRecipeCache = ref<Record<string, Recipe>>({});
+const selectedMealCategorySlugs = ref<string[]>([]);
+const selectedMealTagSlugs = ref<string[]>([]);
+
 watch(dialog, () => {
   if (dialog.note) {
     newMeal.recipeId = undefined;
+    selectedMealRecipeIds.value = [];
+    selectedMealRecipeCache.value = {};
   }
 });
 
@@ -350,8 +419,67 @@ const isCreateDisabled = computed(() => {
   if (dialog.note) {
     return !newMeal.title.trim();
   }
-  return !newMeal.recipeId;
+  return newMeal.existing ? !newMeal.recipeId : !selectedMealRecipeIds.value.length;
 });
+
+async function submitMealPlan() {
+  if (dialog.loading || isCreateDisabled.value) {
+    return;
+  }
+
+  dialog.loading = true;
+  try {
+    if (newMeal.existing) {
+      await props.actions.updateOne({ ...newMeal, date: newMealDateString.value });
+    }
+    else if (dialog.note) {
+      const { error } = await api.mealplans.createOne({
+        date: newMealDateString.value,
+        entryType: newMeal.entryType,
+        title: newMeal.title,
+        text: newMeal.text,
+      });
+      if (error) {
+        alert.error(i18n.t("meal-plan.mealplan-creation-failed"));
+        return;
+      }
+      await props.actions.refreshAll();
+    }
+    else {
+      const failedRecipeIds: string[] = [];
+      let created = false;
+
+      for (const recipeId of selectedMealRecipeIds.value) {
+        const { error } = await api.mealplans.createOne({
+          date: newMealDateString.value,
+          entryType: newMeal.entryType,
+          recipeId,
+        });
+        if (error) {
+          failedRecipeIds.push(recipeId);
+        }
+        else {
+          created = true;
+        }
+      }
+
+      if (created) {
+        await props.actions.refreshAll();
+      }
+      if (failedRecipeIds.length) {
+        selectedMealRecipeIds.value = failedRecipeIds;
+        alert.error(i18n.t("meal-plan.mealplan-creation-failed"));
+        return;
+      }
+    }
+
+    state.value.dialog = false;
+    resetDialog();
+  }
+  finally {
+    dialog.loading = false;
+  }
+}
 
 function openDialog(date: Date) {
   newMeal.date = date;
@@ -375,6 +503,7 @@ function toggleTodayEdit(date: Date) {
 
 function editMeal(mealplan: UpdatePlanEntry) {
   const { date, title, text, entryType, recipeId, id, groupId, userId } = mealplan;
+  const mealRecipe = (mealplan as any).recipe;
   if (!entryType) return;
 
   const [year, month, day] = date.split("-").map(Number);
@@ -387,6 +516,11 @@ function editMeal(mealplan: UpdatePlanEntry) {
   newMeal.id = id;
   newMeal.groupId = groupId;
   newMeal.userId = userId || auth.user.value?.id || "";
+  selectedMealRecipeIds.value = [];
+
+  selectedMealRecipeCache.value = mealRecipe?.id
+    ? { [mealRecipe.id]: mealRecipe as Recipe }
+    : {};
 
   state.value.dialog = true;
   dialog.note = !recipeId;
@@ -399,6 +533,13 @@ function resetDialog() {
   newMeal.entryType = "dinner";
   newMeal.recipeId = undefined;
   newMeal.existing = false;
+  selectedMealRecipeIds.value = [];
+  selectedMealRecipeCache.value = {};
+  selectedMealCategorySlugs.value = [];
+  selectedMealTagSlugs.value = [];
+  search.query.value = "";
+  dialog.note = false;
+  dialog.error = false;
 }
 
 async function randomMeal(date: Date, type: PlanEntryType) {
@@ -415,7 +556,42 @@ async function randomMeal(date: Date, type: PlanEntryType) {
 // =====================================================
 // Search
 
-const search = useRecipeSearch(api);
+const { store: mealPlanCategories } = useCategoryStore();
+const { store: mealPlanTags } = useTagStore();
+const search = useRecipeSearch(api, {
+  categories: selectedMealCategorySlugs,
+  tags: selectedMealTagSlugs,
+  perPage: 100,
+});
+const mealPlanRecipeOptions = computed(() => {
+  const recipesById = new Map<string, Recipe>();
+  Object.values(selectedMealRecipeCache.value).forEach(recipe => recipesById.set(recipe.id, recipe));
+  search.data.value.forEach(recipe => recipesById.set(recipe.id, recipe));
+  return [...recipesById.values()];
+});
+
+function rememberSingleMealRecipe(recipeId: string | null) {
+  if (!recipeId) {
+    selectedMealRecipeCache.value = {};
+    return;
+  }
+
+  const recipe = mealPlanRecipeOptions.value.find(candidate => candidate.id === recipeId);
+  if (recipe) {
+    selectedMealRecipeCache.value = { [recipe.id]: recipe };
+  }
+}
+
+function rememberSelectedMealRecipes(recipeIds: string[] | null) {
+  const activeIds = new Set(recipeIds || []);
+  const nextCache: Record<string, Recipe> = {};
+  mealPlanRecipeOptions.value.forEach((recipe) => {
+    if (activeIds.has(recipe.id)) {
+      nextCache[recipe.id] = recipe;
+    }
+  });
+  selectedMealRecipeCache.value = nextCache;
+}
 const planTypeOptions = usePlanTypeOptions();
 
 onMounted(async () => {

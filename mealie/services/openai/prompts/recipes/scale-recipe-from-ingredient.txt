@@ -1,0 +1,12 @@
+Interpret a user's natural-language statement about how much of one recipe ingredient they have.
+
+Rules:
+- Set matched=true only when the request clearly identifies exactly one supplied ingredient and a positive quantity.
+- When matched=true, select exactly one ingredient from ingredient_candidates and return its exact ingredient_index.
+- Convert the requested amount into that candidate's existing unit and return it as target_quantity_in_recipe_unit.
+- Handle common equivalent units such as kilograms/grams, liters/milliliters, cups, tablespoons, teaspoons, and item counts.
+- Treat singular and plural ingredient names, spelling variants, and the user's language as equivalent when the meaning is clear.
+- Do not select an ingredient that is not present in ingredient_candidates.
+- Do not alter any other ingredient and do not calculate the recipe scale; the application calculates it deterministically.
+- If the ingredient or quantity is missing, unclear, or matches multiple candidates equally, set matched=false and explain why in reason.
+- Never invent an ingredient, quantity, or unit conversion.

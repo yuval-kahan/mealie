@@ -207,6 +207,28 @@
         <span class="shopping-list-page-title">{{ shoppingList.name }}</span>
       </template>
     </BasePageTitle>
+    <v-alert
+      v-if="mergedSourceLinks.length"
+      type="info"
+      variant="tonal"
+      :icon="$globals.icons.merge"
+      class="mb-4"
+    >
+      <div class="font-weight-bold mb-2">
+        {{ $t("shopping-list.merged-from") }}
+      </div>
+      <div class="d-flex flex-wrap ga-2">
+        <v-chip
+          v-for="source in mergedSourceLinks"
+          :key="source.id"
+          :to="`/shopping-lists/${source.id}`"
+          size="small"
+          :append-icon="$globals.icons.openInNew"
+        >
+          {{ source.name }}
+        </v-chip>
+      </div>
+    </v-alert>
     <BannerWarning
       v-if="isOffline"
       :title="$t('shopping-list.you-are-offline')"
@@ -480,6 +502,36 @@ const {
 
 const hasShoppingListItems = computed(() => {
   return Boolean(listItems.unchecked.length || listItems.checked.length);
+});
+
+function parseStringArrayExtra(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map(String).filter(Boolean);
+  }
+  if (typeof value !== "string" || !value.trim()) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+  }
+  catch {
+    return [];
+  }
+}
+
+const mergedSourceLinks = computed(() => {
+  if (!shoppingList.value) {
+    return [];
+  }
+
+  const ids = parseStringArrayExtra(shoppingList.value.extras?.mergedFromListIds);
+  const names = parseStringArrayExtra(shoppingList.value.extras?.mergedFromListNames);
+  return ids.map((sourceId, index) => ({
+    id: sourceId,
+    name: names[index] || sourceId,
+  }));
 });
 </script>
 

@@ -1,6 +1,33 @@
 <template>
   <div v-if="value && value.length > 0">
     <BaseDialog
+      v-model="aiIngredientsDialog"
+      :title="$t('recipe.adjust-ingredients-with-ai')"
+      :icon="$globals.icons.robot"
+      width="640"
+      max-width="96vw"
+      can-submit
+      :submit-disabled="aiIngredientRequest.trim().length < 2 || aiIngredientsLoading"
+      :submit-loading="aiIngredientsLoading"
+      @submit="adjustIngredientsWithAI"
+    >
+      <v-card-text class="pt-4">
+        <p class="mb-4">
+          {{ $t("recipe.adjust-ingredients-with-ai-description") }}
+        </p>
+        <v-textarea
+          v-model="aiIngredientRequest"
+          autofocus
+          auto-grow
+          rows="4"
+          variant="outlined"
+          :label="$t('recipe.adjust-ingredients-with-ai')"
+          :placeholder="$t('recipe.adjust-ingredients-with-ai-placeholder')"
+          :disabled="aiIngredientsLoading"
+        />
+      </v-card-text>
+    </BaseDialog>
+    <BaseDialog
       v-model="quantityScaleDialog"
       :title="$t('recipe.scale-from-ingredient')"
       :icon="$globals.icons.edit"
@@ -29,11 +56,22 @@
     </BaseDialog>
     <div
       v-if="!isCookMode"
-      class="d-flex justify-start"
+      class="d-flex flex-wrap align-center justify-start ga-1"
     >
       <h2 class="mt-1 text-h5 font-weight-medium opacity-80">
         {{ $t("recipe.ingredients") }}
       </h2>
+      <v-btn
+        v-if="showAiIngredientAdjustment"
+        size="small"
+        variant="tonal"
+        color="success"
+        class="ms-2"
+        :prepend-icon="$globals.icons.robot"
+        @click="aiIngredientsDialog = true"
+      >
+        AI
+      </v-btn>
       <v-btn
         icon
         size="small"
@@ -65,6 +103,27 @@
         :copy-text="ingredientCopyText"
       />
     </div>
+    <v-alert
+      v-if="aiIngredientsAdjusted"
+      type="success"
+      variant="tonal"
+      density="compact"
+      class="mb-3"
+    >
+      <div class="d-flex flex-wrap align-center ga-2">
+        <span>{{ $t("recipe.ai-ingredients-adjusted") }}</span>
+        <v-spacer />
+        <v-btn
+          v-if="canResetAiIngredientsAdjustment"
+          size="small"
+          variant="text"
+          :prepend-icon="$globals.icons.refresh"
+          @click="$emit('resetAiIngredientsAdjustment')"
+        >
+          {{ $t("general.reset") }}
+        </v-btn>
+      </div>
+    </v-alert>
     <div>
       <div
         v-for="(ingredient, index) in value"
@@ -121,9 +180,11 @@
 
 <script setup lang="ts">
 import RecipeIngredientListItem from "./RecipeIngredientListItem.vue";
-import { useStaticRoutes } from "~/composables/api";
+import { useStaticRoutes, useUserApi } from "~/composables/api";
 import { useIngredientTextParser } from "~/composables/recipes";
 import { recipeItemImagesEnsured, useRecipeItemImages } from "~/composables/recipes/use-recipe-item-images";
+import { useLoggedInState } from "~/composables/use-logged-in-state";
+import { alert } from "~/composables/use-toast";
 import { useUserExperiencePreferences } from "~/composables/use-users/preferences";
 import type { RecipeIngredient } from "~/lib/api/types/recipe";
 
@@ -134,6 +195,8 @@ interface Props {
   groupId?: string | null;
   recipeSlug?: string | null;
   itemImagesEnsured?: boolean;
+  aiIngredientsAdjusted?: boolean;
+  canResetAiIngredientsAdjustment?: boolean;
 }
 const props = withDefaults(defineProps<Props>(), {
   value: () => [],
@@ -142,14 +205,21 @@ const props = withDefaults(defineProps<Props>(), {
   groupId: null,
   recipeSlug: null,
   itemImagesEnsured: false,
+  aiIngredientsAdjusted: false,
+  canResetAiIngredientsAdjustment: false,
 });
 
 const emit = defineEmits<{
   "itemImagesEnsured": [];
   "update:scale": [scale: number];
+  "ingredientsAdjusted": [payload: { ingredients: RecipeIngredient[]; adjustmentNote: string }];
+  "resetAiIngredientsAdjustment": [];
 }>();
 
 const { parseIngredientText } = useIngredientTextParser();
+const api = useUserApi();
+const i18n = useI18n();
+const { isOwnGroup } = useLoggedInState();
 const userExperiencePreferences = useUserExperiencePreferences();
 const { ensureRecipeItemImages } = useRecipeItemImages();
 const { itemImage } = useStaticRoutes();
@@ -158,6 +228,9 @@ const localItemImagesEnsured = ref(props.itemImagesEnsured);
 const quantityScaleDialog = ref(false);
 const quantityScaleIngredient = ref<RecipeIngredient | null>(null);
 const targetQuantity = ref<number | null>(null);
+const aiIngredientsDialog = ref(false);
+const aiIngredientRequest = ref("");
+const aiIngredientsLoading = ref(false);
 
 const validTargetQuantity = computed(() => Number.isFinite(Number(targetQuantity.value)) && Number(targetQuantity.value) > 0);
 const quantityScaleIngredientName = computed(() => {
@@ -173,6 +246,12 @@ const checked = ref(props.value.map(() => false));
 const showTitleEditor = computed(() => props.value.map(x => validateTitle(x.title)));
 const showEnsureItemImagesButton = computed(() => {
   return !props.isCookMode && !!props.recipeSlug && !localItemImagesEnsured.value;
+});
+const showAiIngredientAdjustment = computed(() => {
+  return !props.isCookMode
+    && isOwnGroup.value
+    && !!props.recipeSlug
+    && props.value.some(ingredient => !ingredient.title || ingredient.display || ingredient.note || ingredient.food);
 });
 
 watch(
@@ -263,6 +342,32 @@ function applyQuantityScale() {
 
   emit("update:scale", desiredQuantity / baseQuantity);
   quantityScaleDialog.value = false;
+}
+
+async function adjustIngredientsWithAI() {
+  const request = aiIngredientRequest.value.trim();
+  if (!props.recipeSlug || request.length < 2 || aiIngredientsLoading.value) {
+    return;
+  }
+
+  aiIngredientsLoading.value = true;
+  try {
+    const { data, error } = await api.recipes.adjustIngredientsWithAI(props.recipeSlug, request);
+    if (error || !data?.ingredients?.length) {
+      alert.error(i18n.t("events.something-went-wrong"));
+      return;
+    }
+
+    emit("ingredientsAdjusted", {
+      ingredients: data.ingredients,
+      adjustmentNote: data.adjustmentNote || "",
+    });
+    aiIngredientRequest.value = "";
+    aiIngredientsDialog.value = false;
+  }
+  finally {
+    aiIngredientsLoading.value = false;
+  }
 }
 </script>
 

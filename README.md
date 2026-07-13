@@ -10,6 +10,21 @@
 > This repository is a customized fork of [Mealie](https://github.com/mealie-recipes/mealie), focused on AI-assisted recipe creation, cookbook translation and extraction, richer shopping-list workflows, Hebrew/RTL usability, and local-first media management.
 > See [FORK_CHANGES.md](FORK_CHANGES.md) for the complete feature list, implementation notes, stability review, and verification results.
 
+## Fork Highlights
+
+- Create structured recipes and shopping lists with AI from text, links, images, videos, books, and browser-extracted pages.
+- Translate full cookbooks, extract recipes by page range, resume long-running jobs, and distribute work across multiple Gemini API keys.
+- Manage uploaded and translated cookbook libraries, AI-generated cookbooks, articles, recipe media, background jobs, and source-page links.
+- Use expanded shopping-list workflows including AI organization, inline editing, search, bulk deletion, and merging any number of lists while preserving their sources.
+- Use the Hebrew/RTL interface or any of Mealie's 42 bundled locales. Fork-specific UI and the browser extension are localized with parity checks.
+- Run the customized frontend and backend together with the included Docker Compose configuration.
+
+### Mealie AI Browser Extension
+
+The included Chrome/Edge extension extracts the current page through the user's browser, detects recipes or articles, sends the content to this Mealie instance, and can create a translated recipe plus an AI-organized shopping list.
+
+![Mealie AI browser extension](docs/images/mealie-ai-browser-extension.jpeg)
+
 <!-- PROJECT LOGO -->
 <br />
 <p align="center">

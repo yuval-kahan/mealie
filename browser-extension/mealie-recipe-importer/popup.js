@@ -711,14 +711,16 @@ function errorMessage(error) {
   return error?.message || translator.t("errors.unexpected");
 }
 
-function translationLanguageForRequest(targetLanguage, pageLanguage) {
+function translationLanguageForRequest(targetLanguage, _pageLanguage) {
   const target = languagePrimary(targetLanguage);
   if (!target) {
     return null;
   }
 
-  const source = languagePrimary(pageLanguage);
-  return source && source === target ? null : targetLanguage;
+  // The selected language is an output-language contract, not merely a request
+  // to translate a page that appears to be in another language. Always send it
+  // so Mealie can force every recipe field into the selected locale.
+  return String(targetLanguage).trim().replace("_", "-");
 }
 
 function languagePrimary(value) {

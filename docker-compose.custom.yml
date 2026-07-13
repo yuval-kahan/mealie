@@ -10,14 +10,16 @@ services:
         COMMIT: local-custom
     restart: unless-stopped
     ports:
-      - "9092:9000"
+      # The production image contains both the Nuxt frontend and the API.
+      # Keep the local URL consistent with the development URL.
+      - "3000:9000"
     volumes:
       - mealie-custom-data:/app/data/
     environment:
       ALLOW_SIGNUP: "false"
       LOG_LEVEL: "DEBUG"
       DB_ENGINE: sqlite
-      BASE_URL: http://localhost:9092
+      BASE_URL: http://localhost:3000
       TZ: Asia/Jerusalem
 
 volumes:

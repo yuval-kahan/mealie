@@ -7,8 +7,12 @@
       :group-id="recipe.groupId"
       :recipe-slug="recipe.slug"
       :item-images-ensured="recipeItemImagesEnsured(recipe.extras)"
+      :ai-ingredients-adjusted="Boolean(recipe.extras?.aiIngredientAdjustment)"
+      :can-reset-ai-ingredients-adjustment="Boolean(aiIngredientAdjustmentOriginal)"
       @item-images-ensured="markItemImagesEnsured"
       @update:scale="$emit('update:scale', $event)"
+      @ingredients-adjusted="applyAiIngredientAdjustment"
+      @reset-ai-ingredients-adjustment="resetAiIngredientAdjustment"
     />
     <div v-if="!isEditMode && recipe.tools && recipe.tools.length > 0">
       <h2 class="mt-4 text-h5 font-weight-medium opacity-80">
@@ -53,7 +57,7 @@ import { useToolStore } from "~/composables/store";
 import { useUserExperiencePreferences } from "~/composables/use-users/preferences";
 import { markRecipeItemImagesEnsured, recipeItemImagesEnsured } from "~/composables/recipes/use-recipe-item-images";
 import type { NoUndefinedField } from "~/lib/api/types/non-generated";
-import type { Recipe, RecipeTool } from "~/lib/api/types/recipe";
+import type { Recipe, RecipeIngredient, RecipeTool } from "~/lib/api/types/recipe";
 import ItemImageThumb from "~/components/Domain/ItemImages/ItemImageThumb.vue";
 import RecipeIngredients from "~/components/Domain/Recipe/RecipeIngredients.vue";
 
@@ -70,7 +74,7 @@ const props = withDefaults(defineProps<Props>(), {
   isCookMode: false,
 });
 
-defineEmits<{
+const emit = defineEmits<{
   "update:scale": [scale: number];
 }>();
 
@@ -83,6 +87,7 @@ const userExperiencePreferences = useUserExperiencePreferences();
 const { itemImage } = useStaticRoutes();
 
 const recipeTools = ref<RecipeToolWithOnHand[]>([]);
+const aiIngredientAdjustmentOriginal = ref<RecipeIngredient[] | null>(null);
 watch(() => props.recipe.tools, () => {
   if (!(user.householdSlug && toolStore)) {
     recipeTools.value = props.recipe.tools.map(tool => ({ ...tool, onHand: false }) as RecipeToolWithOnHand);
@@ -119,5 +124,43 @@ function updateTool(index: number) {
 
 function markItemImagesEnsured() {
   markRecipeItemImagesEnsured(props.recipe);
+}
+
+function cloneIngredients(ingredients: RecipeIngredient[]) {
+  return JSON.parse(JSON.stringify(ingredients)) as RecipeIngredient[];
+}
+
+function applyAiIngredientAdjustment(payload: { ingredients: RecipeIngredient[]; adjustmentNote: string }) {
+  if (!aiIngredientAdjustmentOriginal.value) {
+    aiIngredientAdjustmentOriginal.value = cloneIngredients(props.recipe.recipeIngredient || []);
+  }
+
+  // The recipe page deliberately shares one editable recipe model between its child sections.
+  // eslint-disable-next-line vue/no-mutating-props
+  props.recipe.recipeIngredient = payload.ingredients;
+  // eslint-disable-next-line vue/no-mutating-props
+  props.recipe.extras = {
+    ...(props.recipe.extras || {}),
+    aiIngredientAdjustment: {
+      appliedAt: new Date().toISOString(),
+      note: payload.adjustmentNote,
+    },
+  };
+  emit("update:scale", 1);
+}
+
+function resetAiIngredientAdjustment() {
+  if (!aiIngredientAdjustmentOriginal.value) {
+    return;
+  }
+
+  // eslint-disable-next-line vue/no-mutating-props
+  props.recipe.recipeIngredient = aiIngredientAdjustmentOriginal.value;
+  aiIngredientAdjustmentOriginal.value = null;
+  const extras = { ...(props.recipe.extras || {}) };
+  delete extras.aiIngredientAdjustment;
+  // eslint-disable-next-line vue/no-mutating-props
+  props.recipe.extras = extras;
+  emit("update:scale", 1);
 }
 </script>

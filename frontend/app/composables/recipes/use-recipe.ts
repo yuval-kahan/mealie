@@ -20,6 +20,9 @@ export const useRecipe = function (slug: string, eager = true) {
     loading.value = true;
     const { data } = await api.recipes.deleteOne(slug);
     loading.value = false;
+    if (data && import.meta.client) {
+      window.dispatchEvent(new CustomEvent("mealie:organizers-updated"));
+    }
     return data;
   }
 

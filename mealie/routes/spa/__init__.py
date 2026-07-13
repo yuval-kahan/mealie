@@ -33,13 +33,19 @@ class MetaTag:
 
 class SPAStaticFiles(StaticFiles):
     async def get_response(self, path: str, scope):
+        is_client_route = not path.startswith(("api/", "_nuxt/"))
         try:
             response = await super().get_response(path, scope)
         except HTTPException as ex:
-            if ex.status_code == 404:
+            if ex.status_code == 404 and is_client_route:
                 response = await super().get_response("index.html", scope)
             else:
                 raise ex
+
+        # With html=True Starlette may return 404.html directly instead of raising.
+        # Client-side Nuxt routes must still receive index.html so direct links work.
+        if response.status_code == 404 and is_client_route:
+            response = await super().get_response("index.html", scope)
 
         # Hashed assets (_nuxt/*) are safe to cache forever since new builds produce new filenames.
         # HTML must revalidate so browsers always fetch the correct bundle references after a

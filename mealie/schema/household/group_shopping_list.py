@@ -189,6 +189,19 @@ class ShoppingListCreate(MealieModel):
         return {x.key_name: x.value for x in v} if v else {}
 
 
+class ShoppingListMergeRequest(MealieModel):
+    source_list_ids: list[UUID4]
+    name: str | None = None
+
+    @model_validator(mode="after")
+    def validate_source_lists(self):
+        self.source_list_ids = list(dict.fromkeys(self.source_list_ids))
+        if len(self.source_list_ids) < 2:
+            raise ValueError("At least two shopping lists are required")
+
+        return self
+
+
 class ShoppingListRecipeRefOut(MealieModel):
     id: UUID4
     shopping_list_id: UUID4

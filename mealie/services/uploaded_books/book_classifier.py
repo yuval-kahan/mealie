@@ -73,7 +73,12 @@ class UploadedBookClassifier(BaseService):
         sample = "\n\n".join(f"[Page {page.number}]\n{page.text}" for page in selected)
         return sample[: self.SAMPLE_MAX_CHARS]
 
-    async def classify(self, book_id: UUID4, uploaded_books_root: Path) -> None:
+    async def classify(
+        self,
+        book_id: UUID4,
+        uploaded_books_root: Path,
+        response_language: str | None = None,
+    ) -> None:
         book = self._get_book(book_id)
         book.classification_status = "processing"
         book.classification_error = None
@@ -91,9 +96,15 @@ class UploadedBookClassifier(BaseService):
                 "and sample pages together. Return concise metadata. Do not claim Michelin or restaurant affiliation "
                 "unless the supplied text supports it. Categories and tags should be useful search labels."
             )
+            if response_language:
+                prompt += (
+                    f" Return summary, cuisines, difficulty, book type, teaching level, techniques, categories, tags, "
+                    f"and other user-facing text in {response_language}. Keep proper names in their established form."
+                )
             message = (
                 f"Book title: {book.name}\nOriginal filename: {book.original_file_name}\n"
-                f"File type: {book.extension}\n\nSample:\n"
+                f"File type: {book.extension}\n"
+                f"Requested metadata language: {response_language or 'same language as the book'}\n\nSample:\n"
                 f"{sample or '[No extractable sample; classify cautiously from title.]'}"
             )
             response = await openai_service.get_response(

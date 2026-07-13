@@ -70,6 +70,20 @@ export interface RecipeAIShoppingListResponse {
   shopping_list_error?: string | null;
 }
 
+export interface RecipeIngredientScaleFromTextResponse {
+  ingredientIndex: number;
+  ingredientName: string;
+  originalQuantity: number;
+  targetQuantity: number;
+  unit: string;
+  scale: number;
+}
+
+export interface RecipeIngredientsAdjustWithAIResponse {
+  ingredients: Recipe["recipeIngredient"];
+  adjustmentNote: string;
+}
+
 const prefix = "/api";
 
 const routes = {
@@ -96,6 +110,8 @@ const routes = {
   recipesRecipeSlugImage: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/image`,
   recipesRecipeSlugImageAi: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/image/ai`,
   recipesRecipeSlugItemImagesEnsure: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/item-images/ensure`,
+  recipesRecipeSlugScaleFromText: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/scale-from-text`,
+  recipesRecipeSlugAdjustIngredientsWithAi: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/ingredients/adjust-with-ai`,
   recipesRecipeSlugAssets: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/assets`,
 
   recipesSlugComments: (slug: string) => `${prefix}/recipes/${slug}/comments`,
@@ -168,6 +184,21 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
 
   async aiSearch(payload: RecipeAISearchRequest) {
     return await this.requests.post<RecipeAISearchResponse>(routes.recipesAISearch, payload);
+  }
+
+  async scaleFromIngredientText(slug: string, text: string) {
+    return await this.requests.post<RecipeIngredientScaleFromTextResponse, { text: string }>(
+      routes.recipesRecipeSlugScaleFromText(slug),
+      { text },
+    );
+  }
+
+  async adjustIngredientsWithAI(slug: string, text: string) {
+    return await this.requests.post<RecipeIngredientsAdjustWithAIResponse, { text: string }>(
+      routes.recipesRecipeSlugAdjustIngredientsWithAi(slug),
+      { text },
+      { suppressAlert: true },
+    );
   }
 
   async createAsset(recipeSlug: string, payload: CreateAsset) {
