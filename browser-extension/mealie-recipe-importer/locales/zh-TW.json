@@ -52,14 +52,16 @@
     "send-auto": "偵測並發送至 AI",
     "send-recipe": "發送食譜至 AI",
     "send-article": "發送文章至 AI",
-    "connect-mealie": "開啟 / 連接 Mealie"
+    "connect-mealie": "開啟 / 連接 Mealie",
+    "save-website": "儲存網站"
   },
   "preview": {
     "title": "預覽"
   },
   "links": {
     "open-recipe": "在 Mealie 中開啟食譜",
-    "open-article": "在 Mealie 中開啟文章"
+    "open-article": "在 Mealie 中開啟文章",
+    "open-websites": "在 Mealie 中開啟已儲存的網站"
   },
   "status": {
     "open-and-login": "請先在此瀏覽器分頁中開啟 Mealie 並登入，再使用擴充功能。",
@@ -81,7 +83,9 @@
     "recipe-created-too": "同時也建立了食譜：{name}",
     "shopping-list": "購物清單：{name}",
     "attention": "注意：{message}",
-    "extraction-finished": "擷取完成"
+    "extraction-finished": "擷取完成",
+    "saving-website": "正在分析並儲存目前的食譜網站...",
+    "website-saved": "網站已儲存：{name}"
   },
   "errors": {
     "invalid-mealie-url": "Mealie 位址無效。",

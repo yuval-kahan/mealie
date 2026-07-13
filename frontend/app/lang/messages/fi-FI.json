@@ -1117,7 +1117,17 @@
     "ai-organize-failed": "Ostoslistan järjestäminen tekoälyllä epäonnistui",
     "ai-organize-empty": "Tyhjää ostoslistaa ei voi järjestää tekoälyllä",
     "link-recipe": "Linkitä resepti",
-    "search-recipe": "Etsi resepti"
+    "search-recipe": "Etsi resepti",
+    "sort-lists": "Lajittele listat",
+    "sort-by": "Lajitteluperuste",
+    "item-count": "Tuotteiden määrä",
+    "merged-list-placement": "Yhdistettyjen listojen sijainti",
+    "merged-sort-normal": "Käytä normaalia lajittelujärjestystä",
+    "merged-sort-first": "Yhdistetyt listat ensin",
+    "merged-sort-last": "Yhdistetyt listat viimeisenä",
+    "sort-priority": "Lajittelun prioriteetti",
+    "primary-priority": "Ensisijainen taso",
+    "secondary-priority": "Toissijainen taso"
   },
   "sidebar": {
     "all-recipes": "Reseptit",
@@ -1835,5 +1845,20 @@
     "no-ai-results": "AI ei löytänyt vastaavia artikkeleita.",
     "no-articles": "Ei vielä artikkeleita.",
     "delete-confirm": "Haluatko varmasti poistaa tämän artikkelin?"
+  },
+  "shopping-website": {
+    "websites": "Verkkosivustot",
+    "website-name": "Sivuston nimi",
+    "website-address": "Sivuston osoite",
+    "saved-page-food": "Tallennetun sivun ruoat",
+    "other-offered-foods": "Muut sivuston tarjoamat ruoat",
+    "save-website": "Tallenna sivusto",
+    "edit-website": "Muokkaa sivustoa",
+    "manual": "Manuaalinen",
+    "analyze-with-ai": "Analysoi tekoälyllä",
+    "ai-url-help": "Mealie lukee tämän osoitteen ja käyttää tekoälyä sivuston, sivun ruokien ja muiden tarjottujen ruokien tunnistamiseen.",
+    "delete-confirm": "Poistetaanko tämä tallennettu sivusto?",
+    "no-websites": "Ruokaostossivustoja ei ole vielä tallennettu.",
+    "websites-description": "Pidä ruokakaupat, ravintoloiden verkkokaupat, tuottajat ja hyödylliset tuotesivut yhdessä paikassa."
   }
 }

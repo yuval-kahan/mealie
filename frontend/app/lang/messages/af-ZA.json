@@ -1117,7 +1117,17 @@
     "ai-organize-failed": "AI inkopielys-organisasie het misluk",
     "ai-organize-empty": "Kan nie 'n leë inkopielys met AI organiseer nie",
     "link-recipe": "Skakel resep",
-    "search-recipe": "Soek resep"
+    "search-recipe": "Soek resep",
+    "sort-lists": "Sorteer lyste",
+    "sort-by": "Sorteer volgens",
+    "item-count": "Aantal items",
+    "merged-list-placement": "Plaas van saamgevoegde lyste",
+    "merged-sort-normal": "Gebruik die normale sorteervolgorde",
+    "merged-sort-first": "Saamgevoegde lyste eerste",
+    "merged-sort-last": "Saamgevoegde lyste laaste",
+    "sort-priority": "Sorteer prioriteit",
+    "primary-priority": "Eerste vlak",
+    "secondary-priority": "Tweede vlak"
   },
   "sidebar": {
     "all-recipes": "Alle resepte",
@@ -1835,5 +1845,20 @@
     "no-ai-results": "AI het geen ooreenstemmende artikels gevind nie.",
     "no-articles": "Nog geen artikels nie.",
     "delete-confirm": "Is jy seker jy wil hierdie artikel uitvee?"
+  },
+  "shopping-website": {
+    "websites": "Webwerwe",
+    "website-name": "Webwerfnaam",
+    "website-address": "Webwerfadres",
+    "saved-page-food": "Kos op die gestoorde bladsy",
+    "other-offered-foods": "Ander kos aangebied deur die webwerf",
+    "save-website": "Stoor webwerf",
+    "edit-website": "Wysig webwerf",
+    "manual": "Handmatig",
+    "analyze-with-ai": "Ontleed met AI",
+    "ai-url-help": "Mealie sal hierdie adres lees en AI gebruik om die webwerf, die kos op hierdie bladsy, en ander kos wat dit aanbied, te identifiseer.",
+    "delete-confirm": "Vee hierdie gestoorde webwerf uit?",
+    "no-websites": "Geen kos-inkopiewebwerwe is nog gestoor nie.",
+    "websites-description": "Hou koswinkels, restaurantwinkels, produsente en nuttige produkbladsye bymekaar."
   }
 }

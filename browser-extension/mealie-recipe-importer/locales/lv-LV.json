@@ -52,14 +52,16 @@
     "send-auto": "Noteikt un nosūtīt uz AI",
     "send-recipe": "Nosūtīt recepti uz AI",
     "send-article": "Nosūtīt rakstu uz AI",
-    "connect-mealie": "Atvērt / savienot Mealie"
+    "connect-mealie": "Atvērt / savienot Mealie",
+    "save-website": "Saglabāt vietni"
   },
   "preview": {
     "title": "Priekšskatījums"
   },
   "links": {
     "open-recipe": "Atvērt recepti Mealie",
-    "open-article": "Atvērt rakstu Mealie"
+    "open-article": "Atvērt rakstu Mealie",
+    "open-websites": "Atvērt saglabātās vietnes Mealie"
   },
   "status": {
     "open-and-login": "Atveriet Mealie šīs pārlūkprogrammas cilnē un pierakstieties pirms paplašinājuma lietošanas.",
@@ -81,7 +83,9 @@
     "recipe-created-too": "Tika izveidota arī recepte: {name}",
     "shopping-list": "Iepirkumu saraksts: {name}",
     "attention": "Uzmanību: {message}",
-    "extraction-finished": "Ekstrahēšana pabeigta"
+    "extraction-finished": "Ekstrahēšana pabeigta",
+    "saving-website": "Analizē un saglabā pašreizējo pārtikas vietni...",
+    "website-saved": "Vietne saglabāta: {name}"
   },
   "errors": {
     "invalid-mealie-url": "Mealie adrese nav derīga.",

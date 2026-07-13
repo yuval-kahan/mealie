@@ -1117,7 +1117,17 @@
     "ai-organize-failed": "Organizarea listei de cumpărături cu AI a eșuat",
     "ai-organize-empty": "Nu se poate organiza o listă de cumpărături goală cu AI",
     "link-recipe": "Conectează rețeta",
-    "search-recipe": "Caută rețetă"
+    "search-recipe": "Caută rețetă",
+    "sort-lists": "Sortează listele",
+    "sort-by": "Sortează după",
+    "item-count": "Număr de articole",
+    "merged-list-placement": "Plasarea listelor îmbinate",
+    "merged-sort-normal": "Folosește ordinea de sortare normală",
+    "merged-sort-first": "Listele îmbinate primele",
+    "merged-sort-last": "Listele îmbinate ultimele",
+    "sort-priority": "Prioritate sortare",
+    "primary-priority": "Primul nivel",
+    "secondary-priority": "Al doilea nivel"
   },
   "sidebar": {
     "all-recipes": "Toate reţetele",
@@ -1835,5 +1845,20 @@
     "no-ai-results": "AI nu a găsit articole potrivite.",
     "no-articles": "Nu există articole încă.",
     "delete-confirm": "Ești sigur că vrei să ștergi acest articol?"
+  },
+  "shopping-website": {
+    "websites": "Site-uri web",
+    "website-name": "Nume site web",
+    "website-address": "Adresă site web",
+    "saved-page-food": "Alimente pe pagina salvată",
+    "other-offered-foods": "Alte alimente oferite de site",
+    "save-website": "Salvează site-ul web",
+    "edit-website": "Editează site-ul web",
+    "manual": "Manual",
+    "analyze-with-ai": "Analizează cu AI",
+    "ai-url-help": "Mealie va citi această adresă și va folosi AI pentru a identifica site-ul, alimentele de pe această pagină și alte alimente oferite.",
+    "delete-confirm": "Ștergeți acest site web salvat?",
+    "no-websites": "Nu au fost salvate încă site-uri web pentru cumpărături alimentare.",
+    "websites-description": "Păstrați împreună magazinele alimentare, restaurantele, producătorii și paginile utile de produse."
   }
 }

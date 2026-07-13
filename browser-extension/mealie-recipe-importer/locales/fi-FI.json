@@ -52,14 +52,16 @@
     "send-auto": "Tunnista ja lähetä tekoälylle",
     "send-recipe": "Lähetä resepti tekoälylle",
     "send-article": "Lähetä artikkeli tekoälylle",
-    "connect-mealie": "Avaa / yhdistä Mealie"
+    "connect-mealie": "Avaa / yhdistä Mealie",
+    "save-website": "Tallenna verkkosivu"
   },
   "preview": {
     "title": "Esikatselu"
   },
   "links": {
     "open-recipe": "Avaa resepti Mealiessa",
-    "open-article": "Avaa artikkeli Mealiessa"
+    "open-article": "Avaa artikkeli Mealiessa",
+    "open-websites": "Avaa tallennetut verkkosivut Mealiessa"
   },
   "status": {
     "open-and-login": "Avaa Mealie selaimen välilehdellä ja kirjaudu sisään ennen laajennuksen käyttöä.",
@@ -81,7 +83,9 @@
     "recipe-created-too": "Myös resepti luotiin: {name}",
     "shopping-list": "Ostoslista: {name}",
     "attention": "Huomio: {message}",
-    "extraction-finished": "Poiminta valmis"
+    "extraction-finished": "Poiminta valmis",
+    "saving-website": "Analysoidaan ja tallennetaan nykyistä ruokasivustoa...",
+    "website-saved": "Verkkosivu tallennettu: {name}"
   },
   "errors": {
     "invalid-mealie-url": "Mealien osoite on virheellinen.",

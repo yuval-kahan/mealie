@@ -1117,7 +1117,17 @@
     "ai-organize-failed": "Organizácia nákupného zoznamu pomocou AI zlyhala",
     "ai-organize-empty": "Prázdny nákupný zoznam nie je možné organizovať pomocou AI",
     "link-recipe": "Prepojiť recept",
-    "search-recipe": "Hľadať recept"
+    "search-recipe": "Hľadať recept",
+    "sort-lists": "Zoradiť zoznamy",
+    "sort-by": "Zoradiť podľa",
+    "item-count": "Počet položiek",
+    "merged-list-placement": "Umiestnenie zlúčeného zoznamu",
+    "merged-sort-normal": "Použiť bežné poradie triedenia",
+    "merged-sort-first": "Zlúčené zoznamy ako prvé",
+    "merged-sort-last": "Zlúčené zoznamy ako posledné",
+    "sort-priority": "Priorita triedenia",
+    "primary-priority": "Prvá úroveň",
+    "secondary-priority": "Druhá úroveň"
   },
   "sidebar": {
     "all-recipes": "Všetky recepty",
@@ -1835,5 +1845,20 @@
     "no-ai-results": "AI nenašla žiadne zodpovedajúce články.",
     "no-articles": "Zatiaľ žiadne články.",
     "delete-confirm": "Naozaj chcete odstrániť tento článok?"
+  },
+  "shopping-website": {
+    "websites": "Webové stránky",
+    "website-name": "Názov webovej stránky",
+    "website-address": "Adresa webovej stránky",
+    "saved-page-food": "Potraviny na uloženej stránke",
+    "other-offered-foods": "Ďalšie potraviny ponúkané webovou stránkou",
+    "save-website": "Uložiť webovú stránku",
+    "edit-website": "Upraviť webovú stránku",
+    "manual": "Manuálne",
+    "analyze-with-ai": "Analyzovať pomocou AI",
+    "ai-url-help": "Mealie prečíta túto adresu a použije AI na identifikáciu stránky, potravín na tejto stránke a ďalších ponúkaných potravín.",
+    "delete-confirm": "Odstrániť túto uloženú webovú stránku?",
+    "no-websites": "Zatiaľ neboli uložené žiadne webové stránky na nákup potravín.",
+    "websites-description": "Uchovávajte obchody s potravinami, reštaurácie, výrobcov a užitočné produktové stránky na jednom mieste."
   }
 }

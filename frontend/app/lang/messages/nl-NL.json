@@ -1117,7 +1117,17 @@
     "ai-organize-failed": "AI-organisatie van boodschappenlijst mislukt",
     "ai-organize-empty": "Kan een lege boodschappenlijst niet organiseren met AI",
     "link-recipe": "Recept koppelen",
-    "search-recipe": "Recept zoeken"
+    "search-recipe": "Recept zoeken",
+    "sort-lists": "Lijsten sorteren",
+    "sort-by": "Sorteren op",
+    "item-count": "Aantal items",
+    "merged-list-placement": "Plaatsing samengevoegde lijst",
+    "merged-sort-normal": "Gebruik de normale sorteervolgorde",
+    "merged-sort-first": "Samengevoegde lijsten eerst",
+    "merged-sort-last": "Samengevoegde lijsten laatst",
+    "sort-priority": "Sorteerprioriteit",
+    "primary-priority": "Eerste niveau",
+    "secondary-priority": "Tweede niveau"
   },
   "sidebar": {
     "all-recipes": "Alle Recepten",
@@ -1835,5 +1845,20 @@
     "no-ai-results": "AI heeft geen overeenkomende artikelen gevonden.",
     "no-articles": "Nog geen artikelen.",
     "delete-confirm": "Weet je zeker dat je dit artikel wilt verwijderen?"
+  },
+  "shopping-website": {
+    "websites": "Websites",
+    "website-name": "Websitenaam",
+    "website-address": "Websiteadres",
+    "saved-page-food": "Voedsel op de opgeslagen pagina",
+    "other-offered-foods": "Ander voedsel aangeboden door de website",
+    "save-website": "Website opslaan",
+    "edit-website": "Website bewerken",
+    "manual": "Handmatig",
+    "analyze-with-ai": "Analyseren met AI",
+    "ai-url-help": "Mealie leest dit adres en gebruikt AI om de site, het voedsel op deze pagina en ander aangeboden voedsel te identificeren.",
+    "delete-confirm": "Deze opgeslagen website verwijderen?",
+    "no-websites": "Er zijn nog geen websites voor het kopen van voedsel opgeslagen.",
+    "websites-description": "Houd voedingswinkels, restaurantwinkels, producenten en nuttige productpagina's bij elkaar."
   }
 }

@@ -1117,7 +1117,17 @@
     "ai-organize-failed": "AI alışveriş listesi düzenlemesi başarısız oldu",
     "ai-organize-empty": "Boş bir alışveriş listesi AI ile düzenlenemez",
     "link-recipe": "Tarif Bağla",
-    "search-recipe": "Tarif Ara"
+    "search-recipe": "Tarif Ara",
+    "sort-lists": "Listeleri sırala",
+    "sort-by": "Sıralama ölçütü",
+    "item-count": "Öğe sayısı",
+    "merged-list-placement": "Birleştirilmiş liste konumu",
+    "merged-sort-normal": "Normal sıralama düzenini kullan",
+    "merged-sort-first": "Birleştirilmiş listeler önce",
+    "merged-sort-last": "Birleştirilmiş listeler sonra",
+    "sort-priority": "Sıralama önceliği",
+    "primary-priority": "Birinci seviye",
+    "secondary-priority": "İkinci seviye"
   },
   "sidebar": {
     "all-recipes": "Tüm Tarifler",
@@ -1835,5 +1845,20 @@
     "no-ai-results": "AI eşleşen makale bulamadı.",
     "no-articles": "Henüz makale yok.",
     "delete-confirm": "Bu makaleyi silmek istediğinizden emin misiniz?"
+  },
+  "shopping-website": {
+    "websites": "Web siteleri",
+    "website-name": "Web sitesi adı",
+    "website-address": "Web sitesi adresi",
+    "saved-page-food": "Kaydedilen sayfadaki yiyecekler",
+    "other-offered-foods": "Web sitesinin sunduğu diğer yiyecekler",
+    "save-website": "Web sitesini kaydet",
+    "edit-website": "Web sitesini düzenle",
+    "manual": "Manuel",
+    "analyze-with-ai": "AI ile analiz et",
+    "ai-url-help": "Mealie bu adresi okuyacak ve siteyi, sayfadaki yiyecekleri ve sunduğu diğer yiyecekleri tanımlamak için AI kullanacaktır.",
+    "delete-confirm": "Bu kayıtlı web sitesi silinsin mi?",
+    "no-websites": "Henüz hiçbir yiyecek alışverişi web sitesi kaydedilmedi.",
+    "websites-description": "Yiyecek dükkanlarını, restoran mağazalarını, üreticileri ve faydalı ürün sayfalarını bir arada tutun."
   }
 }

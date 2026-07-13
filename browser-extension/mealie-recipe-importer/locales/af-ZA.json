@@ -52,14 +52,16 @@
     "send-auto": "Bespeur en stuur na AI",
     "send-recipe": "Stuur resep na AI",
     "send-article": "Stuur artikel na AI",
-    "connect-mealie": "Maak Mealie oop / koppel"
+    "connect-mealie": "Maak Mealie oop / koppel",
+    "save-website": "Stoor webwerf"
   },
   "preview": {
     "title": "Voorskou"
   },
   "links": {
     "open-recipe": "Maak resep in Mealie oop",
-    "open-article": "Maak artikel in Mealie oop"
+    "open-article": "Maak artikel in Mealie oop",
+    "open-websites": "Maak gestoorde webwerwe in Mealie oop"
   },
   "status": {
     "open-and-login": "Maak Mealie oop in 'n oortjie in hierdie blaaier en meld aan voordat jy die uitbreiding gebruik.",
@@ -81,7 +83,9 @@
     "recipe-created-too": "'n Resep is ook geskep: {name}",
     "shopping-list": "Inkopielys: {name}",
     "attention": "Aandag: {message}",
-    "extraction-finished": "Onttrekking voltooi"
+    "extraction-finished": "Onttrekking voltooi",
+    "saving-website": "Ontleed en stoor die huidige koswebwerf...",
+    "website-saved": "Webwerf gestoor: {name}"
   },
   "errors": {
     "invalid-mealie-url": "Die Mealie-adres is ongeldig.",

@@ -1117,7 +1117,17 @@
     "ai-organize-failed": "AI organizacija liste za kupovinu nije uspela",
     "ai-organize-empty": "Nije moguće organizovati praznu listu za kupovinu pomoću AI-a",
     "link-recipe": "Poveži recept",
-    "search-recipe": "Pretraži recept"
+    "search-recipe": "Pretraži recept",
+    "sort-lists": "Сортирај листе",
+    "sort-by": "Сортирај према",
+    "item-count": "Број ставки",
+    "merged-list-placement": "Позиција спојених листа",
+    "merged-sort-normal": "Користи нормалан редослед сортирања",
+    "merged-sort-first": "Спојене листе на почетку",
+    "merged-sort-last": "Спојене листе на крају",
+    "sort-priority": "Приоритет сортирања",
+    "primary-priority": "Први ниво",
+    "secondary-priority": "Други ниво"
   },
   "sidebar": {
     "all-recipes": "Сви рецепти",
@@ -1835,5 +1845,20 @@
     "no-ai-results": "AI није пронашао одговарајуће чланке.",
     "no-articles": "Још увек нема чланака.",
     "delete-confirm": "Да ли сте сигурни да желите да обришете овај чланак?"
+  },
+  "shopping-website": {
+    "websites": "Веб-сајтови",
+    "website-name": "Назив веб-сајта",
+    "website-address": "Адреса веб-сајта",
+    "saved-page-food": "Храна на сачуваној страници",
+    "other-offered-foods": "Остала храна коју нуди веб-сајт",
+    "save-website": "Сачувај веб-сајт",
+    "edit-website": "Измени веб-сајт",
+    "manual": "Ручно",
+    "analyze-with-ai": "Анализирај помоћу AI",
+    "ai-url-help": "Mealie ће прочитати ову адресу и користити AI да идентификује сајт, храну на овој страници и другу храну коју нуди.",
+    "delete-confirm": "Обрисати овај сачувани веб-сајт?",
+    "no-websites": "Још увек нема сачуваних веб-сајтова за куповину хране.",
+    "websites-description": "Чувајте продавнице хране, ресторане, произвођаче и корисне странице производа на једном месту."
   }
 }

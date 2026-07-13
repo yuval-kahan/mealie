@@ -39,6 +39,10 @@ export interface UserShoppingListPreferences {
   viewAllLists: boolean;
   openListsInline: boolean;
   showItemImages: boolean;
+  sortBy: "createdAt" | "name" | "itemCount";
+  sortDirection: "asc" | "desc";
+  mergedPlacement: "normal" | "first" | "last";
+  mergedPriority: "primary" | "secondary";
 }
 
 export interface UserTimelinePreferences {
@@ -170,6 +174,10 @@ export function useShoppingListPreferences(): Ref<UserShoppingListPreferences> {
       viewAllLists: false,
       openListsInline: true,
       showItemImages: true,
+      sortBy: "createdAt" as const,
+      sortDirection: "desc" as const,
+      mergedPlacement: "normal" as const,
+      mergedPriority: "primary" as const,
     },
     { mergeDefaults: true },
   );

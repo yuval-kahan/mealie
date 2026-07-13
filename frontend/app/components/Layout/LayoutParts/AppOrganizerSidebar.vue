@@ -130,46 +130,99 @@
           </v-chip>
         </v-list-subheader>
 
-        <template
-          v-for="nav in section.links"
-          :key="section.key + '-' + (nav.key || nav.title)"
+        <v-text-field
+          v-if="sectionSupportsSearch(section.key)"
+          v-model="sectionSearches[section.key]"
+          class="app-organizer-sidebar__section-search mx-2 mb-1"
+          density="compact"
+          variant="outlined"
+          hide-details
+          clearable
+          :label="$t('search.search')"
+          :prepend-inner-icon="$globals.icons.search"
+        />
+
+        <div
+          :class="{
+            'app-organizer-sidebar__section-scroll': sectionSupportsSearch(section.key),
+          }"
         >
-          <v-list-group
-            v-if="nav.children?.length"
-            :key="section.key + '-' + (nav.key || nav.title) + '-group'"
-            v-model="state.dropDowns[section.key + '-' + nav.title]"
-            :prepend-icon="nav.icon"
-            color="primary"
-            fluid
+          <template
+            v-for="nav in filteredSectionLinks(section)"
+            :key="section.key + '-' + (nav.key || nav.title)"
           >
-            <template #activator="{ props: hoverProps }">
+            <v-list-group
+              v-if="nav.children?.length"
+              :key="section.key + '-' + (nav.key || nav.title) + '-group'"
+              v-model="state.dropDowns[section.key + '-' + nav.title]"
+              :prepend-icon="nav.icon"
+              color="primary"
+              fluid
+            >
+              <template #activator="{ props: hoverProps }">
+                <v-list-item
+                  v-bind="hoverProps"
+                  :prepend-icon="nav.icon"
+                  :title="nav.title"
+                />
+              </template>
+
               <v-list-item
-                v-bind="hoverProps"
-                :prepend-icon="nav.icon"
-                :title="nav.title"
-              />
-            </template>
+                v-for="child in nav.children"
+                :key="section.key + '-' + (child.key || child.title)"
+                exact
+                :href="child.href"
+                :rel="child.href ? 'noopener' : undefined"
+                :target="child.href ? '_blank' : undefined"
+                :to="child.href ? undefined : child.to"
+                class="ms-2"
+                :prepend-icon="child.icon"
+                :title="child.title"
+                @click="handleNavClick(child)"
+              >
+                <template
+                  v-if="child.actions?.length"
+                  #append
+                >
+                  <div class="app-organizer-sidebar__item-actions">
+                    <v-btn
+                      v-for="action in child.actions"
+                      :key="action.key || action.title"
+                      icon
+                      size="x-small"
+                      variant="text"
+                      :title="action.title"
+                      :aria-label="action.title"
+                      :loading="action.loading"
+                      :disabled="action.disabled"
+                      @click.stop.prevent="handleNavActionClick(action)"
+                    >
+                      <v-icon size="small">
+                        {{ action.icon }}
+                      </v-icon>
+                    </v-btn>
+                  </div>
+                </template>
+              </v-list-item>
+            </v-list-group>
 
             <v-list-item
-              v-for="child in nav.children"
-              :key="section.key + '-' + (child.key || child.title)"
+              v-else
+              :key="section.key + '-' + (nav.key || nav.title) + '-item'"
               exact
-              :href="child.href"
-              :rel="child.href ? 'noopener' : undefined"
-              :target="child.href ? '_blank' : undefined"
-              :to="child.href ? undefined : child.to"
-              class="ms-2"
-              :prepend-icon="child.icon"
-              :title="child.title"
-              @click="handleNavClick(child)"
+              link
+              :href="nav.href"
+              :rel="nav.href ? 'noopener' : undefined"
+              :target="nav.href ? '_blank' : undefined"
+              :to="nav.href ? undefined : nav.to"
+              :prepend-icon="nav.icon"
+              :title="nav.title"
+              @click="handleNavClick(nav)"
             >
-              <template
-                v-if="child.actions?.length"
-                #append
-              >
+              <template v-if="nav.actions?.length" #append>
                 <div class="app-organizer-sidebar__item-actions">
                   <v-btn
-                    v-for="action in child.actions"
+                    v-for="action in nav.actions"
                     :key="action.key || action.title"
                     icon
                     size="x-small"
@@ -187,46 +240,13 @@
                 </div>
               </template>
             </v-list-item>
-          </v-list-group>
-
+          </template>
           <v-list-item
-            v-else
-            :key="section.key + '-' + (nav.key || nav.title) + '-item'"
-            exact
-            link
-            :href="nav.href"
-            :rel="nav.href ? 'noopener' : undefined"
-            :target="nav.href ? '_blank' : undefined"
-            :to="nav.href ? undefined : nav.to"
-            :prepend-icon="nav.icon"
-            :title="nav.title"
-            @click="handleNavClick(nav)"
-          >
-            <template
-              v-if="nav.actions?.length"
-              #append
-            >
-              <div class="app-organizer-sidebar__item-actions">
-                <v-btn
-                  v-for="action in nav.actions"
-                  :key="action.key || action.title"
-                  icon
-                  size="x-small"
-                  variant="text"
-                  :title="action.title"
-                  :aria-label="action.title"
-                  :loading="action.loading"
-                  :disabled="action.disabled"
-                  @click.stop.prevent="handleNavActionClick(action)"
-                >
-                  <v-icon size="small">
-                    {{ action.icon }}
-                  </v-icon>
-                </v-btn>
-              </div>
-            </template>
-          </v-list-item>
-        </template>
+            v-if="sectionSupportsSearch(section.key) && !filteredSectionLinks(section).length"
+            :title="$t('search.no-results')"
+            disabled
+          />
+        </div>
       </template>
     </v-list>
 
@@ -298,6 +318,20 @@ const toggleCollapsedLabel = computed(() => {
 const state = reactive({
   dropDowns: {} as Record<string, boolean>,
 });
+const sectionSearches = reactive<Partial<Record<OrganizerSidebarSectionKey, string>>>({
+  categories: "",
+  tags: "",
+});
+
+function sectionSupportsSearch(key: OrganizerSidebarSectionKey) {
+  return key === "categories" || key === "tags";
+}
+
+function filteredSectionLinks(section: OrganizerSidebarSection) {
+  const query = (sectionSearches[section.key] || "").trim().toLocaleLowerCase();
+  if (!query) return section.links;
+  return section.links.filter(link => link.title.toLocaleLowerCase().includes(query));
+}
 
 const preferenceKeyBySection: Record<OrganizerSidebarSectionKey, OrganizerVisibilityPreferenceKey> = {
   shoppingLists: "showShoppingLists",
@@ -460,6 +494,17 @@ watch(
   align-items: center;
   display: flex;
   gap: 4px;
+}
+
+.app-organizer-sidebar__section-search {
+  max-width: calc(100% - 16px);
+}
+
+.app-organizer-sidebar__section-scroll {
+  max-height: min(30vh, 280px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .app-organizer-sidebar__item-actions {

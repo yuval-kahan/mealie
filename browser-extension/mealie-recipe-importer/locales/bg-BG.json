@@ -52,14 +52,16 @@
     "send-auto": "Откриване и изпращане към AI",
     "send-recipe": "Изпращане на рецепта към AI",
     "send-article": "Изпращане на статия към AI",
-    "connect-mealie": "Отваряне / свързване с Mealie"
+    "connect-mealie": "Отваряне / свързване с Mealie",
+    "save-website": "Запазване на уебсайт"
   },
   "preview": {
     "title": "Преглед"
   },
   "links": {
     "open-recipe": "Отваряне на рецептата в Mealie",
-    "open-article": "Отваряне на статията в Mealie"
+    "open-article": "Отваряне на статията в Mealie",
+    "open-websites": "Отваряне на запазените уебсайтове в Mealie"
   },
   "status": {
     "open-and-login": "Отворете Mealie в раздел на този браузър и влезте в профила си, преди да използвате разширението.",
@@ -81,7 +83,9 @@
     "recipe-created-too": "Създадена е и рецепта: {name}",
     "shopping-list": "Списък за пазаруване: {name}",
     "attention": "Внимание: {message}",
-    "extraction-finished": "Извличането приключи"
+    "extraction-finished": "Извличането приключи",
+    "saving-website": "Анализиране и запазване на текущия уебсайт за храна...",
+    "website-saved": "Уебсайтът е запазен: {name}"
   },
   "errors": {
     "invalid-mealie-url": "Адресът на Mealie е невалиден.",

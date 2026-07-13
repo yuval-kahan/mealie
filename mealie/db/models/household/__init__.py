@@ -1,6 +1,6 @@
+from .article import Article
 from .cookbook import CookBook
 from .events import GroupEventNotifierModel, GroupEventNotifierOptionsModel
-from .article import Article
 from .household import Household
 from .household_to_recipe import HouseholdToRecipe
 from .invite_tokens import GroupInviteToken
@@ -15,6 +15,7 @@ from .shopping_list import (
     ShoppingListMultiPurposeLabel,
     ShoppingListRecipeReference,
 )
+from .shopping_website import ShoppingWebsite
 from .uploaded_book import UploadedBook
 from .webhooks import GroupWebhooksModel
 
@@ -36,6 +37,7 @@ __all__ = [
     "ShoppingListItemRecipeReference",
     "ShoppingListMultiPurposeLabel",
     "ShoppingListRecipeReference",
+    "ShoppingWebsite",
     "UploadedBook",
     "GroupWebhooksModel",
 ]

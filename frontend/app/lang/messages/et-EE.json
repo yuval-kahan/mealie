@@ -1117,7 +1117,17 @@
     "ai-organize-failed": "Ostunimekirja organiseerimine AI-ga ebaõnnestus",
     "ai-organize-empty": "Tühja ostunimekirja ei saa AI-ga organiseerida",
     "link-recipe": "Lingi retsept",
-    "search-recipe": "Otsi retsepti"
+    "search-recipe": "Otsi retsepti",
+    "sort-lists": "Sorteeri loendid",
+    "sort-by": "Sorteeri alusel",
+    "item-count": "Üksuste arv",
+    "merged-list-placement": "Ühendatud loendi paigutus",
+    "merged-sort-normal": "Kasuta tavapärast sortimisjärjestust",
+    "merged-sort-first": "Ühendatud loendid esimesena",
+    "merged-sort-last": "Ühendatud loendid viimasena",
+    "sort-priority": "Sorteerimise prioriteet",
+    "primary-priority": "Esimene tase",
+    "secondary-priority": "Teine tase"
   },
   "sidebar": {
     "all-recipes": "Kõik retseptid",
@@ -1835,5 +1845,20 @@
     "no-ai-results": "AI ei leidnud sobivaid artikleid.",
     "no-articles": "Artikleid veel pole.",
     "delete-confirm": "Kas olete kindel, et soovite selle artikli kustutada?"
+  },
+  "shopping-website": {
+    "websites": "Veebisaidid",
+    "website-name": "Veebisaidi nimi",
+    "website-address": "Veebisaidi aadress",
+    "saved-page-food": "Salvestatud lehel olev toit",
+    "other-offered-foods": "Muud veebisaidi pakutavad toidud",
+    "save-website": "Salvesta veebisait",
+    "edit-website": "Muuda veebisaiti",
+    "manual": "Käsitsi",
+    "analyze-with-ai": "Analüüsi AI-ga",
+    "ai-url-help": "Mealie loeb seda aadressi ja kasutab AI-d saidi, lehel oleva toidu ja muude pakutavate toitude tuvastamiseks.",
+    "delete-confirm": "Kas kustutada see salvestatud veebisait?",
+    "no-websites": "Ühtegi toidupoe veebisaiti pole veel salvestatud.",
+    "websites-description": "Hoia toidupoed, restoranide poed, tootjad ja kasulikud tootelehed koos."
   }
 }

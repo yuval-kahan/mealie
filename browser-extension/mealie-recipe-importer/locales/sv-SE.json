@@ -52,14 +52,16 @@
     "send-auto": "Identifiera och skicka till AI",
     "send-recipe": "Skicka recept till AI",
     "send-article": "Skicka artikel till AI",
-    "connect-mealie": "Öppna / anslut Mealie"
+    "connect-mealie": "Öppna / anslut Mealie",
+    "save-website": "Spara webbplats"
   },
   "preview": {
     "title": "Förhandsgranskning"
   },
   "links": {
     "open-recipe": "Öppna recept i Mealie",
-    "open-article": "Öppna artikel i Mealie"
+    "open-article": "Öppna artikel i Mealie",
+    "open-websites": "Öppna sparade webbplatser i Mealie"
   },
   "status": {
     "open-and-login": "Öppna Mealie i en flik i denna webbläsare och logga in innan du använder tillägget.",
@@ -81,7 +83,9 @@
     "recipe-created-too": "Ett recept skapades också: {name}",
     "shopping-list": "Inköpslista: {name}",
     "attention": "Observera: {message}",
-    "extraction-finished": "Extrahering slutförd"
+    "extraction-finished": "Extrahering slutförd",
+    "saving-website": "Analyserar och sparar den aktuella matwebbplatsen...",
+    "website-saved": "Webbplats sparad: {name}"
   },
   "errors": {
     "invalid-mealie-url": "Mealie-adressen är ogiltig.",

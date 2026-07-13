@@ -1117,7 +1117,17 @@
     "ai-organize-failed": "AI 购物清单整理失败",
     "ai-organize-empty": "无法使用 AI 整理空的购物清单",
     "link-recipe": "关联食谱",
-    "search-recipe": "搜索食谱"
+    "search-recipe": "搜索食谱",
+    "sort-lists": "排序列表",
+    "sort-by": "排序方式",
+    "item-count": "项目数量",
+    "merged-list-placement": "合并列表位置",
+    "merged-sort-normal": "使用常规排序顺序",
+    "merged-sort-first": "合并列表优先",
+    "merged-sort-last": "合并列表置后",
+    "sort-priority": "排序优先级",
+    "primary-priority": "第一级",
+    "secondary-priority": "第二级"
   },
   "sidebar": {
     "all-recipes": "全部食谱",
@@ -1835,5 +1845,20 @@
     "no-ai-results": "AI 未找到匹配的文章。",
     "no-articles": "暂无文章。",
     "delete-confirm": "确定要删除此文章吗？"
+  },
+  "shopping-website": {
+    "websites": "网站",
+    "website-name": "网站名称",
+    "website-address": "网站地址",
+    "saved-page-food": "已保存页面上的食品",
+    "other-offered-foods": "网站提供的其他食品",
+    "save-website": "保存网站",
+    "edit-website": "编辑网站",
+    "manual": "手动",
+    "analyze-with-ai": "使用 AI 分析",
+    "ai-url-help": "Mealie 将读取此地址并使用 AI 来识别该站点、页面上的食品以及它提供的其他食品。",
+    "delete-confirm": "删除此已保存的网站吗？",
+    "no-websites": "尚未保存任何食品购物网站。",
+    "websites-description": "集中管理食品商店、餐厅店铺、生产商和有用的产品页面。"
   }
 }

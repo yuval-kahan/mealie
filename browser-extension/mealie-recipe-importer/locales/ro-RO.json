@@ -52,14 +52,16 @@
     "send-auto": "Detectează și trimite către AI",
     "send-recipe": "Trimite rețeta către AI",
     "send-article": "Trimite articolul către AI",
-    "connect-mealie": "Deschide / conectează Mealie"
+    "connect-mealie": "Deschide / conectează Mealie",
+    "save-website": "Salvează site-ul"
   },
   "preview": {
     "title": "Previzualizare"
   },
   "links": {
     "open-recipe": "Deschide rețeta în Mealie",
-    "open-article": "Deschide articolul în Mealie"
+    "open-article": "Deschide articolul în Mealie",
+    "open-websites": "Deschide site-urile salvate în Mealie"
   },
   "status": {
     "open-and-login": "Deschide Mealie într-o filă în acest browser și autentifică-te înainte de a utiliza extensia.",
@@ -81,7 +83,9 @@
     "recipe-created-too": "A fost creată și o rețetă: {name}",
     "shopping-list": "Listă de cumpărături: {name}",
     "attention": "Atenție: {message}",
-    "extraction-finished": "Extragerea a fost finalizată"
+    "extraction-finished": "Extragerea a fost finalizată",
+    "saving-website": "Se analizează și se salvează site-ul culinar curent...",
+    "website-saved": "Site salvat: {name}"
   },
   "errors": {
     "invalid-mealie-url": "Adresa Mealie este invalidă.",

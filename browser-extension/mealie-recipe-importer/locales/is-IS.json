@@ -52,14 +52,16 @@
     "send-auto": "Greina og senda til AI",
     "send-recipe": "Senda uppskrift til AI",
     "send-article": "Senda grein til AI",
-    "connect-mealie": "Opna / tengja Mealie"
+    "connect-mealie": "Opna / tengja Mealie",
+    "save-website": "Vista vefsíðu"
   },
   "preview": {
     "title": "Forskoðun"
   },
   "links": {
     "open-recipe": "Opna uppskrift í Mealie",
-    "open-article": "Opna grein í Mealie"
+    "open-article": "Opna grein í Mealie",
+    "open-websites": "Opna vistaðar vefsíður í Mealie"
   },
   "status": {
     "open-and-login": "Opnaðu Mealie í flipa í þessum vafra og skráðu þig inn áður en viðbótin er notuð.",
@@ -81,7 +83,9 @@
     "recipe-created-too": "Uppskrift var einnig búin til: {name}",
     "shopping-list": "Innkaupalisti: {name}",
     "attention": "Athugið: {message}",
-    "extraction-finished": "Sækingu lokið"
+    "extraction-finished": "Sækingu lokið",
+    "saving-website": "Greini og vista núverandi matarvefsíðu...",
+    "website-saved": "Vefsíða vistuð: {name}"
   },
   "errors": {
     "invalid-mealie-url": "Mealie-slóðin er ógild.",

@@ -52,14 +52,16 @@
     "send-auto": "Algıla ve AI'ye gönder",
     "send-recipe": "Tarifi AI'ye gönder",
     "send-article": "Makaleyi AI'ye gönder",
-    "connect-mealie": "Mealie'yi aç / bağlan"
+    "connect-mealie": "Mealie'yi aç / bağlan",
+    "save-website": "Web sitesini kaydet"
   },
   "preview": {
     "title": "Önizleme"
   },
   "links": {
     "open-recipe": "Tarifi Mealie'de aç",
-    "open-article": "Makaleyi Mealie'de aç"
+    "open-article": "Makaleyi Mealie'de aç",
+    "open-websites": "Kaydedilen web sitelerini Mealie'de aç"
   },
   "status": {
     "open-and-login": "Uzantıyı kullanmadan önce bu tarayıcıda bir sekmede Mealie'yi açın ve giriş yapın.",
@@ -81,7 +83,9 @@
     "recipe-created-too": "Ayrıca bir tarif oluşturuldu: {name}",
     "shopping-list": "Alışveriş listesi: {name}",
     "attention": "Dikkat: {message}",
-    "extraction-finished": "Ayıklama tamamlandı"
+    "extraction-finished": "Ayıklama tamamlandı",
+    "saving-website": "Mevcut yemek web sitesi analiz ediliyor ve kaydediliyor...",
+    "website-saved": "Web sitesi kaydedildi: {name}"
   },
   "errors": {
     "invalid-mealie-url": "Mealie adresi geçersiz.",

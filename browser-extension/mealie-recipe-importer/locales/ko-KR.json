@@ -52,14 +52,16 @@
     "send-auto": "감지 후 AI로 전송",
     "send-recipe": "레시피를 AI로 전송",
     "send-article": "아티클을 AI로 전송",
-    "connect-mealie": "Mealie 열기 / 연결"
+    "connect-mealie": "Mealie 열기 / 연결",
+    "save-website": "웹사이트 저장"
   },
   "preview": {
     "title": "미리보기"
   },
   "links": {
     "open-recipe": "Mealie에서 레시피 열기",
-    "open-article": "Mealie에서 아티클 열기"
+    "open-article": "Mealie에서 아티클 열기",
+    "open-websites": "Mealie에서 저장된 웹사이트 열기"
   },
   "status": {
     "open-and-login": "확장 프로그램을 사용하기 전에 이 브라우저의 탭에서 Mealie를 열고 로그인하세요.",
@@ -81,7 +83,9 @@
     "recipe-created-too": "레시피도 함께 생성되었습니다: {name}",
     "shopping-list": "쇼핑 목록: {name}",
     "attention": "주의: {message}",
-    "extraction-finished": "추출 완료"
+    "extraction-finished": "추출 완료",
+    "saving-website": "현재 음식 웹사이트를 분석하고 저장하는 중...",
+    "website-saved": "웹사이트 저장됨: {name}"
   },
   "errors": {
     "invalid-mealie-url": "Mealie 주소가 올바르지 않습니다.",

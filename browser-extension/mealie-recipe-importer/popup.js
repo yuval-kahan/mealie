@@ -36,6 +36,7 @@ const elements = {
   includeItemImages: document.getElementById("includeItemImages"),
   extractOnly: document.getElementById("extractOnly"),
   sendToMealie: document.getElementById("sendToMealie"),
+  saveWebsite: document.getElementById("saveWebsite"),
   connectMealie: document.getElementById("connectMealie"),
   previewPanel: document.getElementById("previewPanel"),
   previewText: document.getElementById("previewText"),
@@ -75,6 +76,7 @@ async function init() {
 
   elements.extractOnly.addEventListener("click", handleExtractOnly);
   elements.sendToMealie.addEventListener("click", handleSendToMealie);
+  elements.saveWebsite.addEventListener("click", handleSaveWebsite);
   elements.connectMealie.addEventListener("click", handleConnectMealie);
   elements.extractMode.addEventListener("change", updateModeText);
   elements.interfaceLanguage.addEventListener("change", handleInterfaceLanguageChange);
@@ -516,6 +518,33 @@ async function handleSendToMealie() {
   }
 }
 
+async function handleSaveWebsite() {
+  setBusy(true);
+  hideRecipeLink();
+  setStatus(translator.t("status.saving-website"));
+
+  try {
+    const settings = currentSettings();
+    await chrome.storage.sync.set(settings);
+    if (!await checkMealieStatus()) {
+      return;
+    }
+
+    const extraction = lastExtraction || await extractCurrentTab();
+    lastExtraction = extraction;
+    showPreview(extraction.markdown);
+    const website = await createShoppingWebsiteFromBrowserPage(settings, extraction);
+    setStatus(translator.t("status.website-saved", { name: website.name }), "success");
+    showWebsiteLink(settings.mealieUrl);
+  }
+  catch (error) {
+    setStatus(errorMessage(error), "error");
+  }
+  finally {
+    setBusy(false);
+  }
+}
+
 function statusTextForMode(mode) {
   if (mode === "article") {
     return translator.t("status.processing-article");
@@ -624,6 +653,32 @@ async function createArticleFromBrowserPage(settings, extraction) {
   return payload;
 }
 
+async function createShoppingWebsiteFromBrowserPage(settings, extraction) {
+  const authToken = await findMealieAuthToken(settings.mealieUrl);
+  if (!authToken) {
+    throw new Error(translator.t("status.open-and-login"));
+  }
+
+  const response = await fetch(`${settings.mealieUrl}/api/households/shopping-websites/browser-page`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(authToken),
+    },
+    body: JSON.stringify({
+      url: extraction.url,
+      page_title: extraction.title,
+      page_text: extraction.markdown,
+    }),
+  });
+  const payload = await safeJson(response);
+  if (!response.ok) {
+    throw new Error(apiErrorMessage(payload, response.status));
+  }
+  return payload;
+}
+
 async function safeJson(response) {
   try {
     return await response.json();
@@ -663,6 +718,7 @@ function setBusy(nextBusy) {
 function updateActionState() {
   elements.extractOnly.disabled = isBusy;
   elements.sendToMealie.disabled = isBusy || !mealieSiteReady;
+  elements.saveWebsite.disabled = isBusy || !mealieSiteReady;
 }
 
 function setStatus(message, type = "") {
@@ -692,6 +748,13 @@ function showArticleLink(baseUrl, articleId) {
   showResultLink(
     `${normalizeBaseUrl(baseUrl)}/articles/${encodeURIComponent(articleId)}`,
     translator.t("links.open-article"),
+  );
+}
+
+function showWebsiteLink(baseUrl) {
+  showResultLink(
+    `${normalizeBaseUrl(baseUrl)}/shopping-websites`,
+    translator.t("links.open-websites"),
   );
 }
 

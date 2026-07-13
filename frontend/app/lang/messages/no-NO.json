@@ -1117,7 +1117,17 @@
     "ai-organize-failed": "AI-organisering av handleliste feilet",
     "ai-organize-empty": "Kan ikke organisere en tom handleliste med AI",
     "link-recipe": "Koble oppskrift",
-    "search-recipe": "Søk etter oppskrift"
+    "search-recipe": "Søk etter oppskrift",
+    "sort-lists": "Sorter lister",
+    "sort-by": "Sorter etter",
+    "item-count": "Antall elementer",
+    "merged-list-placement": "Plassering av sammenslåtte lister",
+    "merged-sort-normal": "Bruk normal sorteringsrekkefølge",
+    "merged-sort-first": "Sammenslåtte lister først",
+    "merged-sort-last": "Sammenslåtte lister sist",
+    "sort-priority": "Sorteringsprioritet",
+    "primary-priority": "Førstenivå",
+    "secondary-priority": "Andrenivå"
   },
   "sidebar": {
     "all-recipes": "Alle oppskrifter",
@@ -1835,5 +1845,20 @@
     "no-ai-results": "AI fant ingen samsvarende artikler.",
     "no-articles": "Ingen artikler ennå.",
     "delete-confirm": "Er du sikker på at du vil slette denne artikkelen?"
+  },
+  "shopping-website": {
+    "websites": "Nettsteder",
+    "website-name": "Navn på nettsted",
+    "website-address": "Adresse til nettsted",
+    "saved-page-food": "Mat på den lagrede siden",
+    "other-offered-foods": "Annen mat som tilbys av nettstedet",
+    "save-website": "Lagre nettsted",
+    "edit-website": "Rediger nettsted",
+    "manual": "Manuell",
+    "analyze-with-ai": "Analyser med AI",
+    "ai-url-help": "Mealie vil lese denne adressen og bruke AI til å identifisere nettstedet, maten på denne siden og annen mat som tilbys.",
+    "delete-confirm": "Slette dette lagrede nettstedet?",
+    "no-websites": "Ingen matbutikk-nettsteder er lagret ennå.",
+    "websites-description": "Hold matbutikker, restaurantbutikker, produsenter og nyttige produktsider samlet."
   }
 }

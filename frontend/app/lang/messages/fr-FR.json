@@ -1117,7 +1117,17 @@
     "ai-organize-failed": "L'organisation de la liste de courses par l'IA a échoué",
     "ai-organize-empty": "Impossible d'organiser une liste de courses vide avec l'IA",
     "link-recipe": "Lier une recette",
-    "search-recipe": "Rechercher une recette"
+    "search-recipe": "Rechercher une recette",
+    "sort-lists": "Trier les listes",
+    "sort-by": "Trier par",
+    "item-count": "Nombre d'articles",
+    "merged-list-placement": "Emplacement des listes fusionnées",
+    "merged-sort-normal": "Utiliser l'ordre de tri normal",
+    "merged-sort-first": "Listes fusionnées en premier",
+    "merged-sort-last": "Listes fusionnées en dernier",
+    "sort-priority": "Priorité de tri",
+    "primary-priority": "Premier niveau",
+    "secondary-priority": "Second niveau"
   },
   "sidebar": {
     "all-recipes": "Recettes",
@@ -1835,5 +1845,20 @@
     "no-ai-results": "L'IA n'a trouvé aucun article correspondant.",
     "no-articles": "Aucun article pour le moment.",
     "delete-confirm": "Êtes-vous sûr de vouloir supprimer cet article ?"
+  },
+  "shopping-website": {
+    "websites": "Sites web",
+    "website-name": "Nom du site web",
+    "website-address": "Adresse du site web",
+    "saved-page-food": "Aliments sur la page enregistrée",
+    "other-offered-foods": "Autres aliments proposés par le site",
+    "save-website": "Enregistrer le site web",
+    "edit-website": "Modifier le site web",
+    "manual": "Manuel",
+    "analyze-with-ai": "Analyser avec l'IA",
+    "ai-url-help": "Mealie lira cette adresse et utilisera l'IA pour identifier le site, les aliments sur cette page et les autres aliments proposés.",
+    "delete-confirm": "Supprimer ce site web enregistré ?",
+    "no-websites": "Aucun site web d'achat alimentaire n'a encore été enregistré.",
+    "websites-description": "Regroupez les boutiques alimentaires, les restaurants, les producteurs et les pages de produits utiles."
   }
 }

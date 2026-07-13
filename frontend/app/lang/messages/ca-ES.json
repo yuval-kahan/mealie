@@ -1117,7 +1117,17 @@
     "ai-organize-failed": "L'organització de la llista de la compra amb l'AI ha fallat",
     "ai-organize-empty": "No es pot organitzar una llista de la compra buida amb l'AI",
     "link-recipe": "Enllaça recepta",
-    "search-recipe": "Cerca recepta"
+    "search-recipe": "Cerca recepta",
+    "sort-lists": "Ordena les llistes",
+    "sort-by": "Ordena per",
+    "item-count": "Nombre d'elements",
+    "merged-list-placement": "Ubicació de les llistes combinades",
+    "merged-sort-normal": "Utilitza l'ordre de classificació normal",
+    "merged-sort-first": "Llistes combinades primer",
+    "merged-sort-last": "Llistes combinades al final",
+    "sort-priority": "Prioritat d'ordenació",
+    "primary-priority": "Primer nivell",
+    "secondary-priority": "Segon nivell"
   },
   "sidebar": {
     "all-recipes": "Receptes",
@@ -1835,5 +1845,20 @@
     "no-ai-results": "La IA no ha trobat articles coincidents.",
     "no-articles": "Encara no hi ha articles.",
     "delete-confirm": "Segur que vols suprimir aquest article?"
+  },
+  "shopping-website": {
+    "websites": "Llocs web",
+    "website-name": "Nom del lloc web",
+    "website-address": "Adreça del lloc web",
+    "saved-page-food": "Aliments a la pàgina desada",
+    "other-offered-foods": "Altres aliments oferts pel lloc web",
+    "save-website": "Desa el lloc web",
+    "edit-website": "Edita el lloc web",
+    "manual": "Manual",
+    "analyze-with-ai": "Analitza amb AI",
+    "ai-url-help": "Mealie llegirà aquesta adreça i utilitzarà AI per identificar el lloc, els aliments d'aquesta pàgina i altres aliments que ofereix.",
+    "delete-confirm": "Vols suprimir aquest lloc web desat?",
+    "no-websites": "Encara no s'ha desat cap lloc web de compra d'aliments.",
+    "websites-description": "Mantén agrupades les botigues d'alimentació, restaurants, productors i pàgines de productes útils."
   }
 }

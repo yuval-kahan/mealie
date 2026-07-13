@@ -32,6 +32,16 @@ def test_shopping_lists_get_all(api_client: TestClient, unique_user: TestUser, s
         assert list_["id"] in known_ids
 
 
+def test_shopping_lists_get_all_includes_item_count(
+    api_client: TestClient, unique_user: TestUser, list_with_items: ShoppingListOut
+):
+    response = api_client.get(api_routes.households_shopping_lists, headers=unique_user.token)
+    assert response.status_code == 200
+
+    shopping_list = next(item for item in response.json()["items"] if item["id"] == str(list_with_items.id))
+    assert shopping_list["itemCount"] == 10
+
+
 def test_shopping_lists_create_one(api_client: TestClient, unique_user: TestUser):
     payload = {
         "name": random_string(10),
@@ -114,9 +124,7 @@ def test_shopping_lists_delete_one(
 
 def test_shopping_lists_merge_and_bulk_delete(api_client: TestClient, unique_user: TestUser):
     database = unique_user.repos
-    label = database.group_multi_purpose_labels.create(
-        {"name": random_string(10), "group_id": unique_user.group_id}
-    )
+    label = database.group_multi_purpose_labels.create({"name": random_string(10), "group_id": unique_user.group_id})
     food = database.ingredient_foods.create(
         SaveIngredientFood(name=random_string(10), group_id=unique_user.group_id, label_id=label.id)
     )

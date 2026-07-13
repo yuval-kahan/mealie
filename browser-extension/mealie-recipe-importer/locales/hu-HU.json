@@ -52,14 +52,16 @@
     "send-auto": "Felismerés és küldés az AI-nak",
     "send-recipe": "Recept küldése az AI-nak",
     "send-article": "Cikk küldése az AI-nak",
-    "connect-mealie": "Mealie megnyitása / csatlakoztatása"
+    "connect-mealie": "Mealie megnyitása / csatlakoztatása",
+    "save-website": "Weboldal mentése"
   },
   "preview": {
     "title": "Előnézet"
   },
   "links": {
     "open-recipe": "Recept megnyitása a Mealie-ban",
-    "open-article": "Cikk megnyitása a Mealie-ban"
+    "open-article": "Cikk megnyitása a Mealie-ban",
+    "open-websites": "Mentett weboldalak megnyitása a Mealie-ben"
   },
   "status": {
     "open-and-login": "A bővítmény használata előtt nyissa meg a Mealie-t egy lapon ebben a böngészőben, és jelentkezzen be.",
@@ -81,7 +83,9 @@
     "recipe-created-too": "Egy recept is létrejött: {name}",
     "shopping-list": "Bevásárlólista: {name}",
     "attention": "Figyelem: {message}",
-    "extraction-finished": "Kinyerés befejeződött"
+    "extraction-finished": "Kinyerés befejeződött",
+    "saving-website": "Az aktuális étel weboldal elemzése és mentése...",
+    "website-saved": "Weboldal mentve: {name}"
   },
   "errors": {
     "invalid-mealie-url": "A Mealie-cím érvénytelen.",

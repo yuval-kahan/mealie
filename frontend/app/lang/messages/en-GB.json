@@ -1117,7 +1117,17 @@
     "ai-organize-failed": "AI shopping list organisation failed",
     "ai-organize-empty": "Cannot organise an empty shopping list with AI",
     "link-recipe": "Link recipe",
-    "search-recipe": "Search recipe"
+    "search-recipe": "Search recipe",
+    "sort-lists": "Sort lists",
+    "sort-by": "Sort by",
+    "item-count": "Number of items",
+    "merged-list-placement": "Merged-list placement",
+    "merged-sort-normal": "Use the normal sort order",
+    "merged-sort-first": "Merged lists first",
+    "merged-sort-last": "Merged lists last",
+    "sort-priority": "Sort priority",
+    "primary-priority": "First level",
+    "secondary-priority": "Second level"
   },
   "sidebar": {
     "all-recipes": "All Recipes",
@@ -1835,5 +1845,20 @@
     "no-ai-results": "AI did not find matching articles.",
     "no-articles": "No articles yet.",
     "delete-confirm": "Are you sure you want to delete this article?"
+  },
+  "shopping-website": {
+    "websites": "Websites",
+    "website-name": "Website name",
+    "website-address": "Website address",
+    "saved-page-food": "Food on the saved page",
+    "other-offered-foods": "Other food offered by the website",
+    "save-website": "Save website",
+    "edit-website": "Edit website",
+    "manual": "Manual",
+    "analyze-with-ai": "Analyse with AI",
+    "ai-url-help": "Mealie will read this address and use AI to identify the site, the food on this page, and other food it offers.",
+    "delete-confirm": "Delete this saved website?",
+    "no-websites": "No food-shopping websites have been saved yet.",
+    "websites-description": "Keep food shops, restaurant stores, producers, and useful product pages together."
   }
 }

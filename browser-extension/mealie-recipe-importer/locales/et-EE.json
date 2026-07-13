@@ -52,14 +52,16 @@
     "send-auto": "Tuvasta ja saada AI-le",
     "send-recipe": "Saada retsept AI-le",
     "send-article": "Saada artikkel AI-le",
-    "connect-mealie": "Ava / ühenda Mealie"
+    "connect-mealie": "Ava / ühenda Mealie",
+    "save-website": "Salvesta veebisait"
   },
   "preview": {
     "title": "Eelvaade"
   },
   "links": {
     "open-recipe": "Ava retsept Mealie's",
-    "open-article": "Ava artikkel Mealie's"
+    "open-article": "Ava artikkel Mealie's",
+    "open-websites": "Ava salvestatud veebisaidid Mealie's"
   },
   "status": {
     "open-and-login": "Ava Mealie selle brauseri vahekaardil ja logi sisse enne laienduse kasutamist.",
@@ -81,7 +83,9 @@
     "recipe-created-too": "Loodi ka retsept: {name}",
     "shopping-list": "Ostunimekiri: {name}",
     "attention": "Tähelepanu: {message}",
-    "extraction-finished": "Ekstraktimine lõpetatud"
+    "extraction-finished": "Ekstraktimine lõpetatud",
+    "saving-website": "Analüüsin ja salvestan praegust toiduteemalist veebisaiti...",
+    "website-saved": "Veebisait salvestatud: {name}"
   },
   "errors": {
     "invalid-mealie-url": "Mealie aadress on kehtetu.",

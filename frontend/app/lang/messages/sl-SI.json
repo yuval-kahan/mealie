@@ -1117,7 +1117,17 @@
     "ai-organize-failed": "Organizacija nakupovalnega seznama z AI ni uspela",
     "ai-organize-empty": "Praznega nakupovalnega seznama ni mogoče organizirati z AI",
     "link-recipe": "Poveži recept",
-    "search-recipe": "Išči recept"
+    "search-recipe": "Išči recept",
+    "sort-lists": "Razvrsti sezname",
+    "sort-by": "Razvrsti po",
+    "item-count": "Število predmetov",
+    "merged-list-placement": "Mesto združenega seznama",
+    "merged-sort-normal": "Uporabi običajni vrstni red",
+    "merged-sort-first": "Združeni seznami na začetku",
+    "merged-sort-last": "Združeni seznami na koncu",
+    "sort-priority": "Prednost razvrščanja",
+    "primary-priority": "Prva raven",
+    "secondary-priority": "Druga raven"
   },
   "sidebar": {
     "all-recipes": "Vsi recepti",
@@ -1835,5 +1845,20 @@
     "no-ai-results": "AI ni našel ustreznih člankov.",
     "no-articles": "Še ni člankov.",
     "delete-confirm": "Ali ste prepričani, da želite izbrisati ta članek?"
+  },
+  "shopping-website": {
+    "websites": "Spletna mesta",
+    "website-name": "Ime spletnega mesta",
+    "website-address": "Naslov spletnega mesta",
+    "saved-page-food": "Hrana na shranjeni strani",
+    "other-offered-foods": "Druga hrana, ki jo ponuja spletno mesto",
+    "save-website": "Shrani spletno mesto",
+    "edit-website": "Uredi spletno mesto",
+    "manual": "Ročno",
+    "analyze-with-ai": "Analiziraj z AI",
+    "ai-url-help": "Mealie bo prebral ta naslov in uporabil AI za prepoznavo spletnega mesta, hrane na tej strani in druge hrane, ki jo ponuja.",
+    "delete-confirm": "Izbrišem to shranjeno spletno mesto?",
+    "no-websites": "Še ni shranjenih nobenih spletnih mest za nakup hrane.",
+    "websites-description": "Zberite trgovine s hrano, restavracije, proizvajalce in uporabne strani z izdelki na enem mestu."
   }
 }

@@ -1117,7 +1117,17 @@
     "ai-organize-failed": "AI-organisering af indkøbsliste mislykkedes",
     "ai-organize-empty": "Kan ikke organisere en tom indkøbsliste med AI",
     "link-recipe": "Link opskrift",
-    "search-recipe": "Søg opskrift"
+    "search-recipe": "Søg opskrift",
+    "sort-lists": "Sortér lister",
+    "sort-by": "Sortér efter",
+    "item-count": "Antal elementer",
+    "merged-list-placement": "Placering af sammenflettede lister",
+    "merged-sort-normal": "Brug den normale sorteringsrækkefølge",
+    "merged-sort-first": "Sammenflettede lister først",
+    "merged-sort-last": "Sammenflettede lister sidst",
+    "sort-priority": "Sorteringsprioritet",
+    "primary-priority": "Første niveau",
+    "secondary-priority": "Andet niveau"
   },
   "sidebar": {
     "all-recipes": "Alle opskrifter",
@@ -1835,5 +1845,20 @@
     "no-ai-results": "AI fandt ingen matchende artikler.",
     "no-articles": "Ingen artikler endnu.",
     "delete-confirm": "Er du sikker på, at du vil slette denne artikel?"
+  },
+  "shopping-website": {
+    "websites": "Websteder",
+    "website-name": "Webstedsnavn",
+    "website-address": "Webstedsadresse",
+    "saved-page-food": "Mad på den gemte side",
+    "other-offered-foods": "Anden mad tilbudt af webstedet",
+    "save-website": "Gem websted",
+    "edit-website": "Redigér websted",
+    "manual": "Manuel",
+    "analyze-with-ai": "Analysér med AI",
+    "ai-url-help": "Mealie vil læse denne adresse og bruge AI til at identificere siden, maden på denne side og anden mad, den tilbyder.",
+    "delete-confirm": "Slet dette gemte websted?",
+    "no-websites": "Ingen madindkøbs-websteder er gemt endnu.",
+    "websites-description": "Hold styr på madbutikker, restaurantbutikker, producenter og nyttige produktsider ét sted."
   }
 }

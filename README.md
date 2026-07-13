@@ -15,7 +15,8 @@
 - Create structured recipes and shopping lists with AI from text, links, images, videos, books, and browser-extracted pages.
 - Translate full cookbooks, extract recipes by page range, resume long-running jobs, and distribute work across multiple Gemini API keys.
 - Manage uploaded and translated cookbook libraries, AI-generated cookbooks, articles, recipe media, background jobs, and source-page links.
-- Use expanded shopping-list workflows including AI organization, inline editing, search, bulk deletion, and merging any number of lists while preserving their sources.
+- Use expanded shopping-list workflows including AI organization, inline editing, search, multi-level sorting, bulk deletion, and merging any number of lists while preserving their sources.
+- Save and search food-shopping websites manually or let AI identify the current product and the other foods a site offers, directly from Mealie or the browser extension.
 - Use the Hebrew/RTL interface or any of Mealie's 42 bundled locales. Fork-specific UI and the browser extension are localized with parity checks.
 - Run the customized frontend and backend together with the included Docker Compose configuration.
 

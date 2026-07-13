@@ -52,14 +52,16 @@
     "send-auto": "Detectar e enviar para a IA",
     "send-recipe": "Enviar receita para a IA",
     "send-article": "Enviar artigo para a IA",
-    "connect-mealie": "Abrir / conectar Mealie"
+    "connect-mealie": "Abrir / conectar Mealie",
+    "save-website": "Salvar site"
   },
   "preview": {
     "title": "Visualização"
   },
   "links": {
     "open-recipe": "Abrir receita no Mealie",
-    "open-article": "Abrir artigo no Mealie"
+    "open-article": "Abrir artigo no Mealie",
+    "open-websites": "Abrir sites salvos no Mealie"
   },
   "status": {
     "open-and-login": "Abra o Mealie em uma aba neste navegador e faça login antes de usar a extensão.",
@@ -81,7 +83,9 @@
     "recipe-created-too": "Uma receita também foi criada: {name}",
     "shopping-list": "Lista de compras: {name}",
     "attention": "Atenção: {message}",
-    "extraction-finished": "Extração concluída"
+    "extraction-finished": "Extração concluída",
+    "saving-website": "Analisando e salvando o site de culinária atual...",
+    "website-saved": "Site salvo: {name}"
   },
   "errors": {
     "invalid-mealie-url": "O endereço do Mealie é inválido.",

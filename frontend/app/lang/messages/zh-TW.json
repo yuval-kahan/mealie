@@ -1117,7 +1117,17 @@
     "ai-organize-failed": "AI 購物清單整理失敗",
     "ai-organize-empty": "無法使用 AI 整理空的購物清單",
     "link-recipe": "連結食譜",
-    "search-recipe": "搜尋食譜"
+    "search-recipe": "搜尋食譜",
+    "sort-lists": "排序清單",
+    "sort-by": "排序方式",
+    "item-count": "項目數量",
+    "merged-list-placement": "合併清單位置",
+    "merged-sort-normal": "使用一般排序順序",
+    "merged-sort-first": "合併清單優先",
+    "merged-sort-last": "合併清單置後",
+    "sort-priority": "排序優先級",
+    "primary-priority": "第一層級",
+    "secondary-priority": "第二層級"
   },
   "sidebar": {
     "all-recipes": "所有食譜",
@@ -1835,5 +1845,20 @@
     "no-ai-results": "AI 未找到相符的文章。",
     "no-articles": "尚無文章。",
     "delete-confirm": "確定要刪除此文章嗎？"
+  },
+  "shopping-website": {
+    "websites": "網站",
+    "website-name": "網站名稱",
+    "website-address": "網站網址",
+    "saved-page-food": "已儲存頁面上的食品",
+    "other-offered-foods": "網站提供的其他食品",
+    "save-website": "儲存網站",
+    "edit-website": "編輯網站",
+    "manual": "手動",
+    "analyze-with-ai": "使用 AI 分析",
+    "ai-url-help": "Mealie 將讀取此網址並使用 AI 來識別網站、頁面上的食品以及其提供的其他食品。",
+    "delete-confirm": "確定要刪除此已儲存的網站嗎？",
+    "no-websites": "尚未儲存任何食品購物網站。",
+    "websites-description": "將食品商店、餐廳、生產商及實用的產品頁面集中管理。"
   }
 }

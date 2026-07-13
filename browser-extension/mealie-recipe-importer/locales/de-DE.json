@@ -52,14 +52,16 @@
     "send-auto": "Erkennen und an KI senden",
     "send-recipe": "Rezept an KI senden",
     "send-article": "Artikel an KI senden",
-    "connect-mealie": "Mealie öffnen / verbinden"
+    "connect-mealie": "Mealie öffnen / verbinden",
+    "save-website": "Webseite speichern"
   },
   "preview": {
     "title": "Vorschau"
   },
   "links": {
     "open-recipe": "Rezept in Mealie öffnen",
-    "open-article": "Artikel in Mealie öffnen"
+    "open-article": "Artikel in Mealie öffnen",
+    "open-websites": "Gespeicherte Webseiten in Mealie öffnen"
   },
   "status": {
     "open-and-login": "Öffne Mealie in einem Tab in diesem Browser und melde dich an, bevor du die Erweiterung verwendest.",
@@ -81,7 +83,9 @@
     "recipe-created-too": "Ein Rezept wurde ebenfalls erstellt: {name}",
     "shopping-list": "Einkaufsliste: {name}",
     "attention": "Achtung: {message}",
-    "extraction-finished": "Extraktion abgeschlossen"
+    "extraction-finished": "Extraktion abgeschlossen",
+    "saving-website": "Analysiere und speichere die aktuelle Rezept-Webseite...",
+    "website-saved": "Webseite gespeichert: {name}"
   },
   "errors": {
     "invalid-mealie-url": "Die Mealie-Adresse ist ungültig.",

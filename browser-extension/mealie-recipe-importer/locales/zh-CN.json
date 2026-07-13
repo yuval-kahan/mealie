@@ -52,14 +52,16 @@
     "send-auto": "检测并发送至 AI",
     "send-recipe": "发送食谱至 AI",
     "send-article": "发送文章至 AI",
-    "connect-mealie": "打开 / 连接 Mealie"
+    "connect-mealie": "打开 / 连接 Mealie",
+    "save-website": "保存网站"
   },
   "preview": {
     "title": "预览"
   },
   "links": {
     "open-recipe": "在 Mealie 中打开食谱",
-    "open-article": "在 Mealie 中打开文章"
+    "open-article": "在 Mealie 中打开文章",
+    "open-websites": "在 Mealie 中打开已保存的网站"
   },
   "status": {
     "open-and-login": "在使用扩展程序前，请先在此浏览器中打开 Mealie 并登录。",
@@ -81,7 +83,9 @@
     "recipe-created-too": "同时创建了食谱：{name}",
     "shopping-list": "购物清单：{name}",
     "attention": "注意：{message}",
-    "extraction-finished": "提取完成"
+    "extraction-finished": "提取完成",
+    "saving-website": "正在分析并保存当前美食网站...",
+    "website-saved": "网站已保存：{name}"
   },
   "errors": {
     "invalid-mealie-url": "Mealie 地址无效。",

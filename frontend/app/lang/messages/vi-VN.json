@@ -1117,7 +1117,17 @@
     "ai-organize-failed": "Sắp xếp danh sách mua sắm bằng AI thất bại",
     "ai-organize-empty": "Không thể sắp xếp danh sách mua sắm trống bằng AI",
     "link-recipe": "Liên kết công thức",
-    "search-recipe": "Tìm kiếm công thức"
+    "search-recipe": "Tìm kiếm công thức",
+    "sort-lists": "Sắp xếp danh sách",
+    "sort-by": "Sắp xếp theo",
+    "item-count": "Số lượng mục",
+    "merged-list-placement": "Vị trí danh sách hợp nhất",
+    "merged-sort-normal": "Sử dụng thứ tự sắp xếp thông thường",
+    "merged-sort-first": "Danh sách hợp nhất lên đầu",
+    "merged-sort-last": "Danh sách hợp nhất xuống cuối",
+    "sort-priority": "Thứ tự ưu tiên",
+    "primary-priority": "Cấp độ một",
+    "secondary-priority": "Cấp độ hai"
   },
   "sidebar": {
     "all-recipes": "Tất cả công thức",
@@ -1835,5 +1845,20 @@
     "no-ai-results": "AI không tìm thấy bài viết phù hợp.",
     "no-articles": "Chưa có bài viết nào.",
     "delete-confirm": "Bạn có chắc chắn muốn xóa bài viết này không?"
+  },
+  "shopping-website": {
+    "websites": "Trang web",
+    "website-name": "Tên trang web",
+    "website-address": "Địa chỉ trang web",
+    "saved-page-food": "Thực phẩm trên trang đã lưu",
+    "other-offered-foods": "Các thực phẩm khác được cung cấp bởi trang web",
+    "save-website": "Lưu trang web",
+    "edit-website": "Chỉnh sửa trang web",
+    "manual": "Thủ công",
+    "analyze-with-ai": "Phân tích bằng AI",
+    "ai-url-help": "Mealie sẽ đọc địa chỉ này và sử dụng AI để xác định trang web, thực phẩm trên trang này và các thực phẩm khác mà trang đó cung cấp.",
+    "delete-confirm": "Xóa trang web đã lưu này?",
+    "no-websites": "Chưa có trang web mua sắm thực phẩm nào được lưu.",
+    "websites-description": "Lưu trữ các cửa hàng thực phẩm, nhà hàng, nhà sản xuất và các trang sản phẩm hữu ích tại một nơi."
   }
 }

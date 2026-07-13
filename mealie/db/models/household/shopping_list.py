@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Optional
 
 from pydantic import ConfigDict
-from sqlalchemy import Boolean, Float, ForeignKey, Integer, String, UniqueConstraint, event, orm
+from sqlalchemy import Boolean, Float, ForeignKey, Integer, String, UniqueConstraint, event, func, orm, select
 from sqlalchemy.ext.associationproxy import AssociationProxy, association_proxy
 from sqlalchemy.ext.orderinglist import ordering_list
 from sqlalchemy.orm import Mapped, mapped_column
@@ -161,6 +161,12 @@ class ShoppingList(SqlAlchemyBase, BaseMixins):
         cascade="all, delete, delete-orphan",
         order_by="ShoppingListItem.position",
         collection_class=ordering_list("position"),
+    )
+    item_count: Mapped[int] = orm.column_property(
+        select(func.count(ShoppingListItem.id))
+        .where(ShoppingListItem.shopping_list_id == id)
+        .correlate_except(ShoppingListItem)
+        .scalar_subquery()
     )
 
     recipe_references: Mapped[list[ShoppingListRecipeReference]] = orm.relationship(

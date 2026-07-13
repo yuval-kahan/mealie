@@ -1117,7 +1117,17 @@
     "ai-organize-failed": "Organizace nákupního seznamu pomocí AI selhala",
     "ai-organize-empty": "Prázdný nákupní seznam nelze organizovat pomocí AI",
     "link-recipe": "Propojit recept",
-    "search-recipe": "Hledat recept"
+    "search-recipe": "Hledat recept",
+    "sort-lists": "Seřadit seznamy",
+    "sort-by": "Seřadit podle",
+    "item-count": "Počet položek",
+    "merged-list-placement": "Umístění sloučeného seznamu",
+    "merged-sort-normal": "Použít běžné pořadí řazení",
+    "merged-sort-first": "Sloučené seznamy jako první",
+    "merged-sort-last": "Sloučené seznamy jako poslední",
+    "sort-priority": "Priorita řazení",
+    "primary-priority": "První úroveň",
+    "secondary-priority": "Druhá úroveň"
   },
   "sidebar": {
     "all-recipes": "Všechny recepty",
@@ -1835,5 +1845,20 @@
     "no-ai-results": "AI nenalezla žádné odpovídající články.",
     "no-articles": "Zatím žádné články.",
     "delete-confirm": "Opravdu chcete tento článek smazat?"
+  },
+  "shopping-website": {
+    "websites": "Webové stránky",
+    "website-name": "Název webu",
+    "website-address": "Adresa webu",
+    "saved-page-food": "Potraviny na uložené stránce",
+    "other-offered-foods": "Další potraviny nabízené webem",
+    "save-website": "Uložit web",
+    "edit-website": "Upravit web",
+    "manual": "Ručně",
+    "analyze-with-ai": "Analyzovat pomocí AI",
+    "ai-url-help": "Mealie načte tuto adresu a pomocí AI identifikuje web, potraviny na této stránce a další nabízené potraviny.",
+    "delete-confirm": "Smazat tento uložený web?",
+    "no-websites": "Zatím nebyly uloženy žádné weby pro nákup potravin.",
+    "websites-description": "Uchovávejte obchody s potravinami, restaurace, výrobce a užitečné produktové stránky pohromadě."
   }
 }

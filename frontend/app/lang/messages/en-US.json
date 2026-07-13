@@ -1142,7 +1142,32 @@
     "merge-lists-failed": "Shopping list merge failed",
     "merge-lists-complete": "Shopping lists merged successfully",
     "delete-lists-failed": "Shopping list deletion failed",
-    "merged-from": "Merged from"
+    "merged-from": "Merged from",
+    "sort-lists": "Sort lists",
+    "sort-by": "Sort by",
+    "item-count": "Number of items",
+    "merged-list-placement": "Merged-list placement",
+    "merged-sort-normal": "Use the normal sort order",
+    "merged-sort-first": "Merged lists first",
+    "merged-sort-last": "Merged lists last",
+    "sort-priority": "Sort priority",
+    "primary-priority": "First level",
+    "secondary-priority": "Second level"
+  },
+  "shopping-website": {
+    "websites": "Websites",
+    "website-name": "Website name",
+    "website-address": "Website address",
+    "saved-page-food": "Food on the saved page",
+    "other-offered-foods": "Other food offered by the website",
+    "save-website": "Save website",
+    "edit-website": "Edit website",
+    "manual": "Manual",
+    "analyze-with-ai": "Analyze with AI",
+    "ai-url-help": "Mealie will read this address and use AI to identify the site, the food on this page, and other food it offers.",
+    "delete-confirm": "Delete this saved website?",
+    "no-websites": "No food-shopping websites have been saved yet.",
+    "websites-description": "Keep food shops, restaurant stores, producers, and useful product pages together."
   },
   "sidebar": {
     "all-recipes": "All Recipes",

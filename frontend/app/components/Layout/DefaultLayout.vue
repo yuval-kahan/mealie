@@ -2337,6 +2337,12 @@ const topLinks = computed<SideBarLink[]>(() => [
     restricted: true,
   },
   {
+    icon: $globals.icons.web,
+    title: i18n.t("shopping-website.websites"),
+    to: "/shopping-websites",
+    restricted: true,
+  },
+  {
     icon: $globals.icons.fileSign,
     title: i18n.t("article.articles"),
     to: "/articles",

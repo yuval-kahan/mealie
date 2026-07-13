@@ -52,14 +52,16 @@
     "send-auto": "Otkrij i pošalji na AI",
     "send-recipe": "Pošalji recept na AI",
     "send-article": "Pošalji članak na AI",
-    "connect-mealie": "Otvori / poveži Mealie"
+    "connect-mealie": "Otvori / poveži Mealie",
+    "save-website": "Sačuvaj veb-sajt"
   },
   "preview": {
     "title": "Pregled"
   },
   "links": {
     "open-recipe": "Otvori recept u Mealie-u",
-    "open-article": "Otvori članak u Mealie-u"
+    "open-article": "Otvori članak u Mealie-u",
+    "open-websites": "Otvori sačuvane veb-sajtove u Mealie"
   },
   "status": {
     "open-and-login": "Otvorite Mealie u kartici u ovom pregledaču i prijavite se pre korišćenja ekstenzije.",
@@ -81,7 +83,9 @@
     "recipe-created-too": "Takođe je kreiran recept: {name}",
     "shopping-list": "Lista za kupovinu: {name}",
     "attention": "Pažnja: {message}",
-    "extraction-finished": "Ekstrahovanje završeno"
+    "extraction-finished": "Ekstrahovanje završeno",
+    "saving-website": "Analiziram i čuvam trenutni veb-sajt sa hranom...",
+    "website-saved": "Veb-sajt sačuvan: {name}"
   },
   "errors": {
     "invalid-mealie-url": "Mealie adresa nije ispravna.",

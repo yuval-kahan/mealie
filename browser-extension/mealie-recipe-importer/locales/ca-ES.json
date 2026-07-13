@@ -52,14 +52,16 @@
     "send-auto": "Detectar i enviar a la IA",
     "send-recipe": "Enviar recepta a la IA",
     "send-article": "Enviar article a la IA",
-    "connect-mealie": "Obrir / connectar Mealie"
+    "connect-mealie": "Obrir / connectar Mealie",
+    "save-website": "Desa el lloc web"
   },
   "preview": {
     "title": "Previsualització"
   },
   "links": {
     "open-recipe": "Obrir recepta a Mealie",
-    "open-article": "Obrir article a Mealie"
+    "open-article": "Obrir article a Mealie",
+    "open-websites": "Obre els llocs web desats a Mealie"
   },
   "status": {
     "open-and-login": "Obre Mealie en una pestanya d'aquest navegador i inicia sessió abans d'utilitzar l'extensió.",
@@ -81,7 +83,9 @@
     "recipe-created-too": "També s'ha creat una recepta: {name}",
     "shopping-list": "Llista de la compra: {name}",
     "attention": "Atenció: {message}",
-    "extraction-finished": "Extracció completada"
+    "extraction-finished": "Extracció completada",
+    "saving-website": "Analitzant i desant el lloc web de cuina actual...",
+    "website-saved": "Lloc web desat: {name}"
   },
   "errors": {
     "invalid-mealie-url": "L'adreça de Mealie no és vàlida.",

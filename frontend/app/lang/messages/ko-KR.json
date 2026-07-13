@@ -1117,7 +1117,17 @@
     "ai-organize-failed": "AI 쇼핑 목록 정리에 실패했습니다",
     "ai-organize-empty": "비어 있는 쇼핑 목록은 AI로 정리할 수 없습니다",
     "link-recipe": "레시피 연결",
-    "search-recipe": "레시피 검색"
+    "search-recipe": "레시피 검색",
+    "sort-lists": "목록 정렬",
+    "sort-by": "정렬 기준",
+    "item-count": "항목 수",
+    "merged-list-placement": "병합된 목록 위치",
+    "merged-sort-normal": "일반 정렬 순서 사용",
+    "merged-sort-first": "병합된 목록 우선",
+    "merged-sort-last": "병합된 목록 마지막",
+    "sort-priority": "정렬 우선순위",
+    "primary-priority": "1차 우선순위",
+    "secondary-priority": "2차 우선순위"
   },
   "sidebar": {
     "all-recipes": "모든 레시피",
@@ -1835,5 +1845,20 @@
     "no-ai-results": "AI가 일치하는 아티클을 찾지 못했습니다.",
     "no-articles": "아직 아티클이 없습니다.",
     "delete-confirm": "이 아티클을 삭제하시겠습니까?"
+  },
+  "shopping-website": {
+    "websites": "웹사이트",
+    "website-name": "웹사이트 이름",
+    "website-address": "웹사이트 주소",
+    "saved-page-food": "저장된 페이지의 식품",
+    "other-offered-foods": "웹사이트에서 제공하는 기타 식품",
+    "save-website": "웹사이트 저장",
+    "edit-website": "웹사이트 편집",
+    "manual": "수동",
+    "analyze-with-ai": "AI로 분석",
+    "ai-url-help": "Mealie가 이 주소를 읽고 AI를 사용하여 사이트, 페이지 내 식품 및 기타 제공 식품을 식별합니다.",
+    "delete-confirm": "이 저장된 웹사이트를 삭제하시겠습니까?",
+    "no-websites": "저장된 식품 쇼핑 웹사이트가 없습니다.",
+    "websites-description": "식품점, 식당 스토어, 생산자 및 유용한 제품 페이지를 한곳에 모아 관리하세요."
   }
 }

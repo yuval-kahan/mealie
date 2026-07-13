@@ -1117,7 +1117,17 @@
     "ai-organize-failed": "KI-Organisation der Einkaufsliste fehlgeschlagen",
     "ai-organize-empty": "Eine leere Einkaufsliste kann nicht mit KI organisiert werden",
     "link-recipe": "Rezept verknüpfen",
-    "search-recipe": "Rezept suchen"
+    "search-recipe": "Rezept suchen",
+    "sort-lists": "Listen sortieren",
+    "sort-by": "Sortieren nach",
+    "item-count": "Anzahl der Artikel",
+    "merged-list-placement": "Platzierung zusammengeführter Listen",
+    "merged-sort-normal": "Normale Sortierreihenfolge verwenden",
+    "merged-sort-first": "Zusammengeführte Listen zuerst",
+    "merged-sort-last": "Zusammengeführte Listen zuletzt",
+    "sort-priority": "Sortierpriorität",
+    "primary-priority": "Erste Ebene",
+    "secondary-priority": "Zweite Ebene"
   },
   "sidebar": {
     "all-recipes": "Alle Rezepte",
@@ -1835,5 +1845,20 @@
     "no-ai-results": "Die KI hat keine passenden Artikel gefunden.",
     "no-articles": "Noch keine Artikel vorhanden.",
     "delete-confirm": "Bist du sicher, dass du diesen Artikel löschen möchtest?"
+  },
+  "shopping-website": {
+    "websites": "Websites",
+    "website-name": "Name der Website",
+    "website-address": "Website-Adresse",
+    "saved-page-food": "Lebensmittel auf der gespeicherten Seite",
+    "other-offered-foods": "Weitere vom Anbieter angebotene Lebensmittel",
+    "save-website": "Website speichern",
+    "edit-website": "Website bearbeiten",
+    "manual": "Manuell",
+    "analyze-with-ai": "Mit AI analysieren",
+    "ai-url-help": "Mealie liest diese Adresse und verwendet AI, um die Seite, die Lebensmittel auf dieser Seite und weitere angebotene Lebensmittel zu identifizieren.",
+    "delete-confirm": "Diese gespeicherte Website löschen?",
+    "no-websites": "Es wurden noch keine Lebensmittel-Shopping-Websites gespeichert.",
+    "websites-description": "Halten Sie Lebensmittelläden, Restaurant-Shops, Erzeuger und nützliche Produktseiten zusammen."
   }
 }

@@ -52,14 +52,16 @@
     "send-auto": "Detekovat a odeslat do AI",
     "send-recipe": "Odeslat recept do AI",
     "send-article": "Odeslat článek do AI",
-    "connect-mealie": "Otevřít / připojit Mealie"
+    "connect-mealie": "Otevřít / připojit Mealie",
+    "save-website": "Uložit webovou stránku"
   },
   "preview": {
     "title": "Náhled"
   },
   "links": {
     "open-recipe": "Otevřít recept v Mealie",
-    "open-article": "Otevřít článek v Mealie"
+    "open-article": "Otevřít článek v Mealie",
+    "open-websites": "Otevřít uložené webové stránky v Mealie"
   },
   "status": {
     "open-and-login": "Před použitím rozšíření otevřete Mealie na kartě v tomto prohlížeči a přihlaste se.",
@@ -81,7 +83,9 @@
     "recipe-created-too": "Byl také vytvořen recept: {name}",
     "shopping-list": "Nákupní seznam: {name}",
     "attention": "Pozor: {message}",
-    "extraction-finished": "Extrakce dokončena"
+    "extraction-finished": "Extrakce dokončena",
+    "saving-website": "Analyzuji a ukládám aktuální web o jídle...",
+    "website-saved": "Webová stránka uložena: {name}"
   },
   "errors": {
     "invalid-mealie-url": "Adresa Mealie je neplatná.",

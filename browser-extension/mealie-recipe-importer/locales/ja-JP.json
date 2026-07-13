@@ -52,14 +52,16 @@
     "send-auto": "検出してAIに送信",
     "send-recipe": "レシピをAIに送信",
     "send-article": "記事をAIに送信",
-    "connect-mealie": "Mealieを開く / 接続する"
+    "connect-mealie": "Mealieを開く / 接続する",
+    "save-website": "ウェブサイトを保存"
   },
   "preview": {
     "title": "プレビュー"
   },
   "links": {
     "open-recipe": "Mealieでレシピを開く",
-    "open-article": "Mealieで記事を開く"
+    "open-article": "Mealieで記事を開く",
+    "open-websites": "保存したウェブサイトをMealieで開く"
   },
   "status": {
     "open-and-login": "拡張機能を使用する前に、このブラウザのタブでMealieを開き、サインインしてください。",
@@ -81,7 +83,9 @@
     "recipe-created-too": "レシピも作成されました: {name}",
     "shopping-list": "買い物リスト: {name}",
     "attention": "注意: {message}",
-    "extraction-finished": "抽出が完了しました"
+    "extraction-finished": "抽出が完了しました",
+    "saving-website": "現在の料理ウェブサイトを分析して保存しています...",
+    "website-saved": "ウェブサイトを保存しました: {name}"
   },
   "errors": {
     "invalid-mealie-url": "Mealieアドレスが無効です。",

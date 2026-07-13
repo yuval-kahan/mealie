@@ -1117,7 +1117,17 @@
     "ai-organize-failed": "AIによる買い物リストの整理に失敗しました",
     "ai-organize-empty": "空の買い物リストをAIで整理することはできません",
     "link-recipe": "レシピをリンク",
-    "search-recipe": "レシピを検索"
+    "search-recipe": "レシピを検索",
+    "sort-lists": "リストを並べ替え",
+    "sort-by": "並べ替え順序",
+    "item-count": "アイテム数",
+    "merged-list-placement": "統合リストの配置",
+    "merged-sort-normal": "通常の並べ替え順序を使用",
+    "merged-sort-first": "統合リストを先頭に",
+    "merged-sort-last": "統合リストを末尾に",
+    "sort-priority": "優先順位の並べ替え",
+    "primary-priority": "第一優先",
+    "secondary-priority": "第二優先"
   },
   "sidebar": {
     "all-recipes": "すべてのレシピ",
@@ -1835,5 +1845,20 @@
     "no-ai-results": "AIは一致する記事を見つけられませんでした。",
     "no-articles": "記事はまだありません。",
     "delete-confirm": "この記事を削除してもよろしいですか？"
+  },
+  "shopping-website": {
+    "websites": "ウェブサイト",
+    "website-name": "ウェブサイト名",
+    "website-address": "ウェブサイトアドレス",
+    "saved-page-food": "保存されたページの食品",
+    "other-offered-foods": "サイトが提供するその他の食品",
+    "save-website": "ウェブサイトを保存",
+    "edit-website": "ウェブサイトを編集",
+    "manual": "手動",
+    "analyze-with-ai": "AIで分析",
+    "ai-url-help": "Mealieがこのアドレスを読み取り、AIを使用してサイト、ページ上の食品、および提供されているその他の食品を特定します。",
+    "delete-confirm": "この保存されたウェブサイトを削除しますか？",
+    "no-websites": "食品ショッピングサイトはまだ保存されていません。",
+    "websites-description": "食品店、レストラン、生産者、および役立つ製品ページをまとめて管理します。"
   }
 }

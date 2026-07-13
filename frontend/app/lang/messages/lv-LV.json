@@ -1117,7 +1117,17 @@
     "ai-organize-failed": "AI iepirkumu saraksta kārtošana neizdevās",
     "ai-organize-empty": "Nevar kārtot tukšu iepirkumu sarakstu ar AI",
     "link-recipe": "Piesaistīt recepti",
-    "search-recipe": "Meklēt recepti"
+    "search-recipe": "Meklēt recepti",
+    "sort-lists": "Kārtot sarakstus",
+    "sort-by": "Kārtot pēc",
+    "item-count": "Vienumu skaits",
+    "merged-list-placement": "Apvienotā saraksta novietojums",
+    "merged-sort-normal": "Izmantot parasto kārtošanas secību",
+    "merged-sort-first": "Apvienotie saraksti vispirms",
+    "merged-sort-last": "Apvienotie saraksti beigās",
+    "sort-priority": "Kārtošanas prioritāte",
+    "primary-priority": "Pirmais līmenis",
+    "secondary-priority": "Otrais līmenis"
   },
   "sidebar": {
     "all-recipes": "Visas receptes",
@@ -1835,5 +1845,20 @@
     "no-ai-results": "AI neatrada atbilstošus rakstus.",
     "no-articles": "Pagaidām nav rakstu.",
     "delete-confirm": "Vai tiešām vēlaties dzēst šo rakstu?"
+  },
+  "shopping-website": {
+    "websites": "Vietnes",
+    "website-name": "Vietnes nosaukums",
+    "website-address": "Vietnes adrese",
+    "saved-page-food": "Pārtika saglabātajā lapā",
+    "other-offered-foods": "Cita vietnes piedāvātā pārtika",
+    "save-website": "Saglabāt vietni",
+    "edit-website": "Rediģēt vietni",
+    "manual": "Manuāli",
+    "analyze-with-ai": "Analizēt ar AI",
+    "ai-url-help": "Mealie nolasīs šo adresi un izmantos AI, lai identificētu vietni, pārtiku šajā lapā un citu piedāvāto pārtiku.",
+    "delete-confirm": "Dzēst šo saglabāto vietni?",
+    "no-websites": "Pārtikas iepirkšanās vietnes vēl nav saglabātas.",
+    "websites-description": "Saglabājiet pārtikas veikalus, restorānu veikalus, ražotājus un noderīgas produktu lapas vienuviet."
   }
 }

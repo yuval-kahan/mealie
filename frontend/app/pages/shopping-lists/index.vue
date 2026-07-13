@@ -210,6 +210,63 @@
         :label="$t('shopping-list.search-shopping-lists')"
         :prepend-inner-icon="$globals.icons.search"
       />
+      <v-menu :close-on-content-click="false">
+        <template #activator="{ props: menuProps }">
+          <v-btn
+            v-bind="menuProps"
+            size="small"
+            color="primary"
+            variant="tonal"
+            :prepend-icon="$globals.icons.sort"
+          >
+            {{ $t("shopping-list.sort-lists") }}
+          </v-btn>
+        </template>
+        <v-card class="shopping-list-sort-menu">
+          <v-card-text>
+            <v-select
+              v-model="preferences.sortBy"
+              :items="shoppingListSortOptions"
+              item-title="title"
+              item-value="value"
+              :label="$t('shopping-list.sort-by')"
+              density="compact"
+            />
+            <v-btn-toggle
+              v-model="preferences.sortDirection"
+              mandatory
+              divided
+              density="compact"
+              class="mb-4"
+            >
+              <v-btn value="asc" :prepend-icon="$globals.icons.sortAscending">
+                {{ $t("general.sort-ascending") }}
+              </v-btn>
+              <v-btn value="desc" :prepend-icon="$globals.icons.sortDescending">
+                {{ $t("general.sort-descending") }}
+              </v-btn>
+            </v-btn-toggle>
+            <v-select
+              v-model="preferences.mergedPlacement"
+              :items="mergedPlacementOptions"
+              item-title="title"
+              item-value="value"
+              :label="$t('shopping-list.merged-list-placement')"
+              density="compact"
+            />
+            <v-select
+              v-model="preferences.mergedPriority"
+              :items="mergedPriorityOptions"
+              item-title="title"
+              item-value="value"
+              :label="$t('shopping-list.sort-priority')"
+              :disabled="preferences.mergedPlacement === 'normal'"
+              density="compact"
+              hide-details
+            />
+          </v-card-text>
+        </v-card>
+      </v-menu>
       <v-btn
         size="small"
         class="my-0 mr-4 shopping-list-image-toggle"
@@ -618,6 +675,21 @@ const overrideDisableRedirect = ref(false);
 const disableRedirect = computed(() => route.query.disableRedirect === "true" || overrideDisableRedirect.value);
 const preferences = useShoppingListPreferences();
 
+const shoppingListSortOptions = computed(() => [
+  { title: i18n.t("general.created"), value: "createdAt" },
+  { title: i18n.t("general.name"), value: "name" },
+  { title: i18n.t("shopping-list.item-count"), value: "itemCount" },
+]);
+const mergedPlacementOptions = computed(() => [
+  { title: i18n.t("shopping-list.merged-sort-normal"), value: "normal" },
+  { title: i18n.t("shopping-list.merged-sort-first"), value: "first" },
+  { title: i18n.t("shopping-list.merged-sort-last"), value: "last" },
+]);
+const mergedPriorityOptions = computed(() => [
+  { title: i18n.t("shopping-list.primary-priority"), value: "primary" },
+  { title: i18n.t("shopping-list.secondary-priority"), value: "secondary" },
+]);
+
 const state = reactive({
   createName: "",
   createRecipeSlug: null as string | null,
@@ -699,7 +771,7 @@ const filteredBulkDeleteLists = computed(() =>
 
 const shoppingListChoices = computed(() => {
   const search = shoppingListSearch.value.trim().toLocaleLowerCase();
-  return availableShoppingLists.value.filter((list) => {
+  const matches = availableShoppingLists.value.filter((list) => {
     if (mergedSourceIds.value.has(list.id)) {
       return false;
     }
@@ -712,7 +784,52 @@ const shoppingListChoices = computed(() => {
       && mergedSourceLists(list).some(source => (source.name || "").toLocaleLowerCase().includes(search));
     return matchesName || matchesSource;
   });
+
+  return matches.sort(compareShoppingLists);
 });
+
+function shoppingListItemCount(list: ShoppingListOut) {
+  return Number(list.itemCount ?? list.listItems?.length ?? 0);
+}
+
+function compareMergedPlacement(left: ShoppingListOut, right: ShoppingListOut) {
+  if (preferences.value.mergedPlacement === "normal") {
+    return 0;
+  }
+
+  const leftMerged = isMergedShoppingList(left) ? 1 : 0;
+  const rightMerged = isMergedShoppingList(right) ? 1 : 0;
+  const direction = preferences.value.mergedPlacement === "first" ? -1 : 1;
+  return (leftMerged - rightMerged) * direction;
+}
+
+function compareShoppingListField(left: ShoppingListOut, right: ShoppingListOut) {
+  const direction = preferences.value.sortDirection === "asc" ? 1 : -1;
+  let comparison = 0;
+
+  if (preferences.value.sortBy === "name") {
+    comparison = (left.name || "").localeCompare(right.name || "", i18n.locale.value, { sensitivity: "base" });
+  }
+  else if (preferences.value.sortBy === "itemCount") {
+    comparison = shoppingListItemCount(left) - shoppingListItemCount(right);
+  }
+  else {
+    comparison = new Date(left.createdAt || 0).getTime() - new Date(right.createdAt || 0).getTime();
+  }
+
+  return comparison * direction;
+}
+
+function compareShoppingLists(left: ShoppingListOut, right: ShoppingListOut) {
+  const mergedComparison = compareMergedPlacement(left, right);
+  const fieldComparison = compareShoppingListField(left, right);
+  const comparisons = preferences.value.mergedPriority === "primary"
+    ? [mergedComparison, fieldComparison]
+    : [fieldComparison, mergedComparison];
+
+  return comparisons.find(value => value !== 0)
+    ?? (left.name || "").localeCompare(right.name || "", i18n.locale.value, { sensitivity: "base" });
+}
 
 const suggestedMergedListName = computed(() => {
   const sourceNames = mergeSelectedListIds.value
@@ -1662,6 +1779,11 @@ async function deleteOne() {
   margin-inline-end: auto;
   max-width: 420px;
   min-width: 220px;
+}
+
+.shopping-list-sort-menu {
+  max-width: min(92vw, 440px);
+  min-width: min(92vw, 380px);
 }
 
 .shopping-list-selection-list {

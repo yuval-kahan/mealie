@@ -52,14 +52,16 @@
     "send-auto": "اكتشاف وإرسال إلى AI",
     "send-recipe": "إرسال الوصفة إلى AI",
     "send-article": "إرسال المقالة إلى AI",
-    "connect-mealie": "فتح / ربط Mealie"
+    "connect-mealie": "فتح / ربط Mealie",
+    "save-website": "حفظ الموقع الإلكتروني"
   },
   "preview": {
     "title": "معاينة"
   },
   "links": {
     "open-recipe": "فتح الوصفة في Mealie",
-    "open-article": "فتح المقالة في Mealie"
+    "open-article": "فتح المقالة في Mealie",
+    "open-websites": "فتح المواقع المحفوظة في Mealie"
   },
   "status": {
     "open-and-login": "افتح Mealie في علامة تبويب في هذا المتصفح وسجّل الدخول قبل استخدام الإضافة.",
@@ -81,7 +83,9 @@
     "recipe-created-too": "تم إنشاء وصفة أيضاً: {name}",
     "shopping-list": "قائمة التسوق: {name}",
     "attention": "تنبيه: {message}",
-    "extraction-finished": "اكتمل الاستخراج"
+    "extraction-finished": "اكتمل الاستخراج",
+    "saving-website": "جاري تحليل وحفظ موقع الطعام الحالي...",
+    "website-saved": "تم حفظ الموقع: {name}"
   },
   "errors": {
     "invalid-mealie-url": "عنوان Mealie غير صالح.",

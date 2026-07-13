@@ -52,14 +52,16 @@
     "send-auto": "Визначити та надіслати до AI",
     "send-recipe": "Надіслати рецепт до AI",
     "send-article": "Надіслати статтю до AI",
-    "connect-mealie": "Відкрити / підключити Mealie"
+    "connect-mealie": "Відкрити / підключити Mealie",
+    "save-website": "Зберегти вебсайт"
   },
   "preview": {
     "title": "Попередній перегляд"
   },
   "links": {
     "open-recipe": "Відкрити рецепт у Mealie",
-    "open-article": "Відкрити статтю у Mealie"
+    "open-article": "Відкрити статтю у Mealie",
+    "open-websites": "Відкрити збережені вебсайти в Mealie"
   },
   "status": {
     "open-and-login": "Відкрийте Mealie у вкладці цього браузера та увійдіть перед використанням розширення.",
@@ -81,7 +83,9 @@
     "recipe-created-too": "Також було створено рецепт: {name}",
     "shopping-list": "Список покупок: {name}",
     "attention": "Увага: {message}",
-    "extraction-finished": "Витягнення завершено"
+    "extraction-finished": "Витягнення завершено",
+    "saving-website": "Аналіз та збереження поточного кулінарного вебсайту...",
+    "website-saved": "Вебсайт збережено: {name}"
   },
   "errors": {
     "invalid-mealie-url": "Адреса Mealie недійсна.",

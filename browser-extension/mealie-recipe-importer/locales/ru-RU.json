@@ -52,14 +52,16 @@
     "send-auto": "Определить и отправить в AI",
     "send-recipe": "Отправить рецепт в AI",
     "send-article": "Отправить статью в AI",
-    "connect-mealie": "Открыть / подключить Mealie"
+    "connect-mealie": "Открыть / подключить Mealie",
+    "save-website": "Сохранить веб-сайт"
   },
   "preview": {
     "title": "Предпросмотр"
   },
   "links": {
     "open-recipe": "Открыть рецепт в Mealie",
-    "open-article": "Открыть статью в Mealie"
+    "open-article": "Открыть статью в Mealie",
+    "open-websites": "Открыть сохраненные веб-сайты в Mealie"
   },
   "status": {
     "open-and-login": "Откройте Mealie в новой вкладке этого браузера и войдите в систему перед использованием расширения.",
@@ -81,7 +83,9 @@
     "recipe-created-too": "Также был создан рецепт: {name}",
     "shopping-list": "Список покупок: {name}",
     "attention": "Внимание: {message}",
-    "extraction-finished": "Извлечение завершено"
+    "extraction-finished": "Извлечение завершено",
+    "saving-website": "Анализ и сохранение текущего кулинарного сайта...",
+    "website-saved": "Веб-сайт сохранен: {name}"
   },
   "errors": {
     "invalid-mealie-url": "Неверный адрес Mealie.",

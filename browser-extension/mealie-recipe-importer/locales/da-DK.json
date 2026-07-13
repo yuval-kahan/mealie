@@ -52,14 +52,16 @@
     "send-auto": "Registrer og send til AI",
     "send-recipe": "Send opskrift til AI",
     "send-article": "Send artikel til AI",
-    "connect-mealie": "Åbn / forbind Mealie"
+    "connect-mealie": "Åbn / forbind Mealie",
+    "save-website": "Gem hjemmeside"
   },
   "preview": {
     "title": "Forhåndsvisning"
   },
   "links": {
     "open-recipe": "Åbn opskrift i Mealie",
-    "open-article": "Åbn artikel i Mealie"
+    "open-article": "Åbn artikel i Mealie",
+    "open-websites": "Åbn gemte hjemmesider i Mealie"
   },
   "status": {
     "open-and-login": "Åbn Mealie i en fane i denne browser og log ind, før du bruger udvidelsen.",
@@ -81,7 +83,9 @@
     "recipe-created-too": "En opskrift blev også oprettet: {name}",
     "shopping-list": "Indkøbsliste: {name}",
     "attention": "Bemærk: {message}",
-    "extraction-finished": "Udtrækning fuldført"
+    "extraction-finished": "Udtrækning fuldført",
+    "saving-website": "Analyserer og gemmer den aktuelle madhjemmeside...",
+    "website-saved": "Hjemmeside gemt: {name}"
   },
   "errors": {
     "invalid-mealie-url": "Mealie-adressen er ugyldig.",

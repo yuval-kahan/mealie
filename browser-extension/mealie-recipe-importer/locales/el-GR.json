@@ -52,14 +52,16 @@
     "send-auto": "Ανίχνευση και αποστολή στο AI",
     "send-recipe": "Αποστολή συνταγής στο AI",
     "send-article": "Αποστολή άρθρου στο AI",
-    "connect-mealie": "Άνοιγμα / σύνδεση στο Mealie"
+    "connect-mealie": "Άνοιγμα / σύνδεση στο Mealie",
+    "save-website": "Αποθήκευση ιστότοπου"
   },
   "preview": {
     "title": "Προεπισκόπηση"
   },
   "links": {
     "open-recipe": "Άνοιγμα συνταγής στο Mealie",
-    "open-article": "Άνοιγμα άρθρου στο Mealie"
+    "open-article": "Άνοιγμα άρθρου στο Mealie",
+    "open-websites": "Άνοιγμα αποθηκευμένων ιστότοπων στο Mealie"
   },
   "status": {
     "open-and-login": "Ανοίξτε το Mealie σε μια καρτέλα σε αυτό το πρόγραμμα περιήγησης και συνδεθείτε πριν χρησιμοποιήσετε την επέκταση.",
@@ -81,7 +83,9 @@
     "recipe-created-too": "Δημιουργήθηκε επίσης μια συνταγή: {name}",
     "shopping-list": "Λίστα αγορών: {name}",
     "attention": "Προσοχή: {message}",
-    "extraction-finished": "Η εξαγωγή ολοκληρώθηκε"
+    "extraction-finished": "Η εξαγωγή ολοκληρώθηκε",
+    "saving-website": "Ανάλυση και αποθήκευση του τρέχοντος ιστότοπου φαγητού...",
+    "website-saved": "Ο ιστότοπος αποθηκεύτηκε: {name}"
   },
   "errors": {
     "invalid-mealie-url": "Η διεύθυνση Mealie δεν είναι έγκυρη.",

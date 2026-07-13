@@ -229,6 +229,7 @@ class ShoppingListSave(ShoppingListCreate):
 class ShoppingListSummary(ShoppingListSave):
     id: UUID4
     household_id: UUID4
+    item_count: int = 0
     recipe_references: list[ShoppingListRecipeRefOut]
     label_settings: list[ShoppingListMultiPurposeLabelOut]
     model_config = ConfigDict(from_attributes=True)

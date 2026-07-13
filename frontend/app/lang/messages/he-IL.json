@@ -1142,7 +1142,32 @@
     "merge-lists-failed": "איחוד רשימות הקניות נכשל",
     "merge-lists-complete": "רשימות הקניות אוחדו בהצלחה",
     "delete-lists-failed": "מחיקת רשימות הקניות נכשלה",
-    "merged-from": "אוחד מתוך"
+    "merged-from": "אוחד מתוך",
+    "sort-lists": "מיין רשימות",
+    "sort-by": "מיין לפי",
+    "item-count": "מספר פריטים",
+    "merged-list-placement": "מיקום רשימות ממוזגות",
+    "merged-sort-normal": "השתמש בסדר המיון הרגיל",
+    "merged-sort-first": "רשימות ממוזגות תחילה",
+    "merged-sort-last": "רשימות ממוזגות בסוף",
+    "sort-priority": "עדיפות מיון",
+    "primary-priority": "רמה ראשונה",
+    "secondary-priority": "רמה שנייה"
+  },
+  "shopping-website": {
+    "websites": "אתרים",
+    "website-name": "שם האתר",
+    "website-address": "כתובת האתר",
+    "saved-page-food": "מזון בדף השמור",
+    "other-offered-foods": "מזונות אחרים המוצעים על ידי האתר",
+    "save-website": "שמור אתר",
+    "edit-website": "ערוך אתר",
+    "manual": "ידני",
+    "analyze-with-ai": "נתח באמצעות AI",
+    "ai-url-help": "Mealie יקרא את הכתובת הזו וישתמש ב-AI כדי לזהות את האתר, המזון בדף זה, ומזונות אחרים שהוא מציע.",
+    "delete-confirm": "למחוק את האתר השמור הזה?",
+    "no-websites": "טרם נשמרו אתרי קניות מזון.",
+    "websites-description": "שמור במקום אחד חנויות מזון, מסעדות, יצרנים ודפי מוצרים שימושיים."
   },
   "sidebar": {
     "all-recipes": "כל המתכונים",

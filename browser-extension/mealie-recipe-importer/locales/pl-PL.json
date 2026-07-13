@@ -52,14 +52,16 @@
     "send-auto": "Wykryj i wyślij do AI",
     "send-recipe": "Wyślij przepis do AI",
     "send-article": "Wyślij artykuł do AI",
-    "connect-mealie": "Otwórz / połącz Mealie"
+    "connect-mealie": "Otwórz / połącz Mealie",
+    "save-website": "Zapisz stronę internetową"
   },
   "preview": {
     "title": "Podgląd"
   },
   "links": {
     "open-recipe": "Otwórz przepis w Mealie",
-    "open-article": "Otwórz artykuł w Mealie"
+    "open-article": "Otwórz artykuł w Mealie",
+    "open-websites": "Otwórz zapisane strony w Mealie"
   },
   "status": {
     "open-and-login": "Otwórz Mealie w karcie przeglądarki i zaloguj się przed użyciem rozszerzenia.",
@@ -81,7 +83,9 @@
     "recipe-created-too": "Utworzono również przepis: {name}",
     "shopping-list": "Lista zakupów: {name}",
     "attention": "Uwaga: {message}",
-    "extraction-finished": "Wyodrębnianie zakończone"
+    "extraction-finished": "Wyodrębnianie zakończone",
+    "saving-website": "Analizowanie i zapisywanie bieżącej strony z przepisami...",
+    "website-saved": "Strona zapisana: {name}"
   },
   "errors": {
     "invalid-mealie-url": "Adres Mealie jest nieprawidłowy.",

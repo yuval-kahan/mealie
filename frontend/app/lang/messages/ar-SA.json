@@ -1117,7 +1117,17 @@
     "ai-organize-failed": "فشل تنظيم قائمة التسوق بواسطة AI",
     "ai-organize-empty": "لا يمكن تنظيم قائمة تسوق فارغة بواسطة AI",
     "link-recipe": "ربط وصفة",
-    "search-recipe": "البحث عن وصفة"
+    "search-recipe": "البحث عن وصفة",
+    "sort-lists": "فرز القوائم",
+    "sort-by": "فرز حسب",
+    "item-count": "عدد العناصر",
+    "merged-list-placement": "موضع القائمة المدمجة",
+    "merged-sort-normal": "استخدام ترتيب الفرز العادي",
+    "merged-sort-first": "القوائم المدمجة أولاً",
+    "merged-sort-last": "القوائم المدمجة أخيراً",
+    "sort-priority": "أولوية الفرز",
+    "primary-priority": "المستوى الأول",
+    "secondary-priority": "المستوى الثاني"
   },
   "sidebar": {
     "all-recipes": "جميع الوصفات",
@@ -1835,5 +1845,20 @@
     "no-ai-results": "لم يعثر الذكاء الاصطناعي على مقالات مطابقة.",
     "no-articles": "لا توجد مقالات بعد.",
     "delete-confirm": "هل أنت متأكد من رغبتك في حذف هذه المقالة؟"
+  },
+  "shopping-website": {
+    "websites": "المواقع الإلكترونية",
+    "website-name": "اسم الموقع",
+    "website-address": "عنوان الموقع",
+    "saved-page-food": "الطعام في الصفحة المحفوظة",
+    "other-offered-foods": "أطعمة أخرى يقدمها الموقع",
+    "save-website": "حفظ الموقع",
+    "edit-website": "تعديل الموقع",
+    "manual": "يدوي",
+    "analyze-with-ai": "التحليل باستخدام AI",
+    "ai-url-help": "سيقوم Mealie بقراءة هذا العنوان واستخدام AI لتحديد الموقع، والطعام الموجود في هذه الصفحة، والأطعمة الأخرى التي يقدمها.",
+    "delete-confirm": "هل تريد حذف هذا الموقع المحفوظ؟",
+    "no-websites": "لم يتم حفظ أي مواقع لتسوق الطعام بعد.",
+    "websites-description": "احتفظ بمتاجر الطعام، ومتاجر المطاعم، والمنتجين، وصفحات المنتجات المفيدة في مكان واحد."
   }
 }

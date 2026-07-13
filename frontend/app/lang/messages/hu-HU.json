@@ -1117,7 +1117,17 @@
     "ai-organize-failed": "Az AI-alapú bevásárlólista-rendszerezés sikertelen",
     "ai-organize-empty": "Üres bevásárlólistát nem lehet AI-val rendszerezni",
     "link-recipe": "Recept csatolása",
-    "search-recipe": "Recept keresése"
+    "search-recipe": "Recept keresése",
+    "sort-lists": "Listák rendezése",
+    "sort-by": "Rendezés alapja",
+    "item-count": "Elemek száma",
+    "merged-list-placement": "Összevont lista elhelyezése",
+    "merged-sort-normal": "Normál rendezési sorrend használata",
+    "merged-sort-first": "Összevont listák elöl",
+    "merged-sort-last": "Összevont listák hátul",
+    "sort-priority": "Rendezési prioritás",
+    "primary-priority": "Elsődleges szint",
+    "secondary-priority": "Másodlagos szint"
   },
   "sidebar": {
     "all-recipes": "Minden recept",
@@ -1835,5 +1845,20 @@
     "no-ai-results": "Az AI nem talált megfelelő cikkeket.",
     "no-articles": "Még nincsenek cikkek.",
     "delete-confirm": "Biztosan törölni szeretnéd ezt a cikket?"
+  },
+  "shopping-website": {
+    "websites": "Weboldalak",
+    "website-name": "Weboldal neve",
+    "website-address": "Weboldal címe",
+    "saved-page-food": "Élelmiszer a mentett oldalon",
+    "other-offered-foods": "A weboldal által kínált egyéb élelmiszerek",
+    "save-website": "Weboldal mentése",
+    "edit-website": "Weboldal szerkesztése",
+    "manual": "Kézi",
+    "analyze-with-ai": "Elemzés AI-val",
+    "ai-url-help": "A Mealie beolvassa ezt a címet, és AI segítségével azonosítja az oldalt, az azon található élelmiszereket, valamint az egyéb kínált termékeket.",
+    "delete-confirm": "Törli ezt a mentett weboldalt?",
+    "no-websites": "Még nincsenek mentett élelmiszer-vásárlási weboldalak.",
+    "websites-description": "Tartsa egy helyen az élelmiszerboltokat, éttermi áruházakat, termelőket és hasznos termékoldalakat."
   }
 }

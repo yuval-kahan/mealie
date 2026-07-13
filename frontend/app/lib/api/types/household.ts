@@ -686,6 +686,7 @@ export interface ShoppingListOut {
   groupId: string;
   userId: string;
   id: string;
+  itemCount?: number;
   listItems?: ShoppingListItemOut[];
   householdId: string;
   recipeReferences?: ShoppingListRecipeRefOut[];
@@ -748,6 +749,7 @@ export interface ShoppingListSummary {
   groupId: string;
   userId: string;
   id: string;
+  itemCount: number;
   householdId: string;
   recipeReferences: ShoppingListRecipeRefOut[];
   labelSettings: ShoppingListMultiPurposeLabelOut[];

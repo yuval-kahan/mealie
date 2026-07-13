@@ -52,14 +52,16 @@
     "send-auto": "Detegovať a odoslať do AI",
     "send-recipe": "Odoslať recept do AI",
     "send-article": "Odoslať článok do AI",
-    "connect-mealie": "Otvoriť / pripojiť Mealie"
+    "connect-mealie": "Otvoriť / pripojiť Mealie",
+    "save-website": "Uložiť webovú stránku"
   },
   "preview": {
     "title": "Náhľad"
   },
   "links": {
     "open-recipe": "Otvoriť recept v Mealie",
-    "open-article": "Otvoriť článok v Mealie"
+    "open-article": "Otvoriť článok v Mealie",
+    "open-websites": "Otvoriť uložené webové stránky v Mealie"
   },
   "status": {
     "open-and-login": "Pred použitím rozšírenia otvorte Mealie na karte v tomto prehliadači a prihláste sa.",
@@ -81,7 +83,9 @@
     "recipe-created-too": "Bol vytvorený aj recept: {name}",
     "shopping-list": "Nákupný zoznam: {name}",
     "attention": "Pozor: {message}",
-    "extraction-finished": "Extrakcia dokončená"
+    "extraction-finished": "Extrakcia dokončená",
+    "saving-website": "Analyzujem a ukladám aktuálnu stránku s jedlom...",
+    "website-saved": "Webová stránka uložená: {name}"
   },
   "errors": {
     "invalid-mealie-url": "Adresa Mealie je neplatná.",

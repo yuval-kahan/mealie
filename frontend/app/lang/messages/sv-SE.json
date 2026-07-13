@@ -1117,7 +1117,17 @@
     "ai-organize-failed": "AI-organisering av inköpslista misslyckades",
     "ai-organize-empty": "Kan inte organisera en tom inköpslista med AI",
     "link-recipe": "Länka recept",
-    "search-recipe": "Sök recept"
+    "search-recipe": "Sök recept",
+    "sort-lists": "Sortera listor",
+    "sort-by": "Sortera efter",
+    "item-count": "Antal artiklar",
+    "merged-list-placement": "Placering av sammanslagna listor",
+    "merged-sort-normal": "Använd normal sorteringsordning",
+    "merged-sort-first": "Sammanslagna listor först",
+    "merged-sort-last": "Sammanslagna listor sist",
+    "sort-priority": "Sorteringsprioritet",
+    "primary-priority": "Första nivå",
+    "secondary-priority": "Andra nivå"
   },
   "sidebar": {
     "all-recipes": "Recept",
@@ -1835,5 +1845,20 @@
     "no-ai-results": "AI hittade inga matchande artiklar.",
     "no-articles": "Inga artiklar än.",
     "delete-confirm": "Är du säker på att du vill radera den här artikeln?"
+  },
+  "shopping-website": {
+    "websites": "Webbplatser",
+    "website-name": "Webbplatsnamn",
+    "website-address": "Webbadress",
+    "saved-page-food": "Mat på den sparade sidan",
+    "other-offered-foods": "Annan mat som erbjuds av webbplatsen",
+    "save-website": "Spara webbplats",
+    "edit-website": "Redigera webbplats",
+    "manual": "Manuell",
+    "analyze-with-ai": "Analysera med AI",
+    "ai-url-help": "Mealie kommer att läsa denna adress och använda AI för att identifiera webbplatsen, maten på denna sida och annan mat som erbjuds.",
+    "delete-confirm": "Ta bort denna sparade webbplats?",
+    "no-websites": "Inga matbutikswebbplatser har sparats ännu.",
+    "websites-description": "Håll matbutiker, restaurangbutiker, producenter och användbara produktsidor samlade."
   }
 }

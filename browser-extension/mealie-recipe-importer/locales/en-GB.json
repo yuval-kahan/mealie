@@ -52,14 +52,16 @@
     "send-auto": "Detect and send to AI",
     "send-recipe": "Send recipe to AI",
     "send-article": "Send article to AI",
-    "connect-mealie": "Open / connect Mealie"
+    "connect-mealie": "Open / connect Mealie",
+    "save-website": "Save website"
   },
   "preview": {
     "title": "Preview"
   },
   "links": {
     "open-recipe": "Open recipe in Mealie",
-    "open-article": "Open article in Mealie"
+    "open-article": "Open article in Mealie",
+    "open-websites": "Open saved websites in Mealie"
   },
   "status": {
     "open-and-login": "Open Mealie in a tab in this browser and sign in before using the extension.",
@@ -81,7 +83,9 @@
     "recipe-created-too": "A recipe was also created: {name}",
     "shopping-list": "Shopping list: {name}",
     "attention": "Attention: {message}",
-    "extraction-finished": "Extraction completed"
+    "extraction-finished": "Extraction completed",
+    "saving-website": "Analysing and saving the current food website...",
+    "website-saved": "Website saved: {name}"
   },
   "errors": {
     "invalid-mealie-url": "The Mealie address is invalid.",

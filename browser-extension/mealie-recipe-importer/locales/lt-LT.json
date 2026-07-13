@@ -31,14 +31,16 @@
     "send-auto": "Aptikti ir siųsti į AI",
     "send-recipe": "Siųsti receptą į AI",
     "send-article": "Siųsti straipsnį į AI",
-    "connect-mealie": "Atidaryti / prijungti Mealie"
+    "connect-mealie": "Atidaryti / prijungti Mealie",
+    "save-website": "Išsaugoti svetainę"
   },
   "preview": {
     "title": "Peržiūra"
   },
   "links": {
     "open-recipe": "Atidaryti receptą Mealie",
-    "open-article": "Atidaryti straipsnį Mealie"
+    "open-article": "Atidaryti straipsnį Mealie",
+    "open-websites": "Atidaryti išsaugotas svetaines Mealie"
   },
   "status": {
     "open-and-login": "Prieš naudodami plėtinį, atidarykite Mealie šios naršyklės skirtuke ir prisijunkite.",
@@ -60,7 +62,9 @@
     "recipe-created-too": "Taip pat buvo sukurtas receptas: {name}",
     "shopping-list": "Pirkinių sąrašas: {name}",
     "attention": "Dėmesio: {message}",
-    "extraction-finished": "Ištraukimas baigtas"
+    "extraction-finished": "Ištraukimas baigtas",
+    "saving-website": "Analizuojama ir išsaugoma dabartinė maisto svetainė...",
+    "website-saved": "Svetainė išsaugota: {name}"
   },
   "errors": {
     "invalid-mealie-url": "Mealie adresas neteisingas.",

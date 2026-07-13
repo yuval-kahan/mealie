@@ -52,14 +52,16 @@
     "send-auto": "Detecteren en naar AI sturen",
     "send-recipe": "Recept naar AI sturen",
     "send-article": "Artikel naar AI sturen",
-    "connect-mealie": "Open / verbind Mealie"
+    "connect-mealie": "Open / verbind Mealie",
+    "save-website": "Website opslaan"
   },
   "preview": {
     "title": "Voorbeeld"
   },
   "links": {
     "open-recipe": "Open recept in Mealie",
-    "open-article": "Open artikel in Mealie"
+    "open-article": "Open artikel in Mealie",
+    "open-websites": "Opgeslagen websites openen in Mealie"
   },
   "status": {
     "open-and-login": "Open Mealie in een tabblad in deze browser en log in voordat je de extensie gebruikt.",
@@ -81,7 +83,9 @@
     "recipe-created-too": "Er is ook een recept aangemaakt: {name}",
     "shopping-list": "Boodschappenlijst: {name}",
     "attention": "Let op: {message}",
-    "extraction-finished": "Extractie voltooid"
+    "extraction-finished": "Extractie voltooid",
+    "saving-website": "Huidige voedselwebsite analyseren en opslaan...",
+    "website-saved": "Website opgeslagen: {name}"
   },
   "errors": {
     "invalid-mealie-url": "Het Mealie-adres is ongeldig.",

@@ -114,6 +114,18 @@ button:disabled {
   color: #744117;
 }
 
+.website-action {
+  background: #f3f8f6;
+  border: 1px solid #7bb9a3;
+  color: #176047;
+  grid-column: 1 / -1;
+}
+
+.website-action:hover:not(:disabled),
+.website-action:focus-visible:not(:disabled) {
+  background: #dff1e9;
+}
+
 .connect-button {
   background: #fff7ed;
   border: 1px solid #efb16b;

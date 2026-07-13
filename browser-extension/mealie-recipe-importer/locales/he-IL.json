@@ -52,6 +52,7 @@
     "send-auto": "זהה ושלח ל-AI",
     "send-recipe": "שלח מתכון ל-AI",
     "send-article": "שלח מאמר ל-AI",
+    "save-website": "שמור אתר",
     "connect-mealie": "פתח / התחבר ל-Mealie"
   },
   "preview": {
@@ -59,7 +60,8 @@
   },
   "links": {
     "open-recipe": "פתח מתכון ב-Mealie",
-    "open-article": "פתח מאמר ב-Mealie"
+    "open-article": "פתח מאמר ב-Mealie",
+    "open-websites": "פתח אתרים שמורים ב-Mealie"
   },
   "status": {
     "open-and-login": "פתח את Mealie בלשונית בדפדפן זה והתחבר לפני השימוש בתוסף.",
@@ -81,7 +83,9 @@
     "recipe-created-too": "נוצר גם מתכון: {name}",
     "shopping-list": "רשימת קניות: {name}",
     "attention": "שים לב: {message}",
-    "extraction-finished": "החילוץ הושלם"
+    "extraction-finished": "החילוץ הושלם",
+    "saving-website": "מנתח ושומר את אתר האוכל הנוכחי...",
+    "website-saved": "האתר נשמר: {name}"
   },
   "errors": {
     "invalid-mealie-url": "כתובת Mealie אינה תקינה.",

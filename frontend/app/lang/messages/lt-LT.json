@@ -1117,7 +1117,17 @@
     "ai-organize-failed": "AI pirkinių sąrašo organizavimas nepavyko",
     "ai-organize-empty": "Negalima organizuoti tuščio pirkinių sąrašo su AI",
     "link-recipe": "Susieti receptą",
-    "search-recipe": "Ieškoti recepto"
+    "search-recipe": "Ieškoti recepto",
+    "sort-lists": "Rikiuoti sąrašus",
+    "sort-by": "Rikiuoti pagal",
+    "item-count": "Elementų skaičius",
+    "merged-list-placement": "Sujungtų sąrašų vieta",
+    "merged-sort-normal": "Naudoti įprastą rikiavimo tvarką",
+    "merged-sort-first": "Sujungti sąrašai pirmiausia",
+    "merged-sort-last": "Sujungti sąrašai paskiausiai",
+    "sort-priority": "Rikiavimo prioritetas",
+    "primary-priority": "Pirmas lygis",
+    "secondary-priority": "Antras lygis"
   },
   "sidebar": {
     "all-recipes": "Visi receptai",
@@ -1835,5 +1845,20 @@
     "no-ai-results": "AI nerado atitinkančių straipsnių.",
     "no-articles": "Kol kas nėra straipsnių.",
     "delete-confirm": "Ar tikrai norite ištrinti šį straipsnį?"
+  },
+  "shopping-website": {
+    "websites": "Svetainės",
+    "website-name": "Svetainės pavadinimas",
+    "website-address": "Svetainės adresas",
+    "saved-page-food": "Maistas išsaugotame puslapyje",
+    "other-offered-foods": "Kitas svetainės siūlomas maistas",
+    "save-website": "Išsaugoti svetainę",
+    "edit-website": "Redaguoti svetainę",
+    "manual": "Rankiniu būdu",
+    "analyze-with-ai": "Analizuoti su AI",
+    "ai-url-help": "Mealie nuskaitys šį adresą ir naudos AI svetainei, maistui šiame puslapyje bei kitam siūlomam maistui atpažinti.",
+    "delete-confirm": "Ištrinti šią išsaugotą svetainę?",
+    "no-websites": "Dar neišsaugota jokių maisto prekių svetainių.",
+    "websites-description": "Laikykite maisto parduotuves, restoranų parduotuves, gamintojus ir naudingus produktų puslapius vienoje vietoje."
   }
 }

@@ -1,0 +1,240 @@
+import json
+import re
+from urllib.parse import urlsplit, urlunsplit
+
+import httpx
+import sqlalchemy as sa
+from fastapi import APIRouter, HTTPException, Query, status
+from pydantic import UUID4
+
+from mealie.db.models.household.shopping_website import ShoppingWebsite
+from mealie.routes._base import controller
+from mealie.routes._base.base_controllers import BaseUserController
+from mealie.schema.household.shopping_website import (
+    ShoppingWebsiteAIRequest,
+    ShoppingWebsiteBrowserPageRequest,
+    ShoppingWebsiteCreate,
+    ShoppingWebsiteOut,
+    ShoppingWebsiteUpdate,
+)
+from mealie.schema.openai.shopping_website import OpenAIShoppingWebsite
+from mealie.schema.response.responses import ErrorResponse
+from mealie.services.openai import OpenAIService
+
+router = APIRouter(prefix="/households/shopping-websites", tags=["Households: Shopping Websites"])
+
+HTML_SCRIPT_STYLE_RE = re.compile(r"<(script|style).*?</\1>", re.IGNORECASE | re.DOTALL)
+HTML_TAG_RE = re.compile(r"<[^>]+>")
+SPACE_RE = re.compile(r"[ \t]+")
+MAX_PAGE_BYTES = 2 * 1024 * 1024
+MAX_PAGE_TEXT = 250000
+
+
+def normalize_terms(values: list[str]) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for value in values or []:
+        item = SPACE_RE.sub(" ", str(value).strip())[:120]
+        key = item.casefold()
+        if item and key not in seen:
+            seen.add(key)
+            normalized.append(item)
+    return normalized[:60]
+
+
+def normalize_url(value: str) -> str:
+    raw = value.strip()
+    parts = urlsplit(raw)
+    if parts.scheme.lower() not in {"http", "https"} or not parts.netloc:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail=ErrorResponse.respond("A valid HTTP or HTTPS website address is required"),
+        )
+    return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), parts.path or "/", parts.query, ""))
+
+
+def clean_html_text(value: str) -> str:
+    value = HTML_SCRIPT_STYLE_RE.sub(" ", value)
+    value = re.sub(r"</(p|div|h[1-6]|li|br|nav|section)>", "\n", value, flags=re.IGNORECASE)
+    value = HTML_TAG_RE.sub(" ", value)
+    value = re.sub(r"\n{3,}", "\n\n", value)
+    value = SPACE_RE.sub(" ", value)
+    return value.strip()[:MAX_PAGE_TEXT]
+
+
+@controller(router)
+class ShoppingWebsitesController(BaseUserController):
+    def _ai_enabled(self) -> bool:
+        settings = (
+            self.session.execute(
+                sa.text("SELECT id, default_provider_id FROM ai_provider_settings WHERE group_id = :group_id"),
+                {"group_id": self.repos.uuid_to_str(self.group_id)},
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if not settings or not settings["default_provider_id"]:
+            return False
+        return bool(
+            self.session.execute(
+                sa.text("SELECT 1 FROM ai_providers WHERE id = :provider_id AND settings_id = :settings_id LIMIT 1"),
+                {"provider_id": settings["default_provider_id"], "settings_id": settings["id"]},
+            ).scalar()
+        )
+
+    def _to_out(self, website: ShoppingWebsite) -> ShoppingWebsiteOut:
+        return ShoppingWebsiteOut(
+            id=website.id,
+            group_id=website.group_id,
+            household_id=website.household_id,
+            user_id=website.user_id,
+            name=website.name,
+            url=website.url,
+            page_food=website.page_food,
+            offered_foods=json.loads(website.offered_foods_json or "[]"),
+            created_at=website.created_at,
+            updated_at=website.updated_at,
+        )
+
+    def _get_or_404(self, website_id: UUID4) -> ShoppingWebsite:
+        website = self.session.execute(
+            sa.select(ShoppingWebsite).where(
+                ShoppingWebsite.id == website_id,
+                ShoppingWebsite.group_id == self.group_id,
+            )
+        ).scalar_one_or_none()
+        if website is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND)
+        return website
+
+    def _apply(self, website: ShoppingWebsite, data: ShoppingWebsiteCreate | ShoppingWebsiteUpdate) -> None:
+        website.name = data.name.strip()
+        website.url = normalize_url(data.url)
+        website.page_food = (data.page_food or "").strip() or None
+        website.offered_foods_json = json.dumps(normalize_terms(data.offered_foods), ensure_ascii=False)
+
+    async def _fetch_url_text(self, url: str) -> str:
+        chunks: list[bytes] = []
+        total = 0
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+            async with client.stream("GET", url, headers={"User-Agent": "Mealie Shopping Websites/1.0"}) as response:
+                response.raise_for_status()
+                async for chunk in response.aiter_bytes():
+                    remaining = MAX_PAGE_BYTES - total
+                    if remaining <= 0:
+                        break
+                    chunks.append(chunk[:remaining])
+                    total += min(len(chunk), remaining)
+        return clean_html_text(b"".join(chunks).decode("utf-8", errors="replace"))
+
+    async def _analyze(self, url: str, page_text: str, page_title: str | None = None) -> ShoppingWebsiteCreate:
+        if not self._ai_enabled():
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=ErrorResponse.respond("OpenAI services are not enabled"),
+            )
+        normalized_url = normalize_url(url)
+        message_parts = [f"Website URL: {normalized_url}"]
+        if page_title:
+            message_parts.append(f"Page title: {page_title.strip()}")
+        message_parts.extend(["", page_text[:MAX_PAGE_TEXT]])
+        openai_service = OpenAIService(self.repos)
+        response = await openai_service.get_response(
+            openai_service.get_prompt("websites.parse-shopping-website"),
+            "\n".join(message_parts),
+            response_schema=OpenAIShoppingWebsite,
+        )
+        if not response or not response.is_food_website or not response.name.strip():
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=ErrorResponse.respond("The provided page does not look like a food shopping website"),
+            )
+        return ShoppingWebsiteCreate(
+            name=response.name.strip(),
+            url=normalized_url,
+            page_food=response.page_food.strip() or None,
+            offered_foods=normalize_terms(response.offered_foods),
+        )
+
+    def _create_or_update(self, data: ShoppingWebsiteCreate) -> ShoppingWebsiteOut:
+        normalized_url = normalize_url(data.url)
+        website = self.session.execute(
+            sa.select(ShoppingWebsite).where(
+                ShoppingWebsite.group_id == self.group_id,
+                ShoppingWebsite.url == normalized_url,
+            )
+        ).scalar_one_or_none()
+        if website is None:
+            website = ShoppingWebsite(
+                group_id=self.group_id,
+                household_id=self.household_id,
+                user_id=self.user.id,
+                name=data.name.strip(),
+                url=normalized_url,
+                session=self.session,
+            )
+        self._apply(website, data.model_copy(update={"url": normalized_url}))
+        self.session.add(website)
+        self.session.commit()
+        self.session.refresh(website)
+        return self._to_out(website)
+
+    @router.get("", response_model=list[ShoppingWebsiteOut])
+    def get_all(self, search: str | None = Query(None)) -> list[ShoppingWebsiteOut]:
+        query = (search or "").strip().casefold()
+        if query in {"undefined", "null"}:
+            query = ""
+        statement = sa.select(ShoppingWebsite).where(ShoppingWebsite.group_id == self.group_id)
+        if query:
+            escaped_query = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            pattern = f"%{escaped_query}%"
+            statement = statement.where(
+                sa.or_(
+                    ShoppingWebsite.name.ilike(pattern, escape="\\"),
+                    ShoppingWebsite.url.ilike(pattern, escape="\\"),
+                    ShoppingWebsite.page_food.ilike(pattern, escape="\\"),
+                    ShoppingWebsite.offered_foods_json.ilike(pattern, escape="\\"),
+                )
+            )
+        websites = (
+            self.session.execute(statement.order_by(ShoppingWebsite.created_at.desc(), ShoppingWebsite.name.asc()))
+            .scalars()
+            .all()
+        )
+        return [self._to_out(website) for website in websites]
+
+    @router.post("", response_model=ShoppingWebsiteOut, status_code=status.HTTP_201_CREATED)
+    def create(self, data: ShoppingWebsiteCreate) -> ShoppingWebsiteOut:
+        return self._create_or_update(data)
+
+    @router.post("/ai-create", response_model=ShoppingWebsiteOut, status_code=status.HTTP_201_CREATED)
+    async def create_with_ai(self, data: ShoppingWebsiteAIRequest) -> ShoppingWebsiteOut:
+        normalized_url = normalize_url(data.url)
+        page_text = await self._fetch_url_text(normalized_url)
+        if not page_text:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, detail=ErrorResponse.respond("The website returned no text")
+            )
+        return self._create_or_update(await self._analyze(normalized_url, page_text))
+
+    @router.post("/browser-page", response_model=ShoppingWebsiteOut, status_code=status.HTTP_201_CREATED)
+    async def create_from_browser_page(self, data: ShoppingWebsiteBrowserPageRequest) -> ShoppingWebsiteOut:
+        return self._create_or_update(await self._analyze(data.url, data.page_text, data.page_title))
+
+    @router.get("/{website_id}", response_model=ShoppingWebsiteOut)
+    def get_one(self, website_id: UUID4) -> ShoppingWebsiteOut:
+        return self._to_out(self._get_or_404(website_id))
+
+    @router.put("/{website_id}", response_model=ShoppingWebsiteOut)
+    def update(self, website_id: UUID4, data: ShoppingWebsiteUpdate) -> ShoppingWebsiteOut:
+        website = self._get_or_404(website_id)
+        self._apply(website, data)
+        self.session.add(website)
+        self.session.commit()
+        self.session.refresh(website)
+        return self._to_out(website)
+
+    @router.delete("/{website_id}", status_code=status.HTTP_204_NO_CONTENT)
+    def delete(self, website_id: UUID4) -> None:
+        self.session.delete(self._get_or_404(website_id))
+        self.session.commit()

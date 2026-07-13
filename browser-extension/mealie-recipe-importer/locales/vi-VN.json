@@ -52,14 +52,16 @@
     "send-auto": "Phát hiện và gửi đến AI",
     "send-recipe": "Gửi công thức đến AI",
     "send-article": "Gửi bài viết đến AI",
-    "connect-mealie": "Mở / kết nối Mealie"
+    "connect-mealie": "Mở / kết nối Mealie",
+    "save-website": "Lưu trang web"
   },
   "preview": {
     "title": "Xem trước"
   },
   "links": {
     "open-recipe": "Mở công thức trong Mealie",
-    "open-article": "Mở bài viết trong Mealie"
+    "open-article": "Mở bài viết trong Mealie",
+    "open-websites": "Mở các trang web đã lưu trong Mealie"
   },
   "status": {
     "open-and-login": "Mở Mealie trong một tab của trình duyệt này và đăng nhập trước khi sử dụng tiện ích.",
@@ -81,7 +83,9 @@
     "recipe-created-too": "Một công thức cũng đã được tạo: {name}",
     "shopping-list": "Danh sách mua sắm: {name}",
     "attention": "Chú ý: {message}",
-    "extraction-finished": "Hoàn tất trích xuất"
+    "extraction-finished": "Hoàn tất trích xuất",
+    "saving-website": "Đang phân tích và lưu trang web ẩm thực hiện tại...",
+    "website-saved": "Đã lưu trang web: {name}"
   },
   "errors": {
     "invalid-mealie-url": "Địa chỉ Mealie không hợp lệ.",

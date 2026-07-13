@@ -1117,7 +1117,17 @@
     "ai-organize-failed": "AI-skipulagning innkaupalista mistókst",
     "ai-organize-empty": "Ekki hægt að skipuleggja tóman innkaupalista með AI",
     "link-recipe": "Tengja uppskrift",
-    "search-recipe": "Leita að uppskrift"
+    "search-recipe": "Leita að uppskrift",
+    "sort-lists": "Raða listum",
+    "sort-by": "Raða eftir",
+    "item-count": "Fjöldi atriða",
+    "merged-list-placement": "Staðsetning sameinaðra lista",
+    "merged-sort-normal": "Nota venjulega röðun",
+    "merged-sort-first": "Sameinaðir listar fyrst",
+    "merged-sort-last": "Sameinaðir listar síðast",
+    "sort-priority": "Forgangsröðun",
+    "primary-priority": "Fyrsta stig",
+    "secondary-priority": "Annað stig"
   },
   "sidebar": {
     "all-recipes": "Allar uppskriftir",
@@ -1835,5 +1845,20 @@
     "no-ai-results": "AI fann engar samsvarandi greinar.",
     "no-articles": "Engar greinar ennþá.",
     "delete-confirm": "Ertu viss um að þú viljir eyða þessari grein?"
+  },
+  "shopping-website": {
+    "websites": "Vefsíður",
+    "website-name": "Nafn vefsíðu",
+    "website-address": "Slóð vefsíðu",
+    "saved-page-food": "Matur á vistuðu síðunni",
+    "other-offered-foods": "Annar matur í boði á vefsíðunni",
+    "save-website": "Vista vefsíðu",
+    "edit-website": "Breyta vefsíðu",
+    "manual": "Handvirkt",
+    "analyze-with-ai": "Greina með AI",
+    "ai-url-help": "Mealie mun lesa þessa slóð og nota AI til að bera kennsl á síðuna, matinn á þessari síðu og annan mat sem hún býður upp á.",
+    "delete-confirm": "Eyða þessari vistuðu vefsíðu?",
+    "no-websites": "Engar vefsíður fyrir matvöruinnkaup hafa verið vistaðar ennþá.",
+    "websites-description": "Haltu utan um matvöruverslanir, veitingastaði, framleiðendur og gagnlegar vörusíður á einum stað."
   }
 }
