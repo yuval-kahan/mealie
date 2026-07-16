@@ -179,7 +179,6 @@ import { useNewRecipeOptions } from "~/composables/use-new-recipe-options";
 import { useRecipeCreatePreferences } from "~/composables/use-users/preferences";
 import { alert } from "~/composables/use-toast";
 import { validators } from "~/composables/use-validators";
-import type { Recipe } from "~/lib/api/types/recipe";
 import type { VForm } from "~/types/auto-forms";
 
 type CreateMode = "text" | "url" | "image";
@@ -334,13 +333,22 @@ const uploadedImagesRule = (value: File[] | File | null) => {
 };
 
 function createTextErrorMessage(error: unknown) {
-  const typedError = error as { response?: { data?: { detail?: { exception?: string; message?: string } } } };
-  const detail = typedError.response?.data?.detail;
+  const typedError = error as {
+    message?: string;
+    response?: {
+      data?: {
+        detail?: { exception?: string; message?: string } | string;
+        message?: string;
+      };
+    };
+  };
+  const responseData = typedError.response?.data;
+  const detail = typeof responseData?.detail === "string" ? { message: responseData.detail } : responseData?.detail;
   if (detail?.exception === "NotARecipe") {
     return i18n.t("recipe.recipe-text-not-recognized");
   }
 
-  return detail?.message || i18n.t("events.something-went-wrong");
+  return detail?.message || responseData?.message || typedError.message || i18n.t("events.something-went-wrong");
 }
 
 function createLinkErrorMessage(error: unknown) {
@@ -383,8 +391,8 @@ async function createRecipe() {
 
     await createRecipeFromText();
   }
-  catch {
-    alert.error(i18n.t("events.something-went-wrong"));
+  catch (error) {
+    alert.error(createTextErrorMessage(error));
     state.loading = false;
     createStatus.value = null;
   }
@@ -401,7 +409,7 @@ async function createRecipeFromText() {
     text,
     translateLanguage: shouldTranslate.value ? i18n.locale.value : null,
     includeAiTips: includeAiTips.value,
-    autoImage: !recipeImageFile.value,
+    autoImage: true,
     includeItemImages: includeItemImages.value,
   });
 
@@ -412,7 +420,6 @@ async function createRecipeFromText() {
   }
 
   await attachMediaToRecipe(data);
-  await ensureRecipeItemImages(data);
   await createShoppingListForRecipe(data);
   await refreshRecipeOrganizers();
 
@@ -436,13 +443,12 @@ async function createRecipeFromImages() {
   );
 
   if (error || !data) {
-    alert.error(i18n.t("events.something-went-wrong"));
+    alert.error(createTextErrorMessage(error));
     state.loading = false;
     return;
   }
 
   await attachMediaToRecipe(data);
-  await ensureRecipeItemImages(data);
   await createShoppingListForRecipe(data);
   await refreshRecipeOrganizers();
   emit("created", data);
@@ -464,6 +470,7 @@ async function createRecipeFromUrl() {
       createStatus.value = message;
     },
     true,
+    shouldTranslate.value ? i18n.locale.value : null,
   );
   createStatus.value = null;
 
@@ -605,7 +612,7 @@ async function refreshRecipeOrganizers() {
 }
 
 async function attachMediaToRecipe(recipeSlug: string) {
-  if (recipeImageFile.value) {
+  if (recipeImageFile.value && await recipeNeedsFallbackCover(recipeSlug)) {
     try {
       const { error } = await api.recipes.updateImage(recipeSlug, recipeImageFile.value);
 
@@ -621,6 +628,26 @@ async function attachMediaToRecipe(recipeSlug: string) {
 
   await attachAdditionalImagesToRecipe(recipeSlug);
   await attachVideoToRecipe(recipeSlug, videoFile.value);
+}
+
+async function recipeNeedsFallbackCover(recipeSlug: string) {
+  try {
+    const { data, error } = await api.recipes.getOne(recipeSlug);
+    if (error || !data) {
+      console.warn("Unable to verify the AI recipe image; keeping it unchanged");
+      return false;
+    }
+
+    if (typeof data.image === "string") {
+      return !data.image.trim();
+    }
+
+    return !data.image;
+  }
+  catch (error) {
+    console.warn("Unable to verify the AI recipe image; keeping it unchanged", error);
+    return false;
+  }
 }
 
 async function ensureRecipeItemImages(recipeSlug: string) {
@@ -676,44 +703,20 @@ async function createShoppingListForRecipe(recipeSlug: string) {
   createStatus.value = i18n.t("recipe.creating-ai-shopping-list");
 
   try {
-    const { data: recipe } = await api.recipes.getOne(recipeSlug);
-    if (!recipe?.id) {
-      alert.error(i18n.t("recipe.ai-shopping-list-create-failed"));
-      return;
-    }
-
-    const shoppingList = await createUniqueShoppingList(recipe);
-    if (!shoppingList?.id) {
-      alert.error(i18n.t("recipe.ai-shopping-list-create-failed"));
-      return;
-    }
-
-    const { error: addError } = await api.shopping.lists.addRecipes(shoppingList.id, [
-      {
-        recipeId: recipe.id,
-        recipeIncrementQuantity: 1,
-        recipeIngredients: recipe.recipeIngredient || null,
-      },
-    ]);
-
-    if (addError) {
-      alert.error(i18n.t("recipe.ai-shopping-list-create-failed"));
-      return;
-    }
-
     createStatus.value = i18n.t("recipe.organizing-ai-shopping-list");
-    const { error: organizeError } = await api.shopping.lists.organizeWithAi(shoppingList.id, includeAiTips.value);
-    if (organizeError) {
-      alert.error(i18n.t("recipe.ai-shopping-list-organize-failed"));
+    const { data, error } = await api.recipes.createAIShoppingList(recipeSlug, {
+      includeAiTips: includeAiTips.value,
+      organizeShoppingListWithAi: true,
+      includeItemImages: includeItemImages.value,
+      translateLanguage: shouldTranslate.value ? i18n.locale.value : null,
+    });
+    if (error || !data?.shoppingListId) {
+      alert.error(i18n.t("recipe.ai-shopping-list-create-failed"));
       return;
     }
-
-    if (includeItemImages.value) {
-      createStatus.value = i18n.t("recipe.finding-item-images");
-      const { error: imageError } = await api.shopping.lists.ensureItemImages(shoppingList.id);
-      if (imageError) {
-        console.error("Failed to ensure shopping list item images", imageError);
-      }
+    if (data.shoppingListError) {
+      alert.error(data.shoppingListError);
+      return;
     }
 
     if (import.meta.client) {
@@ -725,34 +728,5 @@ async function createShoppingListForRecipe(recipeSlug: string) {
     console.error("Failed to create AI shopping list", e);
     alert.error(i18n.t("recipe.ai-shopping-list-create-failed"));
   }
-}
-
-async function createUniqueShoppingList(recipe: Recipe) {
-  const baseName = (recipe.name || recipe.slug || i18n.t("shopping-list.shopping-list")).trim();
-  const { data: shoppingLists } = await api.shopping.lists.getAll(1, -1, { orderBy: "name", orderDirection: "asc" });
-  const existingNames = new Set(
-    (shoppingLists?.items || []).map(list => (list.name || "").trim().toLocaleLowerCase()).filter(Boolean),
-  );
-
-  let name = baseName;
-  let suffix = 2;
-  while (existingNames.has(name.toLocaleLowerCase())) {
-    name = `${baseName} (${suffix})`;
-    suffix += 1;
-  }
-
-  const { data, error } = await api.shopping.lists.createOne({
-    name,
-    extras: {
-      aiCreatedFromRecipeSlug: recipe.slug || null,
-      aiCreatedFromRecipeId: recipe.id || null,
-    },
-  });
-
-  if (error || !data) {
-    return null;
-  }
-
-  return data;
 }
 </script>

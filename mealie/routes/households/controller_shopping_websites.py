@@ -7,19 +7,28 @@ import sqlalchemy as sa
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import UUID4
 
-from mealie.db.models.household.shopping_website import ShoppingWebsite
+from mealie.db.models.household.shopping_list import ShoppingList
+from mealie.db.models.household.shopping_website import (
+    RecipeShoppingWebsite,
+    ShoppingListShoppingWebsite,
+    ShoppingWebsite,
+)
+from mealie.db.models.recipe.recipe import RecipeModel
 from mealie.routes._base import controller
 from mealie.routes._base.base_controllers import BaseUserController
 from mealie.schema.household.shopping_website import (
     ShoppingWebsiteAIRequest,
     ShoppingWebsiteBrowserPageRequest,
     ShoppingWebsiteCreate,
+    ShoppingWebsiteDeletePreview,
+    ShoppingWebsiteEntityLinksUpdate,
     ShoppingWebsiteOut,
     ShoppingWebsiteUpdate,
 )
 from mealie.schema.openai.shopping_website import OpenAIShoppingWebsite
 from mealie.schema.response.responses import ErrorResponse
 from mealie.services.openai import OpenAIService
+from mealie.services.recipe.recipe_service import RecipeService
 
 router = APIRouter(prefix="/households/shopping-websites", tags=["Households: Shopping Websites"])
 
@@ -94,6 +103,8 @@ class ShoppingWebsitesController(BaseUserController):
             offered_foods=json.loads(website.offered_foods_json or "[]"),
             created_at=website.created_at,
             updated_at=website.updated_at,
+            recipe_ids=[link.recipe_id for link in website.recipe_links],
+            shopping_list_ids=[link.shopping_list_id for link in website.shopping_list_links],
         )
 
     def _get_or_404(self, website_id: UUID4) -> ShoppingWebsite:
@@ -106,6 +117,48 @@ class ShoppingWebsitesController(BaseUserController):
         if website is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND)
         return website
+
+    def _validated_website_ids(self, website_ids: list[UUID4]) -> list[UUID4]:
+        unique_ids = list(dict.fromkeys(website_ids))
+        if not unique_ids:
+            return []
+        found_ids = list(
+            self.session.execute(
+                sa.select(ShoppingWebsite.id).where(
+                    ShoppingWebsite.group_id == self.group_id,
+                    ShoppingWebsite.id.in_(unique_ids),
+                )
+            ).scalars()
+        )
+        if len(found_ids) != len(unique_ids):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="One or more shopping websites were not found")
+        return found_ids
+
+    def _linked_entities(self, website_id: UUID4) -> ShoppingWebsiteDeletePreview:
+        recipe_rows = self.session.execute(
+            sa.select(RecipeModel.id, RecipeModel.name)
+            .join(RecipeShoppingWebsite, RecipeShoppingWebsite.recipe_id == RecipeModel.id)
+            .where(
+                RecipeShoppingWebsite.shopping_website_id == website_id,
+                RecipeModel.group_id == self.group_id,
+            )
+            .order_by(RecipeModel.name)
+        ).all()
+        shopping_list_rows = self.session.execute(
+            sa.select(ShoppingList.id, ShoppingList.name)
+            .join(ShoppingListShoppingWebsite, ShoppingListShoppingWebsite.shopping_list_id == ShoppingList.id)
+            .where(
+                ShoppingListShoppingWebsite.shopping_website_id == website_id,
+                ShoppingList.group_id == self.group_id,
+            )
+            .order_by(ShoppingList.name)
+        ).all()
+        return ShoppingWebsiteDeletePreview(
+            recipe_ids=[row.id for row in recipe_rows],
+            recipe_names=[row.name for row in recipe_rows],
+            shopping_list_ids=[row.id for row in shopping_list_rows],
+            shopping_list_names=[row.name or "" for row in shopping_list_rows],
+        )
 
     def _apply(self, website: ShoppingWebsite, data: ShoppingWebsiteCreate | ShoppingWebsiteUpdate) -> None:
         website.name = data.name.strip()
@@ -221,6 +274,65 @@ class ShoppingWebsitesController(BaseUserController):
     async def create_from_browser_page(self, data: ShoppingWebsiteBrowserPageRequest) -> ShoppingWebsiteOut:
         return self._create_or_update(await self._analyze(data.url, data.page_text, data.page_title))
 
+    @router.put("/links/recipe/{recipe_id}", response_model=list[ShoppingWebsiteOut])
+    def update_recipe_links(
+        self,
+        recipe_id: UUID4,
+        data: ShoppingWebsiteEntityLinksUpdate,
+    ) -> list[ShoppingWebsiteOut]:
+        recipe_exists = self.session.execute(
+            sa.select(RecipeModel.id).where(RecipeModel.id == recipe_id, RecipeModel.group_id == self.group_id)
+        ).scalar_one_or_none()
+        if recipe_exists is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Recipe not found")
+        website_ids = self._validated_website_ids(data.website_ids)
+        self.session.execute(sa.delete(RecipeShoppingWebsite).where(RecipeShoppingWebsite.recipe_id == recipe_id))
+        self.session.add_all(
+            [RecipeShoppingWebsite(recipe_id=recipe_id, shopping_website_id=website_id) for website_id in website_ids]
+        )
+        self.session.commit()
+        websites = self.session.execute(
+            sa.select(ShoppingWebsite).where(ShoppingWebsite.id.in_(website_ids)).order_by(ShoppingWebsite.name)
+        ).scalars().all()
+        return [self._to_out(website) for website in websites]
+
+    @router.put("/links/shopping-list/{shopping_list_id}", response_model=list[ShoppingWebsiteOut])
+    def update_shopping_list_links(
+        self,
+        shopping_list_id: UUID4,
+        data: ShoppingWebsiteEntityLinksUpdate,
+    ) -> list[ShoppingWebsiteOut]:
+        shopping_list_exists = self.session.execute(
+            sa.select(ShoppingList.id).where(
+                ShoppingList.id == shopping_list_id,
+                ShoppingList.group_id == self.group_id,
+            )
+        ).scalar_one_or_none()
+        if shopping_list_exists is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Shopping list not found")
+        website_ids = self._validated_website_ids(data.website_ids)
+        self.session.execute(
+            sa.delete(ShoppingListShoppingWebsite).where(
+                ShoppingListShoppingWebsite.shopping_list_id == shopping_list_id
+            )
+        )
+        self.session.add_all(
+            [
+                ShoppingListShoppingWebsite(shopping_list_id=shopping_list_id, shopping_website_id=website_id)
+                for website_id in website_ids
+            ]
+        )
+        self.session.commit()
+        websites = self.session.execute(
+            sa.select(ShoppingWebsite).where(ShoppingWebsite.id.in_(website_ids)).order_by(ShoppingWebsite.name)
+        ).scalars().all()
+        return [self._to_out(website) for website in websites]
+
+    @router.get("/{website_id}/delete-preview", response_model=ShoppingWebsiteDeletePreview)
+    def delete_preview(self, website_id: UUID4) -> ShoppingWebsiteDeletePreview:
+        self._get_or_404(website_id)
+        return self._linked_entities(website_id)
+
     @router.get("/{website_id}", response_model=ShoppingWebsiteOut)
     def get_one(self, website_id: UUID4) -> ShoppingWebsiteOut:
         return self._to_out(self._get_or_404(website_id))
@@ -235,6 +347,25 @@ class ShoppingWebsitesController(BaseUserController):
         return self._to_out(website)
 
     @router.delete("/{website_id}", status_code=status.HTTP_204_NO_CONTENT)
-    def delete(self, website_id: UUID4) -> None:
-        self.session.delete(self._get_or_404(website_id))
+    def delete(
+        self,
+        website_id: UUID4,
+        delete_recipes: bool = Query(False),
+        delete_shopping_lists: bool = Query(False),
+    ) -> None:
+        website = self._get_or_404(website_id)
+        linked = self._linked_entities(website_id)
+        if delete_recipes and linked.recipe_ids:
+            recipe_slugs = list(
+                self.session.execute(
+                    sa.select(RecipeModel.slug).where(
+                        RecipeModel.id.in_(linked.recipe_ids),
+                        RecipeModel.group_id == self.group_id,
+                    )
+                ).scalars()
+            )
+            RecipeService(self.repos, self.user, self.household, translator=self.translator).delete_many(recipe_slugs)
+        if delete_shopping_lists and linked.shopping_list_ids:
+            self.repos.group_shopping_lists.delete_many(linked.shopping_list_ids)
+        self.session.delete(website)
         self.session.commit()

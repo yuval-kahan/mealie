@@ -3,6 +3,11 @@
     v-if="shoppingList"
     class="md-container"
   >
+    <ShoppingWebsiteLinksDialog
+      v-model="shoppingWebsiteLinksDialog"
+      entity-type="shopping-list"
+      :entity-id="id"
+    />
     <BaseDialog
       v-model="state.checkAllDialog"
       :title="$t('general.confirm')"
@@ -139,6 +144,14 @@
               @click="setShoppingListGroceriesReady(false)"
             >
               {{ $t("shopping-list.reset-groceries-ready") }}
+            </v-btn>
+            <v-btn
+              color="primary"
+              variant="tonal"
+              :prepend-icon="$globals.icons.web"
+              @click="shoppingWebsiteLinksDialog = true"
+            >
+              {{ $t("shopping-website.link-websites") }}
             </v-btn>
             <v-btn
               color="primary"
@@ -281,9 +294,9 @@
           >
             <div
               class="shopping-list-section-title body-1 font-weight-bold"
-              :style="{ backgroundColor: getLabelColor(key) }"
             >
-              {{ key }}
+              <span>{{ key }}</span>
+              <span class="shopping-list-section-count">{{ value.length }}</span>
             </div>
             <VueDraggable
               :model-value="value"
@@ -440,6 +453,7 @@ const { store: allLabels } = useLabelStore();
 const { store: allUnits } = useUnitStore();
 const { store: allFoods } = useFoodStore();
 const preferences = useShoppingListPreferences();
+const shoppingWebsiteLinksDialog = ref(false);
 
 function itemCheckedToast(item: ShoppingListItemOut) {
   setTimeout(() => {
@@ -486,7 +500,6 @@ const {
   createListItemData,
   createListItem,
   itemsByLabel,
-  getLabelColor,
   loadingCounter,
   updateIndexUncheckedByLabel,
   recipeMap,
@@ -668,13 +681,19 @@ const mergedSourceLinks = computed(() => {
 
 .shopping-list-section-title {
   align-items: center;
+  background: rgba(var(--v-theme-primary), 0.09);
   display: flex;
   font-size: 1rem;
-  justify-content: flex-start;
-  justify-content: start;
+  justify-content: space-between;
   min-height: 44px;
   padding: 0 16px;
   text-align: start;
+}
+
+.shopping-list-section-count {
+  color: rgba(var(--v-theme-on-surface), 0.72);
+  font-size: 0.8rem;
+  font-weight: 500;
 }
 
 .shopping-list-section-item {

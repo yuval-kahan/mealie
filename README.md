@@ -18,7 +18,7 @@
 - Use expanded shopping-list workflows including AI organization, inline editing, search, multi-level sorting, bulk deletion, and merging any number of lists while preserving their sources.
 - Save and search food-shopping websites manually or let AI identify the current product and the other foods a site offers, directly from Mealie or the browser extension.
 - Search, collapse, reorder, and independently scroll every quick-navigation section, including shopping lists, cookbooks, translated books, categories, and tags.
-- Use the Hebrew/RTL interface or any of Mealie's 42 bundled locales. Fork-specific UI and the browser extension are localized with parity checks.
+- Use the Hebrew/RTL interface or any of Mealie's 42 bundled locales. The latest cookbook extraction/deletion controls are currently localized in Hebrew and English, with English fallback in the other locales; the remaining fork UI and browser extension retain the existing localization checks.
 - Run the customized frontend and backend together with the included Docker Compose configuration.
 
 ### Mealie AI Browser Extension

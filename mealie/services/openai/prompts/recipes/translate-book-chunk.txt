@@ -6,6 +6,9 @@ Rules:
 - Do not summarize, shorten, omit, add recipes, or extract structured recipe data.
 - Preserve headings, ingredient lists, instructions, notes, measurements, temperatures, and timing as faithfully as possible.
 - Preserve every visible number, quantity, temperature, year, page reference, price, and numbered-list marker exactly. Never merge or discard numeric details.
+- For each page, identify a concise literal title only when the page begins a real chapter, section, or recipe. Do not use a sentence from body text as a title.
+- Set entry_type to contents, chapter, section, recipe, or page. Preserve the nearest real chapter in parent_title and mark include_in_contents only for entries that belong in a professional table of contents.
+- When the source contains a table of contents, mark that page as contents and preserve its complete titles, hierarchy, and printed page references in the translated text.
 - Before returning, compare every source page against its translated page and verify that every paragraph, heading, list item, credit, caption, and number is represented. A fluent but shortened translation is invalid.
 - Keep brand names, author names, URLs, and source credits unchanged unless a natural transliteration is clearly expected in the target language.
 - If a page contains no meaningful text, return it with an empty translated text string.

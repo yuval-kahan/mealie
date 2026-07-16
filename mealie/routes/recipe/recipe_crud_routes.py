@@ -32,6 +32,14 @@ from mealie.core import exceptions
 from mealie.core.dependencies import (
     get_temporary_zip_path,
 )
+from mealie.db.models.household.shopping_list import (
+    ShoppingList,
+    ShoppingListItem,
+    ShoppingListItemRecipeReference,
+    ShoppingListRecipeReference,
+)
+from mealie.db.models.household.shopping_website import RecipeShoppingWebsite, ShoppingWebsite
+from mealie.db.models.recipe.api_extras import ShoppingListExtras
 from mealie.pkgs import cache
 from mealie.repos.all_repositories import get_repositories
 from mealie.routes._base import controller
@@ -137,6 +145,13 @@ class RecipeIngredientsAdjustWithAIResponse(MealieModel):
     adjustment_note: str = ""
 
 
+class RecipeDeletePreview(MealieModel):
+    shopping_list_ids: list[UUID4] = Field(default_factory=list)
+    shopping_list_names: list[str] = Field(default_factory=list)
+    website_ids: list[UUID4] = Field(default_factory=list)
+    website_names: list[str] = Field(default_factory=list)
+
+
 class CreateRecipeFromBrowserPage(CreateRecipeFromText):
     source_url: str | None = None
     source_title: str | None = None
@@ -204,11 +219,16 @@ class RecipeController(BaseRecipeController):
             **(recipe.extras or {}),
             "itemImagesEnsured": True,
             "itemImagesEnsuredAt": datetime.now(UTC).isoformat(),
-            "itemImagesResult": {
-                "existing": result.existing,
-                "created": result.created,
-                "failed": result.failed,
-            },
+            # Recipe extras are persisted in a string column.  Keeping the
+            # structured result as JSON avoids leaving the SQLAlchemy session
+            # in a failed transaction after a successful image lookup.
+            "itemImagesResult": orjson.dumps(
+                {
+                    "existing": result.existing,
+                    "created": result.created,
+                    "failed": result.failed,
+                }
+            ).decode(),
         }
         self.service.update_one(recipe.slug, recipe)
 
@@ -219,6 +239,7 @@ class RecipeController(BaseRecipeController):
             return result
         except Exception:
             self.logger.exception("Failed to ensure recipe item images")
+            self.session.rollback()
             return ItemImageEnsureResult(failed=1)
 
     async def _ensure_shopping_list_item_images(self, shopping_list) -> ItemImageEnsureResult:
@@ -226,6 +247,7 @@ class RecipeController(BaseRecipeController):
             return await self._item_image_service().ensure_shopping_list_images(shopping_list)
         except Exception:
             self.logger.exception("Failed to ensure shopping list item images")
+            self.session.rollback()
             return ItemImageEnsureResult(failed=1)
 
     def _raw_ai_provider_status(self) -> tuple[int, str | None, str | None, str | None]:
@@ -279,6 +301,51 @@ class RecipeController(BaseRecipeController):
             {"provider_id": provider_id, "settings_id": settings_id},
         ).scalar()
         return bool(provider_exists)
+
+    def _recipe_delete_preview(self, recipe_id: UUID4) -> RecipeDeletePreview:
+        direct_lists = self.session.execute(
+            sqlalchemy.select(ShoppingList.id, ShoppingList.name)
+            .join(
+                ShoppingListRecipeReference,
+                ShoppingListRecipeReference.shopping_list_id == ShoppingList.id,
+            )
+            .where(
+                ShoppingListRecipeReference.recipe_id == recipe_id,
+                ShoppingList.group_id == self.group_id,
+            )
+        ).all()
+        item_lists = self.session.execute(
+            sqlalchemy.select(ShoppingList.id, ShoppingList.name)
+            .join(ShoppingListItem, ShoppingListItem.shopping_list_id == ShoppingList.id)
+            .join(
+                ShoppingListItemRecipeReference,
+                ShoppingListItemRecipeReference.shopping_list_item_id == ShoppingListItem.id,
+            )
+            .where(
+                ShoppingListItemRecipeReference.recipe_id == recipe_id,
+                ShoppingList.group_id == self.group_id,
+            )
+        ).all()
+        websites = self.session.execute(
+            sqlalchemy.select(ShoppingWebsite.id, ShoppingWebsite.name)
+            .join(
+                RecipeShoppingWebsite,
+                RecipeShoppingWebsite.shopping_website_id == ShoppingWebsite.id,
+            )
+            .where(
+                RecipeShoppingWebsite.recipe_id == recipe_id,
+                ShoppingWebsite.group_id == self.group_id,
+            )
+        ).all()
+
+        shopping_lists = {row.id: row.name or "" for row in [*direct_lists, *item_lists]}
+        shopping_websites = {row.id: row.name or "" for row in websites}
+        return RecipeDeletePreview(
+            shopping_list_ids=list(shopping_lists),
+            shopping_list_names=list(shopping_lists.values()),
+            website_ids=list(shopping_websites),
+            website_names=list(shopping_websites.values()),
+        )
 
     def handle_exceptions(self, ex: Exception) -> None:
         thrownType = type(ex)
@@ -434,6 +501,7 @@ class RecipeController(BaseRecipeController):
                     html,
                     on_progress=on_progress,
                     use_openai=use_openai,
+                    target_language=req.translate_language,
                 )
                 slug = self._finish_recipe_from_web(req, recipe, extras)
                 await queue.put(
@@ -471,6 +539,9 @@ class RecipeController(BaseRecipeController):
         if req.include_categories:
             ctx = ScraperContext(self.repos)
             recipe.recipe_category = extras.use_categories(ctx)  # type: ignore
+
+        if isinstance(req, ScrapeRecipe) and req.use_openai:
+            recipe = self.service.apply_ai_recipe_attribution(recipe)
 
         new_recipe = self.service.create_one(recipe)
 
@@ -609,7 +680,26 @@ class RecipeController(BaseRecipeController):
                 detail=ErrorResponse.respond("OpenAI image services are not enabled"),
             )
 
-        recipe = await self.service.create_from_images(images, translate_language, include_ai_tips, notes)
+        try:
+            recipe = await self.service.create_from_images(images, translate_language, include_ai_tips, notes)
+        except exceptions.NotARecipe as e:
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond(
+                    message=str(e) or "The uploaded image does not look like a complete recipe",
+                    exception="NotARecipe",
+                ),
+            ) from e
+        except Exception as e:
+            self.session.rollback()
+            self.logger.exception("AI image recipe creation failed")
+            raise HTTPException(
+                status_code=502,
+                detail=ErrorResponse.respond(
+                    message="AI recipe creation failed. Check the configured provider and try again.",
+                    exception="AIProviderError",
+                ),
+            ) from e
         if include_item_images:
             await self._ensure_recipe_item_images(recipe)
         self.publish_event(
@@ -653,6 +743,16 @@ class RecipeController(BaseRecipeController):
                 detail=ErrorResponse.respond(
                     message=str(e) or "The pasted text does not look like a recipe",
                     exception="NotARecipe",
+                ),
+            ) from e
+        except Exception as e:
+            self.session.rollback()
+            self.logger.exception("AI text recipe creation failed")
+            raise HTTPException(
+                status_code=502,
+                detail=ErrorResponse.respond(
+                    message="AI recipe creation failed. Check the configured provider and try again.",
+                    exception="AIProviderError",
                 ),
             ) from e
 
@@ -710,6 +810,16 @@ class RecipeController(BaseRecipeController):
                     exception="NotARecipe",
                 ),
             ) from e
+        except Exception as e:
+            self.session.rollback()
+            self.logger.exception("Browser-extension AI recipe creation failed")
+            raise HTTPException(
+                status_code=502,
+                detail=ErrorResponse.respond(
+                    message="AI recipe creation failed. Check the configured provider and try again.",
+                    exception="AIProviderError",
+                ),
+            ) from e
 
         self.publish_event(
             event_type=EventTypes.recipe_created,
@@ -743,34 +853,157 @@ class RecipeController(BaseRecipeController):
 
         return "\n".join(source_parts + ["", recipe_text]).strip()
 
-    def _browser_shopping_list_name(self, recipe: Recipe, shopping_service: ShoppingListService) -> str:
-        base_name = (recipe.name or recipe.slug or "Shopping List").strip()
-        existing_lists = shopping_service.shopping_lists.page_all(PaginationQuery(page=1, per_page=-1))
-        existing_names = {
-            (shopping_list.name or "").strip().casefold()
-            for shopping_list in existing_lists.items
-            if (shopping_list.name or "").strip()
-        }
-
-        name = base_name
-        suffix = 2
-        while name.casefold() in existing_names:
-            name = f"{base_name} ({suffix})"
-            suffix += 1
-
-        return name
-
     def _find_recipe_named_shopping_list(self, recipe: Recipe, shopping_service: ShoppingListService):
-        recipe_name = (recipe.name or "").strip().casefold()
+        direct_list_id = self.session.execute(
+            sqlalchemy.select(ShoppingListRecipeReference.shopping_list_id)
+            .join(ShoppingList, ShoppingList.id == ShoppingListRecipeReference.shopping_list_id)
+            .where(
+                ShoppingListRecipeReference.recipe_id == recipe.id,
+                ShoppingList.group_id == self.group_id,
+            )
+            .limit(1)
+        ).scalar_one_or_none()
+        if direct_list_id:
+            return shopping_service.shopping_lists.get_one(direct_list_id)
+
+        item_list_id = self.session.execute(
+            sqlalchemy.select(ShoppingListItem.shopping_list_id)
+            .join(
+                ShoppingListItemRecipeReference,
+                ShoppingListItemRecipeReference.shopping_list_item_id == ShoppingListItem.id,
+            )
+            .join(ShoppingList, ShoppingList.id == ShoppingListItem.shopping_list_id)
+            .where(
+                ShoppingListItemRecipeReference.recipe_id == recipe.id,
+                ShoppingList.group_id == self.group_id,
+            )
+            .limit(1)
+        ).scalar_one_or_none()
+        if item_list_id:
+            return shopping_service.shopping_lists.get_one(item_list_id)
+
+        extras_list_id = self.session.execute(
+            sqlalchemy.select(ShoppingListExtras.shopping_list_id)
+            .join(ShoppingList, ShoppingList.id == ShoppingListExtras.shopping_list_id)
+            .where(
+                ShoppingList.group_id == self.group_id,
+                sqlalchemy.or_(
+                    sqlalchemy.and_(
+                        ShoppingListExtras.key_name == "aiCreatedFromRecipeId",
+                        ShoppingListExtras.value == str(recipe.id),
+                    ),
+                    sqlalchemy.and_(
+                        ShoppingListExtras.key_name == "aiCreatedFromRecipeSlug",
+                        ShoppingListExtras.value == recipe.slug,
+                    ),
+                ),
+            )
+            .limit(1)
+        ).scalar_one_or_none()
+        if extras_list_id:
+            return shopping_service.shopping_lists.get_one(extras_list_id)
+
+        recipe_name = (recipe.name or "").strip()
         if not recipe_name:
             return None
+        named_list_id = self.session.execute(
+            sqlalchemy.select(ShoppingList.id)
+            .where(
+                ShoppingList.group_id == self.group_id,
+                sqlalchemy.func.lower(sqlalchemy.func.trim(ShoppingList.name)) == recipe_name.casefold(),
+            )
+            .limit(1)
+        ).scalar_one_or_none()
+        return shopping_service.shopping_lists.get_one(named_list_id) if named_list_id else None
 
-        existing_lists = shopping_service.shopping_lists.page_all(PaginationQuery(page=1, per_page=-1))
-        for shopping_list in existing_lists.items:
-            if (shopping_list.name or "").strip().casefold() == recipe_name:
-                return shopping_list
+    def _annotate_recipe_shopping_list_links(self, items: list[dict]) -> None:
+        """Annotate one recipe page with linked-list state using bounded bulk queries."""
 
-        return None
+        recipe_ids = {
+            UUID(str(item["id"]))
+            for item in items
+            if item.get("id")
+        }
+        if not recipe_ids:
+            return
+
+        linked_ids = set(
+            self.session.execute(
+                sqlalchemy.select(ShoppingListRecipeReference.recipe_id)
+                .join(ShoppingList, ShoppingList.id == ShoppingListRecipeReference.shopping_list_id)
+                .where(
+                    ShoppingListRecipeReference.recipe_id.in_(recipe_ids),
+                    ShoppingList.group_id == self.group_id,
+                )
+            ).scalars()
+        )
+        linked_ids.update(
+            self.session.execute(
+                sqlalchemy.select(ShoppingListItemRecipeReference.recipe_id)
+                .join(
+                    ShoppingListItem,
+                    ShoppingListItem.id == ShoppingListItemRecipeReference.shopping_list_item_id,
+                )
+                .join(ShoppingList, ShoppingList.id == ShoppingListItem.shopping_list_id)
+                .where(
+                    ShoppingListItemRecipeReference.recipe_id.in_(recipe_ids),
+                    ShoppingList.group_id == self.group_id,
+                )
+            ).scalars()
+        )
+
+        id_values = {str(recipe_id) for recipe_id in recipe_ids}
+        slug_to_id = {
+            str(item.get("slug") or ""): UUID(str(item["id"]))
+            for item in items
+            if item.get("id") and item.get("slug")
+        }
+        extras_rows = self.session.execute(
+            sqlalchemy.select(ShoppingListExtras.key_name, ShoppingListExtras.value)
+            .join(ShoppingList, ShoppingList.id == ShoppingListExtras.shopping_list_id)
+            .where(
+                ShoppingList.group_id == self.group_id,
+                sqlalchemy.or_(
+                    sqlalchemy.and_(
+                        ShoppingListExtras.key_name == "aiCreatedFromRecipeId",
+                        ShoppingListExtras.value.in_(id_values),
+                    ),
+                    sqlalchemy.and_(
+                        ShoppingListExtras.key_name == "aiCreatedFromRecipeSlug",
+                        ShoppingListExtras.value.in_(set(slug_to_id)),
+                    ),
+                ),
+            )
+        ).all()
+        for key_name, value in extras_rows:
+            if key_name == "aiCreatedFromRecipeId":
+                try:
+                    linked_ids.add(UUID(str(value)))
+                except (TypeError, ValueError):
+                    continue
+            elif value in slug_to_id:
+                linked_ids.add(slug_to_id[value])
+
+        name_to_ids: dict[str, set[UUID]] = defaultdict(set)
+        for item in items:
+            if not item.get("id") or not (item.get("name") or "").strip():
+                continue
+            name_to_ids[item["name"].strip().casefold()].add(UUID(str(item["id"])))
+        if name_to_ids:
+            matching_names = self.session.execute(
+                sqlalchemy.select(ShoppingList.name).where(
+                    ShoppingList.group_id == self.group_id,
+                    sqlalchemy.func.lower(sqlalchemy.func.trim(ShoppingList.name)).in_(set(name_to_ids)),
+                )
+            ).scalars()
+            for name in matching_names:
+                linked_ids.update(name_to_ids.get((name or "").strip().casefold(), set()))
+
+        linked_id_values = {str(recipe_id) for recipe_id in linked_ids}
+        for item in items:
+            extras = dict(item.get("extras") or {})
+            extras["shoppingListLinked"] = str(item.get("id")) in linked_id_values
+            item["extras"] = extras
 
     async def _create_browser_recipe_shopping_list(
         self,
@@ -806,7 +1039,7 @@ class RecipeController(BaseRecipeController):
         try:
             shopping_list = shopping_service.create_one_list(
                 ShoppingListCreate(
-                    name=self._browser_shopping_list_name(recipe, shopping_service),
+                    name=shopping_service.available_unique_list_name(recipe.name or recipe.slug or "Shopping List"),
                     extras={
                         **(extras or {}),
                         "aiCreatedFromRecipeSlug": recipe.slug,
@@ -846,7 +1079,9 @@ class RecipeController(BaseRecipeController):
                     response.shopping_list_organized = True
                 except Exception as e:
                     self.logger.exception("Failed to organize browser-extension shopping list with AI")
+                    self.session.rollback()
                     response.shopping_list_error = str(e) or "AI shopping list organization failed"
+                    shopping_list = shopping_service.shopping_lists.get_one(shopping_list.id) or shopping_list
 
             if include_item_images:
                 await self._ensure_shopping_list_item_images(shopping_list)
@@ -1223,7 +1458,9 @@ class RecipeController(BaseRecipeController):
             {k: v for k, v in query_params.items() if v is not None},
         )
 
-        json_compatible_response = orjson.dumps(pagination_response.model_dump(by_alias=True))
+        response_payload = pagination_response.model_dump(by_alias=True)
+        self._annotate_recipe_shopping_list_links(response_payload.get("items", []))
+        json_compatible_response = orjson.dumps(response_payload)
 
         # Response is returned directly, to avoid validation and improve performance
         return JSONBytes(content=json_compatible_response)
@@ -1423,10 +1660,46 @@ class RecipeController(BaseRecipeController):
 
         return recipe
 
+    @router.get("/{slug}/delete-preview", response_model=RecipeDeletePreview)
+    def delete_preview(self, slug: str) -> RecipeDeletePreview:
+        recipe = self.service.get_one(slug)
+        return self._recipe_delete_preview(recipe.id)
+
     @router.delete("/{slug}")
-    def delete_one(self, slug: str):
+    def delete_one(
+        self,
+        slug: str,
+        delete_shopping_list_ids: list[UUID4] | None = Query(None),
+        delete_website_ids: list[UUID4] | None = Query(None),
+    ):
         """Deletes a recipe by slug"""
         try:
+            recipe_to_delete = self.service.get_one(slug)
+            preview = self._recipe_delete_preview(recipe_to_delete.id)
+            allowed_list_ids = set(preview.shopping_list_ids)
+            selected_list_ids = [
+                list_id for list_id in dict.fromkeys(delete_shopping_list_ids or []) if list_id in allowed_list_ids
+            ]
+            allowed_website_ids = set(preview.website_ids)
+            selected_website_ids = [
+                website_id
+                for website_id in dict.fromkeys(delete_website_ids or [])
+                if website_id in allowed_website_ids
+            ]
+
+            if selected_list_ids:
+                self.repos.group_shopping_lists.delete_many(selected_list_ids)
+            if selected_website_ids:
+                websites = self.session.execute(
+                    sqlalchemy.select(ShoppingWebsite).where(
+                        ShoppingWebsite.id.in_(selected_website_ids),
+                        ShoppingWebsite.group_id == self.group_id,
+                    )
+                ).scalars()
+                for website in websites:
+                    self.session.delete(website)
+                self.session.commit()
+
             recipe = self.service.delete_one(slug)
         except Exception as e:
             self.handle_exceptions(e)

@@ -79,6 +79,7 @@ class UploadedBookExtractRequest(MealieModel):
     include_ai_tips: bool = True
     create_shopping_lists: bool = True
     organize_shopping_lists_with_ai: bool = True
+    allow_duplicate_recipes: bool = False
 
 
 class UploadedBookTranslateRequest(MealieModel):
@@ -86,6 +87,13 @@ class UploadedBookTranslateRequest(MealieModel):
     target_language: str = Field("Hebrew", min_length=2, max_length=80)
     page_start: int | None = Field(None, ge=1)
     page_end: int | None = Field(None, ge=1)
+    include_linked_recipes: bool = True
+    extract_recipes: bool = False
+    auto_recipe_images: bool = True
+    include_item_images: bool = True
+    include_ai_tips: bool = True
+    create_shopping_lists: bool = True
+    organize_shopping_lists_with_ai: bool = True
 
 
 class UploadedBookRecipeSummary(MealieModel):
@@ -116,6 +124,13 @@ class UploadedBookRecipeDeleteResponse(MealieModel):
     skipped_count: int = 0
     deleted_recipe_ids: list[UUID4] = Field(default_factory=list)
     deleted_shopping_list_ids: list[UUID4] = Field(default_factory=list)
+
+
+class UploadedBookDeletePreview(MealieModel):
+    recipe_ids: list[UUID4] = Field(default_factory=list)
+    recipe_names: list[str] = Field(default_factory=list)
+    shopping_list_ids: list[UUID4] = Field(default_factory=list)
+    shopping_list_names: list[str] = Field(default_factory=list)
 
 
 class AICookbookGenerateRequest(MealieModel):

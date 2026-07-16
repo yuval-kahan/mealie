@@ -148,12 +148,14 @@ class ABCScraperStrategy(ABC):
         translator: Translator,
         repos: AllRepositories,
         raw_html: str | None = None,
+        target_language: str | None = None,
     ) -> None:
         self.logger = get_logger()
         self.url = url
         self.raw_html = raw_html
         self.translator = translator
         self.repos = repos
+        self.target_language = (target_language or "").strip() or None
 
     @abstractmethod
     def can_scrape(self) -> bool: ...
@@ -218,6 +220,13 @@ class RecipeScraperPackage(ABCScraperStrategy):
 
             return value
 
+        def clean_named_source(value: Any) -> str:
+            if isinstance(value, list):
+                value = value[0] if value else ""
+            if isinstance(value, dict):
+                value = value.get("name") or value.get("url") or value.get("@id") or ""
+            return cleaner.clean_string(value)
+
         def get_instructions() -> list[RecipeStep]:
             instruction_as_text = try_get_default(
                 scraped_data.instructions,
@@ -262,8 +271,8 @@ class RecipeScraperPackage(ABCScraperStrategy):
             None, "performTime", None, cleaner.clean_time, translator=self.translator
         ) or try_get_default(scraped_data.cook_time, "cookTime", None, cleaner.clean_time, translator=self.translator)
         author = try_get_default(getattr(scraped_data, "author", None), "author", None, cleaner.clean_string)
-        source = try_get_default(None, "source", None, cleaner.clean_string) or try_get_default(
-            None, "publisher", None, cleaner.clean_string
+        source = try_get_default(None, "source", None, clean_named_source) or try_get_default(
+            None, "publisher", None, clean_named_source
         )
 
         extras = ScrapedExtras()
@@ -410,6 +419,13 @@ class RecipeScraperOpenAI(RecipeScraperPackage):
             image = None
 
         components = [f"Convert this content to JSON: {text}"]
+        if self.target_language:
+            components.append(
+                "Target output language: "
+                f"{self.target_language}. Translate every user-facing recipe field into this language, "
+                "including the title, description, yield, ingredients, instructions, notes, categories, tags, "
+                "tools, source, and creator. Preserve URLs and proper names that should not be translated."
+            )
         if image:
             components.append(f"Recipe Image: {image}")
         return "\n".join(components)

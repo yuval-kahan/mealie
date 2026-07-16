@@ -94,7 +94,7 @@
 </template>
 
 <script setup lang="ts">
-import { useUserApi } from "~/composables/api";
+import { useUserApi } from "~/composables/api/api-client";
 import { alert } from "~/composables/use-toast";
 import { useNewRecipeOptions } from "~/composables/use-new-recipe-options";
 import type { VForm } from "~/types/auto-forms";
@@ -119,6 +119,16 @@ const { navigateToRecipe } = useNewRecipeOptions({
   enableParseRecipe: false,
 });
 const { attachVideoToRecipe } = useRecipeVideoAsset();
+
+function createImageErrorMessage(error: unknown) {
+  const typedError = error as {
+    message?: string;
+    response?: { data?: { detail?: { message?: string } | string; message?: string } };
+  };
+  const responseData = typedError.response?.data;
+  const detail = typeof responseData?.detail === "string" ? { message: responseData.detail } : responseData?.detail;
+  return detail?.message || responseData?.message || typedError.message || i18n.t("events.something-went-wrong");
+}
 
 function uploadImages(files: File[]) {
   uploadedImages.value = [...uploadedImages.value, ...files];
@@ -148,7 +158,7 @@ async function createRecipe() {
   const translateLanguage = shouldTranslate.value ? i18n.locale : undefined;
   const { data, error } = await api.recipes.createOneFromImages(uploadedImages.value, translateLanguage?.value);
   if (error || !data) {
-    alert.error(i18n.t("events.something-went-wrong"));
+    alert.error(createImageErrorMessage(error));
     state.loading = false;
   }
   else {
@@ -158,6 +168,7 @@ async function createRecipe() {
 }
 
 function updateUploadedImage(index: number, croppedImage: Blob) {
+  URL.revokeObjectURL(uploadedImagesPreviewUrls.value[index]);
   uploadedImages.value[index] = croppedImage;
   uploadedImagesPreviewUrls.value[index] = URL.createObjectURL(croppedImage);
 }
@@ -178,8 +189,8 @@ function swapImages(i: number, j: number) {
   swapItem(uploadedImagesPreviewUrls.value, i, j);
 }
 
-// Put the intended cover image at the start of the array
-// The backend currently sets the first image as the cover image
+// Put the preferred uploaded fallback first. The backend still tries to find
+// a representative recipe photo before using this source image as the cover.
 function setCoverImage(index: number) {
   if (index < 0 || index >= uploadedImages.value.length || index === 0) {
     return;
@@ -187,4 +198,8 @@ function setCoverImage(index: number) {
 
   swapImages(0, index);
 }
+
+onBeforeUnmount(() => {
+  uploadedImagesPreviewUrls.value.forEach(url => URL.revokeObjectURL(url));
+});
 </script>

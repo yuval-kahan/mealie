@@ -1,10 +1,15 @@
 importScripts("i18n.js");
 
 const BRIDGE_REQUEST = "MEALIE_EXTENSION_IMPORT_RECIPE_URL";
+const POPUP_IMPORT_REQUEST = "MEALIE_EXTENSION_POPUP_IMPORT";
+const POPUP_SAVE_WEBSITE_REQUEST = "MEALIE_EXTENSION_POPUP_SAVE_WEBSITE";
 const MAX_EXTRACTED_TEXT_LENGTH = 180000;
+const MAX_RETURNED_PREVIEW_LENGTH = 30000;
 const AUTH_COOKIE_NAME = "mealie.access_token";
 const SITE_LOCALE_COOKIE_NAME = "i18n_redirected";
 const extensionI18n = globalThis.MealieExtensionI18n;
+let activeBackgroundJobs = 0;
+let backgroundKeepAliveTimer = null;
 
 void updateActionTitle();
 chrome.runtime.onInstalled.addListener(updateActionTitle);
@@ -16,11 +21,16 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type !== BRIDGE_REQUEST) {
+  const handler = message?.type === POPUP_SAVE_WEBSITE_REQUEST
+    ? saveWebsiteFromUrl
+    : message?.type === BRIDGE_REQUEST || message?.type === POPUP_IMPORT_REQUEST
+      ? importRecipeFromUrl
+      : null;
+  if (!handler) {
     return false;
   }
 
-  importRecipeFromUrl(message.payload)
+  runBackgroundJob(() => handler(message.payload))
     .then(sendResponse)
     .catch(async (error) => {
       const translator = await extensionI18n.create(
@@ -34,6 +44,52 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   return true;
 });
+
+async function runBackgroundJob(job) {
+  activeBackgroundJobs += 1;
+  startBackgroundKeepAlive();
+  await updateBackgroundJobBadge();
+  try {
+    return await job();
+  }
+  finally {
+    activeBackgroundJobs = Math.max(0, activeBackgroundJobs - 1);
+    if (!activeBackgroundJobs) {
+      stopBackgroundKeepAlive();
+    }
+    await updateBackgroundJobBadge();
+  }
+}
+
+function startBackgroundKeepAlive() {
+  if (backgroundKeepAliveTimer !== null) {
+    return;
+  }
+
+  backgroundKeepAliveTimer = setInterval(() => {
+    void chrome.runtime.getPlatformInfo().catch(() => {
+      // The next tick can retry while a job is still active.
+    });
+  }, 20000);
+}
+
+function stopBackgroundKeepAlive() {
+  if (backgroundKeepAliveTimer === null) {
+    return;
+  }
+  clearInterval(backgroundKeepAliveTimer);
+  backgroundKeepAliveTimer = null;
+}
+
+async function updateBackgroundJobBadge() {
+  try {
+    await chrome.action.setBadgeBackgroundColor({ color: "#ef8a17" });
+    await chrome.action.setBadgeText({ text: activeBackgroundJobs ? String(activeBackgroundJobs) : "" });
+  }
+  catch {
+    // Badge feedback is optional and must never interrupt an import.
+  }
+}
 
 async function importRecipeFromUrl(payload) {
   const translator = await extensionI18n.create(
@@ -62,10 +118,65 @@ async function importRecipeFromUrl(payload) {
 
   const extraction = await extractPageInBackgroundTab(recipeUrl, translator);
   if (extractMode === "article" || extractMode === "auto") {
-    return await importArticlePage(mealieUrl, authToken, payload, extraction, t);
+    const result = await importArticlePage(mealieUrl, authToken, payload, extraction, t);
+    return withExtractionPreview(result, extraction);
   }
 
-  return await importRecipePage(mealieUrl, authToken, payload, extraction, t);
+  const result = await importRecipePage(mealieUrl, authToken, payload, extraction, t);
+  return withExtractionPreview(result, extraction);
+}
+
+async function saveWebsiteFromUrl(payload) {
+  const translator = await extensionI18n.create(
+    payload?.interfaceLanguage || payload?.translateLanguage,
+  );
+  const t = translator.t;
+  const mealieUrl = normalizeBaseUrl(payload?.mealieUrl);
+  const pageUrl = String(payload?.url || "").trim();
+  if (!mealieUrl || !/^https?:\/\//i.test(mealieUrl)) {
+    throw new Error(t("errors.invalid-mealie-url"));
+  }
+  if (!pageUrl || !/^https?:\/\//i.test(pageUrl)) {
+    throw new Error(t("errors.invalid-recipe-url"));
+  }
+
+  const authToken = payload?.authToken || await findMealieAuthToken(mealieUrl);
+  if (!authToken) {
+    throw new Error(t("status.open-and-login"));
+  }
+
+  const status = await checkMealieStatus(mealieUrl, authToken, t);
+  if (!statusAiEnabled(status)) {
+    throw new Error(aiProviderStatusMessage(status, t));
+  }
+
+  const extraction = await extractPageInBackgroundTab(pageUrl, translator);
+  const response = await fetch(`${mealieUrl}/api/households/shopping-websites/browser-page`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(authToken),
+    },
+    body: JSON.stringify({
+      url: extraction.url,
+      page_title: extraction.title,
+      page_text: extraction.markdown,
+    }),
+  });
+  const body = await safeJson(response);
+  if (!response.ok) {
+    throw new Error(apiErrorMessage(body, response.status, t));
+  }
+
+  return withExtractionPreview({ ok: true, website: body }, extraction);
+}
+
+function withExtractionPreview(result, extraction) {
+  return {
+    ...result,
+    preview: String(extraction?.markdown || "").slice(0, MAX_RETURNED_PREVIEW_LENGTH),
+  };
 }
 
 async function updateActionTitle() {
@@ -184,6 +295,7 @@ async function importArticlePage(mealieUrl, authToken, payload, extraction, t) {
 
   return {
     ok: true,
+    article: body.article,
     articleId: body.article?.id,
     recipeSlug: body.recipeSlug || body.recipe_slug,
     groupSlug: body.groupSlug || body.group_slug,
@@ -272,7 +384,13 @@ function authHeaders(authToken) {
 }
 
 async function extractPageInBackgroundTab(url, translator) {
-  const tab = await chrome.tabs.create({ url, active: false });
+  const openTabs = await chrome.tabs.query({});
+  let tab = openTabs.find(candidate => candidate.id && candidate.url && samePage(candidate.url, url));
+  let createdForExtraction = false;
+  if (!tab) {
+    tab = await chrome.tabs.create({ url, active: false });
+    createdForExtraction = true;
+  }
   if (!tab?.id) {
     throw new Error(translator.t("errors.open-link-failed"));
   }
@@ -295,21 +413,40 @@ async function extractPageInBackgroundTab(url, translator) {
     return result.result;
   }
   finally {
-    withChromeCallback(() => chrome.tabs.remove(tab.id));
+    if (createdForExtraction) {
+      try {
+        await chrome.tabs.remove(tab.id);
+      }
+      catch {
+        // The user may have closed the temporary tab before extraction ended.
+      }
+    }
+  }
+}
+
+function samePage(firstUrl, secondUrl) {
+  try {
+    const first = new URL(firstUrl);
+    const second = new URL(secondUrl);
+    return first.origin === second.origin
+      && first.pathname.replace(/\/$/, "") === second.pathname.replace(/\/$/, "")
+      && first.search === second.search;
+  }
+  catch {
+    return false;
   }
 }
 
 function waitForTabComplete(tabId, t) {
   return new Promise((resolve, reject) => {
+    let settled = false;
     const timeout = setTimeout(() => {
-      cleanup();
-      reject(new Error(t("errors.page-load-timeout")));
+      finish(new Error(t("errors.page-load-timeout")));
     }, 45000);
 
     const listener = (updatedTabId, changeInfo) => {
       if (updatedTabId === tabId && changeInfo.status === "complete") {
-        cleanup();
-        resolve();
+        finish();
       }
     };
 
@@ -318,20 +455,29 @@ function waitForTabComplete(tabId, t) {
       chrome.tabs.onUpdated.removeListener(listener);
     }
 
-    chrome.tabs.onUpdated.addListener(listener);
-  });
-}
-
-function withChromeCallback(action) {
-  try {
-    const result = action();
-    if (result && typeof result.catch === "function") {
-      result.catch(() => {});
+    function finish(error) {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      if (error) {
+        reject(error);
+      }
+      else {
+        resolve();
+      }
     }
-  }
-  catch {
-    // Best effort cleanup only.
-  }
+
+    chrome.tabs.onUpdated.addListener(listener);
+    void chrome.tabs.get(tabId)
+      .then((currentTab) => {
+        if (currentTab.status === "complete") {
+          finish();
+        }
+      })
+      .catch(() => finish(new Error(t("errors.open-link-failed"))));
+  });
 }
 
 async function safeJson(response) {

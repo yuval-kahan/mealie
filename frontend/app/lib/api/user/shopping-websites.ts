@@ -5,6 +5,8 @@ import type {
   ShoppingWebsiteAIRequest,
   ShoppingWebsiteBrowserPageRequest,
   ShoppingWebsiteCreate,
+  ShoppingWebsiteDeletePreview,
+  ShoppingWebsiteEntityLinksUpdate,
   ShoppingWebsiteUpdate,
 } from "~/lib/api/types/shopping-website";
 
@@ -32,7 +34,28 @@ export class ShoppingWebsitesAPI extends BaseAPI {
     return await this.requests.put<ShoppingWebsite, ShoppingWebsiteUpdate>(`${prefix}/${id}`, payload);
   }
 
-  async deleteOne(id: string) {
-    return await this.requests.delete<unknown>(`${prefix}/${id}`);
+  async updateRecipeLinks(recipeId: string, websiteIds: string[]) {
+    return await this.requests.put<ShoppingWebsite[], ShoppingWebsiteEntityLinksUpdate>(
+      `${prefix}/links/recipe/${recipeId}`,
+      { websiteIds },
+    );
+  }
+
+  async updateShoppingListLinks(shoppingListId: string, websiteIds: string[]) {
+    return await this.requests.put<ShoppingWebsite[], ShoppingWebsiteEntityLinksUpdate>(
+      `${prefix}/links/shopping-list/${shoppingListId}`,
+      { websiteIds },
+    );
+  }
+
+  async deletePreview(id: string) {
+    return await this.requests.get<ShoppingWebsiteDeletePreview>(`${prefix}/${id}/delete-preview`);
+  }
+
+  async deleteOne(id: string, options?: { deleteRecipes?: boolean; deleteShoppingLists?: boolean }) {
+    return await this.requests.delete<unknown>(route(`${prefix}/${id}`, {
+      deleteRecipes: options?.deleteRecipes ?? false,
+      deleteShoppingLists: options?.deleteShoppingLists ?? false,
+    }));
   }
 }

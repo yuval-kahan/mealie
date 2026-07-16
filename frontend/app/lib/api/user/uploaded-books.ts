@@ -3,6 +3,7 @@ import type {
   AICookbookGenerateRequest,
   UploadedBook,
   UploadedBookExtractRequest,
+  UploadedBookDeletePreview,
   UploadedBookRecipeDeleteResponse,
   UploadedBookRecipeDeleteRequest,
   UploadedBookRecipeSummary,
@@ -21,6 +22,7 @@ const routes = {
   classify: (id: string) => `${prefix}/households/uploaded-books/${id}/classify`,
   generate: `${prefix}/households/uploaded-books/generate`,
   refreshAi: (id: string) => `${prefix}/households/uploaded-books/${id}/refresh-ai`,
+  aiRecipeMembership: (id: string, slug: string) => `${prefix}/households/uploaded-books/${id}/ai-recipes/${encodeURIComponent(slug)}`,
   uploadedBookFile: (id: string) => `${prefix}/households/uploaded-books/${id}/file`,
   uploadedBookCover: (id: string) => `${prefix}/households/uploaded-books/${id}/cover`,
   openUploadedBook: (id: string) => `${prefix}/households/uploaded-books/${id}/open`,
@@ -74,8 +76,24 @@ export class UploadedBooksAPI extends BaseAPI {
     return await this.requests.post<UploadedBook[]>(routes.refreshAi(id));
   }
 
-  async delete(id: string) {
-    return await this.requests.delete<unknown>(routes.uploadedBook(id));
+  async addRecipeToAiBook(id: string, slug: string) {
+    return await this.requests.put<UploadedBook>(routes.aiRecipeMembership(id, slug), {});
+  }
+
+  async removeRecipeFromAiBook(id: string, slug: string) {
+    return await this.requests.delete<UploadedBook>(routes.aiRecipeMembership(id, slug));
+  }
+
+  async deletePreview(id: string) {
+    return await this.requests.get<UploadedBookDeletePreview>(`${routes.uploadedBook(id)}/delete-preview`);
+  }
+
+  async delete(id: string, options?: { deleteRecipes?: boolean; deleteShoppingLists?: boolean }) {
+    const query = new URLSearchParams({
+      delete_recipes: String(options?.deleteRecipes ?? false),
+      delete_shopping_lists: String(options?.deleteShoppingLists ?? false),
+    });
+    return await this.requests.delete<unknown>(`${routes.uploadedBook(id)}?${query.toString()}`);
   }
 
   async getRecipes(id: string) {

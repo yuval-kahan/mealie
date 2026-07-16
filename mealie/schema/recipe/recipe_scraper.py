@@ -11,6 +11,7 @@ class ScrapeRecipeTest(MealieModel):
 class ScrapeRecipeBase(MealieModel):
     include_tags: bool = False
     include_categories: bool = False
+    translate_language: str | None = Field(None, alias="translateLanguage")
 
 
 class ScrapeRecipe(ScrapeRecipeBase):

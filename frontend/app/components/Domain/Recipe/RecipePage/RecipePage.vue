@@ -33,10 +33,14 @@
             :recipe="recipe"
             :recipe-scale="scale"
             :landscape="landscape"
+            :quick-editing="quickEditing"
             @save="saveRecipe"
             @delete="deleteRecipe"
             @close="closeEditor"
             @renamed="handleRecipeRenamed"
+            @quick-edit="startQuickEdit"
+            @quick-save="saveQuickEdit"
+            @quick-close="closeQuickEdit"
           />
           <RecipeMediaAssets
             v-if="!isEditJSON"
@@ -53,7 +57,13 @@
             :main-menu-bar="false"
           />
           <v-card-text v-else>
-            <!--
+            <RecipeQuickEditForm
+              v-if="quickEditing"
+              v-model="recipe"
+              class="recipe-page-quick-edit"
+            />
+            <template v-else>
+              <!--
               This is where most of the main content is rendered. Some components include state for both Edit and View modes
               which is why some have explicit v-if statements and others use the composition API to determine and manage
               the shared state internally.
@@ -63,73 +73,74 @@
               a significant amount of prop management. When we move to Vue 3 and have access to some of the newer API's the plan to update this
               data management and mutation system we're using.
             -->
-            <div>
-              <RecipePageInfoEditor v-if="isEditMode" v-model="recipe" />
-            </div>
-            <RecipeManualContent
-              v-if="isFreeTextRecipe || (isEditForm && showManualContentControls)"
-              v-model="recipe"
-              :edit="isEditForm"
-              :show-mode-selector="showManualContentControls"
-            />
+              <div>
+                <RecipePageInfoEditor v-if="isEditMode" v-model="recipe" />
+              </div>
+              <RecipeManualContent
+                v-if="isFreeTextRecipe || (isEditForm && showManualContentControls)"
+                v-model="recipe"
+                :edit="isEditForm"
+                :show-mode-selector="showManualContentControls"
+              />
 
-            <template v-if="!isFreeTextRecipe">
-              <div>
-                <RecipePageEditorToolbar v-if="isEditForm" v-model="recipe" />
-              </div>
-              <div>
-                <RecipePageIngredientEditor v-if="isEditForm" v-model="recipe" />
-              </div>
-              <div>
-                <RecipePageScale v-model="scale" :recipe="recipe" />
-              </div>
+              <template v-if="!isFreeTextRecipe">
+                <div>
+                  <RecipePageEditorToolbar v-if="isEditForm" v-model="recipe" />
+                </div>
+                <div>
+                  <RecipePageIngredientEditor v-if="isEditForm" v-model="recipe" />
+                </div>
+                <div>
+                  <RecipePageScale v-model="scale" :recipe="recipe" />
+                </div>
 
-              <!--
+                <!--
                 This section contains the 2 column layout for the recipe steps and other content.
               -->
-              <v-row>
-                <!--
+                <v-row>
+                  <!--
                 The left column is conditionally rendered based on cook mode.
               -->
-                <v-col
-                  v-if="!isCookMode || isEditForm"
-                  cols="12"
-                  sm="12"
-                  md="4"
-                  :class="$vuetify.display.mdAndUp ? 'border-e-thin' : null"
-                >
-                  <RecipePageIngredientToolsView v-if="!isEditForm" v-model:scale="scale" :recipe="recipe" class="pr-2" />
-                  <RecipePageOrganizers v-if="$vuetify.display.mdAndUp" v-model="recipe" class="pr-2" @item-selected="chipClicked" />
-                </v-col>
-                <!--
+                  <v-col
+                    v-if="!isCookMode || isEditForm"
+                    cols="12"
+                    sm="12"
+                    md="4"
+                    :class="$vuetify.display.mdAndUp ? 'border-e-thin' : null"
+                  >
+                    <RecipePageIngredientToolsView v-if="!isEditForm" v-model:scale="scale" :recipe="recipe" class="pr-2" />
+                    <RecipePageOrganizers v-if="$vuetify.display.mdAndUp" v-model="recipe" class="pr-2" @item-selected="chipClicked" />
+                  </v-col>
+                  <!--
                 the right column is always rendered, but it's layout width is determined by where the left column is
                 rendered.
               -->
-                <v-col cols="12" sm="12" :md="8 + (isCookMode ? 1 : 0) * 4">
-                  <RecipePageInstructions
-                    v-model="recipe.recipeInstructions"
-                    v-model:assets="recipe.assets"
-                    :recipe="recipe"
-                    :scale="scale"
-                  />
-                  <div v-if="isEditForm" class="d-flex">
-                    <RecipeDialogBulkAdd class="ml-auto my-2 mr-1" @bulk-data="addStep" />
-                    <BaseButton class="my-2" @click="addStep()">
-                      {{ $t("general.add") }}
-                    </BaseButton>
-                  </div>
-                  <div v-if="!$vuetify.display.mdAndUp">
-                    <RecipePageOrganizers v-model="recipe" />
-                  </div>
-                  <RecipeNotes v-model="recipe.notes" :edit="isEditForm" />
-                </v-col>
-              </v-row>
+                  <v-col cols="12" sm="12" :md="8 + (isCookMode ? 1 : 0) * 4">
+                    <RecipePageInstructions
+                      v-model="recipe.recipeInstructions"
+                      v-model:assets="recipe.assets"
+                      :recipe="recipe"
+                      :scale="scale"
+                    />
+                    <div v-if="isEditForm" class="d-flex">
+                      <RecipeDialogBulkAdd class="ml-auto my-2 mr-1" @bulk-data="addStep" />
+                      <BaseButton class="my-2" @click="addStep()">
+                        {{ $t("general.add") }}
+                      </BaseButton>
+                    </div>
+                    <div v-if="!$vuetify.display.mdAndUp">
+                      <RecipePageOrganizers v-model="recipe" />
+                    </div>
+                    <RecipeNotes v-model="recipe.notes" :edit="isEditForm" />
+                  </v-col>
+                </v-row>
+              </template>
+              <div v-else>
+                <RecipePageOrganizers v-model="recipe" @item-selected="chipClicked" />
+                <RecipeNotes v-model="recipe.notes" :edit="isEditForm" />
+              </div>
+              <RecipePageFooter v-model="recipe" />
             </template>
-            <div v-else>
-              <RecipePageOrganizers v-model="recipe" @item-selected="chipClicked" />
-              <RecipeNotes v-model="recipe.notes" :edit="isEditForm" />
-            </div>
-            <RecipePageFooter v-model="recipe" />
           </v-card-text>
         </div>
       </v-card>
@@ -249,10 +260,11 @@ import {
 import type { NoUndefinedField } from "~/lib/api/types/non-generated";
 import type { Recipe, RecipeCategory, RecipeIngredient, RecipeTag, RecipeTool } from "~/lib/api/types/recipe";
 import { useRouteQuery } from "~/composables/use-router";
-import { useUserApi } from "~/composables/api";
+import { useUserApi } from "~/composables/api/api-client";
 import { uuid4, deepCopy } from "~/composables/use-utils";
 import RecipeDialogBulkAdd from "~/components/Domain/Recipe/RecipeDialogBulkAdd.vue";
 import RecipeNotes from "~/components/Domain/Recipe/RecipeNotes.vue";
+import RecipeQuickEditForm from "~/components/Domain/Recipe/RecipeQuickEditForm.vue";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import { useNavigationWarning } from "~/composables/use-navigation-warning";
 import { alert } from "~/composables/use-toast";
@@ -286,6 +298,8 @@ const notLinkedIngredients = computed(() => {
  * and prompts the user to save if they have unsaved changes.
  */
 const originalRecipe = ref<Recipe | null>(null);
+const quickEditSnapshot = ref<Recipe | null>(null);
+const quickEditing = ref(false);
 const discardDialog = ref(false);
 const pendingRoute = ref<RouteLocationNormalized | null>(null);
 
@@ -313,7 +327,33 @@ function closeEditor() {
     discardDialog.value = true;
   }
   else {
+    quickEditing.value = false;
+    quickEditSnapshot.value = null;
     setMode(PageMode.VIEW);
+  }
+}
+
+function startQuickEdit() {
+  if (quickEditing.value || isEditMode.value) return;
+  quickEditSnapshot.value = deepCopy(recipe.value);
+  quickEditing.value = true;
+}
+
+function closeQuickEdit() {
+  if (quickEditSnapshot.value) {
+    recipe.value = deepCopy(quickEditSnapshot.value) as NoUndefinedField<Recipe>;
+  }
+  quickEditSnapshot.value = null;
+  quickEditing.value = false;
+}
+
+async function saveQuickEdit() {
+  if (!quickEditing.value) return;
+  const saved = await saveRecipe();
+  if (saved) {
+    quickEditSnapshot.value = null;
+    quickEditing.value = false;
+    alert.success(i18n.t("recipe.quick-edit-saved"));
   }
 }
 
@@ -327,6 +367,8 @@ function confirmDiscard() {
     router.push(destination);
   }
   else {
+    quickEditing.value = false;
+    quickEditSnapshot.value = null;
     setMode(PageMode.VIEW);
   }
 }
@@ -337,7 +379,7 @@ function cancelDiscard() {
 }
 
 onBeforeRouteLeave((to) => {
-  if (isEditMode.value && hasUnsavedChanges()) {
+  if ((isEditMode.value || quickEditing.value) && hasUnsavedChanges()) {
     pendingRoute.value = to;
     discardDialog.value = true;
     return false;
@@ -430,25 +472,28 @@ async function saveRecipe() {
   const recipeName = recipe.value.name?.trim() || "";
   if (!recipeName) {
     alert.error(i18n.t("recipe.recipe-name-required"));
-    setMode(PageMode.EDIT);
-    return;
+    if (!quickEditing.value) setMode(PageMode.EDIT);
+    return false;
   }
 
   recipe.value.name = recipeName;
   const { data, error } = await api.recipes.updateOne(recipe.value.slug, recipe.value);
-  if (!error) {
-    if (data?.slug && data.slug !== route.params.slug) {
-      isNavigatingAfterRename.value = true;
-    }
-    setMode(PageMode.VIEW);
+  if (error || !data) {
+    alert.error(i18n.t("events.something-went-wrong"));
+    return false;
   }
-  if (data?.slug) {
+  if (data.slug && data.slug !== route.params.slug) {
+    isNavigatingAfterRename.value = true;
+  }
+  if (!quickEditing.value) setMode(PageMode.VIEW);
+  if (data.slug) {
     recipe.value = data as NoUndefinedField<Recipe>;
     originalRecipe.value = deepCopy(recipe.value);
     if (data.slug !== route.params.slug) {
       router.replace(`/g/${groupSlug.value}/r/` + data.slug);
     }
   }
+  return true;
 }
 
 function handleRecipeRenamed(payload: { slug: string; name: string; recipe?: Recipe }) {
@@ -470,8 +515,12 @@ async function saveParsedIngredients(ingredients: NoUndefinedField<RecipeIngredi
   toggleIsParsing(false);
 }
 
-async function deleteRecipe() {
-  const { data } = await api.recipes.deleteOne(recipe.value.slug);
+async function deleteRecipe(links?: { shoppingListIds?: string[]; websiteIds?: string[] }) {
+  const { data } = await api.recipes.deleteWithLinks(
+    recipe.value.slug,
+    links?.shoppingListIds || [],
+    links?.websiteIds || [],
+  );
   if (data?.slug) {
     window.dispatchEvent(new CustomEvent("mealie:organizers-updated"));
     router.push(`/g/${groupSlug.value}`);
@@ -565,5 +614,9 @@ const scale = ref(1);
   width: 100%;
   max-width: 1320px;
   margin-inline: auto;
+}
+
+.recipe-page-quick-edit {
+  margin-block: 16px 28px;
 }
 </style>

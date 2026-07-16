@@ -337,6 +337,7 @@ class ArticlesController(BaseUserController):
                             await ItemImageService(self.group_id, self.repos).ensure_recipe_images(recipe)
                         except Exception:
                             self.logger.exception("Failed to ensure browser article recipe item images")
+                            self.session.rollback()
                     result.recipe_slug = recipe.slug
                     if data.create_shopping_list:
                         result = await self._create_article_recipe_shopping_list(recipe, data, result)
@@ -422,13 +423,16 @@ class ArticlesController(BaseUserController):
                     response.shopping_list_organized = True
                 except Exception as e:
                     self.logger.exception("Failed to organize browser article shopping list with AI")
+                    self.session.rollback()
                     response.shopping_list_error = str(e) or "AI shopping list organization failed"
+                    shopping_list = shopping_service.shopping_lists.get_one(shopping_list.id) or shopping_list
 
             if data.include_item_images:
                 try:
                     await ItemImageService(self.group_id, self.repos).ensure_shopping_list_images(shopping_list)
                 except Exception:
                     self.logger.exception("Failed to ensure browser article shopping list item images")
+                    self.session.rollback()
         except Exception as e:
             self.logger.exception("Failed to create browser article shopping list")
             response.shopping_list_error = str(e) or "Shopping list creation failed"

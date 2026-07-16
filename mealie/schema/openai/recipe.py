@@ -54,7 +54,11 @@ class OpenAIRecipeNotes(OpenAIBase):
 class OpenAIRecipe(OpenAIBase):
     name: str = Field(
         ...,
-        description="Recipe name or title. Make your best guess if not obvious.",
+        description=(
+            "Recipe name or title. Make your best guess if not obvious. When a credited chef, restaurant, or source "
+            "site is explicitly available, keep the core dish name concise and include that attribution once. "
+            "Never invent an attribution."
+        ),
     )
 
     description: str | None = Field(
@@ -73,8 +77,8 @@ class OpenAIRecipe(OpenAIBase):
     created_by: str | None = Field(
         None,
         description=(
-            "The credited creator, chef, author, book, show, publisher, or organization, if explicitly available. "
-            "Do not invent."
+            "The credited creator, chef, restaurant, author, book, show, publisher, or organization, if explicitly "
+            "available. Do not invent."
         ),
     )
 
@@ -126,6 +130,15 @@ class OpenAIRecipe(OpenAIBase):
     tools: list[str] = Field(
         default_factory=list,
         description="A short list of required kitchen tools or equipment explicitly mentioned in the recipe.",
+    )
+
+    source_image_is_finished_dish: bool = Field(
+        False,
+        description=(
+            "For image-based imports only: true when at least one supplied image clearly shows the finished, "
+            "ready-to-serve dish and is suitable as a recipe cover. False for scans, screenshots, text pages, "
+            "ingredient layouts, packaging, equipment, or preparation-only photos."
+        ),
     )
 
 
@@ -248,6 +261,31 @@ class OpenAIBookRecipeChunkParse(OpenAIBase):
 class OpenAIBookTranslatedPage(OpenAIBase):
     page: int = Field(..., description="Original page number.")
     text: str = Field(..., description="The full translated text for this page.")
+    title: str | None = Field(
+        None,
+        description=(
+            "A concise literal heading for this page when it begins a chapter, section, or recipe. "
+            "Use null for continuation pages, credits, blank pages, and pages without a real heading."
+        ),
+    )
+    entry_type: str = Field(
+        "page",
+        description=(
+            "One of: contents, chapter, section, recipe, page. Use contents for a source table-of-contents page, "
+            "chapter for a major division, recipe for a complete recipe beginning on this page, section for a "
+            "meaningful subsection, and page otherwise."
+        ),
+    )
+    parent_title: str | None = Field(
+        None,
+        description="Nearest chapter title when this page begins a section or recipe; otherwise null.",
+    )
+    include_in_contents: bool = Field(
+        False,
+        description=(
+            "True only for a chapter, meaningful section, or recipe that belongs in a professional contents list."
+        ),
+    )
 
 
 class OpenAIBookTranslationChunkParse(OpenAIBase):

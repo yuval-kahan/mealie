@@ -1,9 +1,17 @@
 from collections.abc import Callable
 from functools import cached_property
 
+import sqlalchemy as sa
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import UUID4
+from pydantic import UUID4, Field
 
+from mealie.db.models.household.shopping_list import (
+    ShoppingListItem,
+    ShoppingListItemRecipeReference,
+    ShoppingListRecipeReference,
+)
+from mealie.db.models.household.shopping_website import ShoppingListShoppingWebsite, ShoppingWebsite
+from mealie.db.models.recipe.recipe import RecipeModel
 from mealie.routes._base.base_controllers import BaseCrudController
 from mealie.routes._base.controller import controller
 from mealie.routes._base.mixins import HttpRepo
@@ -37,18 +45,27 @@ from mealie.services.event_bus_service.event_types import (
 )
 from mealie.services.household_services.shopping_lists import ShoppingListService
 from mealie.services.item_image_service import ItemImageService
+from mealie.services.recipe.recipe_service import RecipeService
 
 item_router = APIRouter(prefix="/households/shopping/items", tags=["Households: Shopping List Items"])
 
 
 class ShoppingListOrganizeAIRequest(MealieModel):
     include_ai_tips: bool = False
+    target_language: str | None = None
 
 
 class ShoppingListItemImagesEnsureResponse(MealieModel):
     existing: int = 0
     created: int = 0
     failed: int = 0
+
+
+class ShoppingListDeletePreview(MealieModel):
+    recipe_ids: list[UUID4] = Field(default_factory=list)
+    recipe_names: list[str] = Field(default_factory=list)
+    website_ids: list[UUID4] = Field(default_factory=list)
+    website_names: list[str] = Field(default_factory=list)
 
 
 def publish_list_item_events(publisher: Callable, items_collection: ShoppingListItemsCollectionOut) -> None:
@@ -179,6 +196,44 @@ class ShoppingListController(BaseCrudController):
     def repo(self):
         return self.repos.group_shopping_lists
 
+    def _delete_preview(self, shopping_list_id: UUID4) -> ShoppingListDeletePreview:
+        direct_recipes = self.session.execute(
+            sa.select(RecipeModel.id, RecipeModel.name)
+            .join(ShoppingListRecipeReference, ShoppingListRecipeReference.recipe_id == RecipeModel.id)
+            .where(
+                ShoppingListRecipeReference.shopping_list_id == shopping_list_id,
+                RecipeModel.group_id == self.group_id,
+            )
+        ).all()
+        item_recipes = self.session.execute(
+            sa.select(RecipeModel.id, RecipeModel.name)
+            .join(ShoppingListItemRecipeReference, ShoppingListItemRecipeReference.recipe_id == RecipeModel.id)
+            .join(ShoppingListItem, ShoppingListItem.id == ShoppingListItemRecipeReference.shopping_list_item_id)
+            .where(
+                ShoppingListItem.shopping_list_id == shopping_list_id,
+                RecipeModel.group_id == self.group_id,
+            )
+        ).all()
+        websites = self.session.execute(
+            sa.select(ShoppingWebsite.id, ShoppingWebsite.name)
+            .join(
+                ShoppingListShoppingWebsite,
+                ShoppingListShoppingWebsite.shopping_website_id == ShoppingWebsite.id,
+            )
+            .where(
+                ShoppingListShoppingWebsite.shopping_list_id == shopping_list_id,
+                ShoppingWebsite.group_id == self.group_id,
+            )
+        ).all()
+        recipes = {row.id: row.name or "" for row in [*direct_recipes, *item_recipes]}
+        linked_websites = {row.id: row.name or "" for row in websites}
+        return ShoppingListDeletePreview(
+            recipe_ids=list(recipes),
+            recipe_names=list(recipes.values()),
+            website_ids=list(linked_websites),
+            website_names=list(linked_websites.values()),
+        )
+
     # =======================================================================
     # CRUD Operations
 
@@ -216,6 +271,9 @@ class ShoppingListController(BaseCrudController):
 
     @router.put("/{item_id}", response_model=ShoppingListOut)
     def update_one(self, item_id: UUID4, data: ShoppingListUpdate):
+        data = data.model_copy(
+            update={"name": self.service.validated_unique_list_name(data.name, exclude_id=item_id)}
+        )
         shopping_list = self.mixins.update_one(data, item_id)
         self.publish_event(
             event_type=EventTypes.shopping_list_updated,
@@ -227,8 +285,49 @@ class ShoppingListController(BaseCrudController):
 
         return shopping_list
 
+    @router.get("/{item_id}/delete-preview", response_model=ShoppingListDeletePreview)
+    def delete_preview(self, item_id: UUID4) -> ShoppingListDeletePreview:
+        self.mixins.get_one(item_id)
+        return self._delete_preview(item_id)
+
     @router.delete("/{item_id}", response_model=ShoppingListOut)
-    def delete_one(self, item_id: UUID4):
+    def delete_one(
+        self,
+        item_id: UUID4,
+        delete_recipe_ids: list[UUID4] | None = Query(None),
+        delete_website_ids: list[UUID4] | None = Query(None),
+    ):
+        preview = self._delete_preview(item_id)
+        allowed_recipe_ids = set(preview.recipe_ids)
+        selected_recipe_ids = [
+            recipe_id for recipe_id in dict.fromkeys(delete_recipe_ids or []) if recipe_id in allowed_recipe_ids
+        ]
+        if selected_recipe_ids:
+            recipe_slugs = list(
+                self.session.execute(
+                    sa.select(RecipeModel.slug).where(
+                        RecipeModel.id.in_(selected_recipe_ids),
+                        RecipeModel.group_id == self.group_id,
+                    )
+                ).scalars()
+            )
+            RecipeService(self.repos, self.user, self.household, translator=self.translator).delete_many(recipe_slugs)
+
+        allowed_website_ids = set(preview.website_ids)
+        selected_website_ids = [
+            website_id for website_id in dict.fromkeys(delete_website_ids or []) if website_id in allowed_website_ids
+        ]
+        if selected_website_ids:
+            websites = self.session.execute(
+                sa.select(ShoppingWebsite).where(
+                    ShoppingWebsite.id.in_(selected_website_ids),
+                    ShoppingWebsite.group_id == self.group_id,
+                )
+            ).scalars()
+            for website in websites:
+                self.session.delete(website)
+            self.session.commit()
+
         shopping_list = self.mixins.delete_one(item_id)  # type: ignore
         if shopping_list:
             self.publish_event(
@@ -283,6 +382,7 @@ class ShoppingListController(BaseCrudController):
             shopping_list, items = await self.service.organize_with_ai(
                 item_id,
                 include_ai_tips=bool(data and data.include_ai_tips),
+                target_language=data.target_language if data else None,
             )
         except ValueError as e:
             raise HTTPException(

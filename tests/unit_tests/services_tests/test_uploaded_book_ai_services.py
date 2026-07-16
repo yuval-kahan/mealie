@@ -184,6 +184,83 @@ def test_translated_book_html_has_cover_contents_and_numbered_pages():
     assert "תוכן עניינים" in output
 
 
+def test_translated_book_toc_preserves_source_contents_titles_and_printed_pages():
+    raw_records = [
+        {
+            "page": 3,
+            "text": "תוכן עניינים\nהקדמה vii\nחום המטבח 13\nמנות ראשונות 21",
+            "entryType": "contents",
+        },
+        {"page": 7, "text": "הקדמה", "title": "הקדמה", "entryType": "chapter"},
+        {"page": 13, "text": "חום המטבח", "title": "חום המטבח", "entryType": "chapter"},
+        {"page": 21, "text": "מנות ראשונות", "title": "מנות ראשונות", "entryType": "chapter"},
+    ]
+    records = [UploadedBookTranslator._translated_page_record(record, rtl=True) for record in raw_records]
+
+    contents = UploadedBookTranslator._translated_book_toc(records, rtl=True)
+
+    assert [(entry["title"], entry["page"], entry["displayPage"]) for entry in contents] == [
+        ("הקדמה", 7, "vii"),
+        ("חום המטבח", 13, "13"),
+        ("מנות ראשונות", 21, "21"),
+    ]
+
+
+def test_translated_book_toc_uses_ai_chapter_and_recipe_metadata_without_source_contents():
+    raw_records = [
+        {
+            "page": 4,
+            "text": "ארוחות בוקר",
+            "title": "ארוחות בוקר",
+            "entryType": "chapter",
+            "includeInContents": True,
+        },
+        {
+            "page": 8,
+            "text": "שקשוקה",
+            "title": "שקשוקה",
+            "entryType": "recipe",
+            "parentTitle": "ארוחות בוקר",
+            "includeInContents": True,
+        },
+        {"page": 9, "text": "המשך הוראות ללא כותרת", "entryType": "page"},
+    ]
+    records = [UploadedBookTranslator._translated_page_record(record, rtl=True) for record in raw_records]
+
+    contents = UploadedBookTranslator._translated_book_toc(records, rtl=True)
+
+    assert [(entry["title"], entry["level"], entry["kind"]) for entry in contents] == [
+        ("ארוחות בוקר", 1, "chapter"),
+        ("שקשוקה", 2, "recipe"),
+    ]
+
+
+def test_partial_translation_does_not_embed_recipes_from_outside_the_page_range(monkeypatch):
+    translator = object.__new__(UploadedBookTranslator)
+    translator.repos = MagicMock()
+    translator.user = SimpleNamespace(group_slug="family")
+    translator._recipes_extracted_from_book = lambda _book: [
+        SimpleNamespace(
+            extras={"uploadedBookSourcePageStart": 182},
+            source="White Heat, page 182",
+            recipe_ingredient=[],
+            recipe_instructions=[],
+            notes=[],
+            name="Outside recipe",
+            slug="outside-recipe",
+        )
+    ]
+    translator._existing_book_recipe_shopping_list = lambda *_args: None
+    monkeypatch.setattr(
+        "mealie.services.uploaded_books.book_recipe_extractor.ShoppingListService",
+        lambda _repos: SimpleNamespace(),
+    )
+
+    sections = translator._linked_recipe_sections(SimpleNamespace(), "Hebrew", set(range(1, 21)))
+
+    assert sections == {}
+
+
 @pytest.mark.asyncio
 async def test_ai_cookbook_planning_uses_bounded_batches(monkeypatch):
     recipes = [

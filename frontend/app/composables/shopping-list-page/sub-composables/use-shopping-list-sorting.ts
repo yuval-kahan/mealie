@@ -125,6 +125,12 @@ export function useShoppingListSorting() {
       }
     });
 
+    Object.keys(items).forEach((labelName) => {
+      if (!(labelName in itemsSorted)) {
+        itemsSorted[labelName] = items[labelName];
+      }
+    });
+
     return itemsSorted;
   }
 

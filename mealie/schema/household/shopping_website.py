@@ -26,6 +26,8 @@ class ShoppingWebsiteOut(ShoppingWebsiteBase):
     user_id: UUID4
     created_at: datetime | None = None
     updated_at: datetime | None = UpdatedAtField(default=None)
+    recipe_ids: list[UUID4] = Field(default_factory=list)
+    shopping_list_ids: list[UUID4] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -37,3 +39,14 @@ class ShoppingWebsiteAIRequest(MealieModel):
 class ShoppingWebsiteBrowserPageRequest(ShoppingWebsiteAIRequest):
     page_title: str | None = Field(None, max_length=500)
     page_text: str = Field(..., min_length=1, max_length=250000)
+
+
+class ShoppingWebsiteEntityLinksUpdate(MealieModel):
+    website_ids: list[UUID4] = Field(default_factory=list)
+
+
+class ShoppingWebsiteDeletePreview(MealieModel):
+    recipe_ids: list[UUID4] = Field(default_factory=list)
+    recipe_names: list[str] = Field(default_factory=list)
+    shopping_list_ids: list[UUID4] = Field(default_factory=list)
+    shopping_list_names: list[str] = Field(default_factory=list)

@@ -15,7 +15,7 @@ from .shopping_list import (
     ShoppingListMultiPurposeLabel,
     ShoppingListRecipeReference,
 )
-from .shopping_website import ShoppingWebsite
+from .shopping_website import RecipeShoppingWebsite, ShoppingListShoppingWebsite, ShoppingWebsite
 from .uploaded_book import UploadedBook
 from .webhooks import GroupWebhooksModel
 
@@ -38,6 +38,8 @@ __all__ = [
     "ShoppingListMultiPurposeLabel",
     "ShoppingListRecipeReference",
     "ShoppingWebsite",
+    "RecipeShoppingWebsite",
+    "ShoppingListShoppingWebsite",
     "UploadedBook",
     "GroupWebhooksModel",
 ]

@@ -21,6 +21,8 @@ const DEFAULT_SETTINGS = {
 };
 
 const MAX_EXTRACTED_TEXT_LENGTH = 180000;
+const POPUP_IMPORT_REQUEST = "MEALIE_EXTENSION_POPUP_IMPORT";
+const POPUP_SAVE_WEBSITE_REQUEST = "MEALIE_EXTENSION_POPUP_SAVE_WEBSITE";
 const AUTH_COOKIE_NAME = "mealie.access_token";
 const SITE_LOCALE_COOKIE_NAME = "i18n_redirected";
 const extensionI18n = globalThis.MealieExtensionI18n;
@@ -470,18 +472,14 @@ async function handleSendToMealie() {
 
   try {
     const settings = currentSettings();
-    await chrome.storage.sync.set(settings);
-    if (!await checkMealieStatus()) {
-      return;
+    void chrome.storage.sync.set(settings);
+    setStatus(statusTextForMode(settings.extractMode));
+    const response = await runBackgroundPageAction(POPUP_IMPORT_REQUEST, settings);
+    if (response.preview) {
+      showPreview(response.preview);
     }
 
-    setStatus(statusTextForMode(settings.extractMode));
-    const extraction = lastExtraction || await extractCurrentTab();
-    lastExtraction = extraction;
-    showPreview(extraction.markdown);
-
     if (settings.extractMode === "article" || settings.extractMode === "auto") {
-      const response = await createArticleFromBrowserPage(settings, extraction);
       const article = response.article;
       const recipeSlug = response.recipeSlug || response.recipe_slug;
       const recipeError = response.recipeError || response.recipe_error;
@@ -518,7 +516,6 @@ async function handleSendToMealie() {
       return;
     }
 
-    const response = await createRecipeFromBrowserPage(settings, extraction);
     const messages = [
       translator.t("status.recipe-created", { name: response.recipeSlug || response.recipe_slug }),
     ];
@@ -554,15 +551,12 @@ async function handleSaveWebsite() {
 
   try {
     const settings = currentSettings();
-    await chrome.storage.sync.set(settings);
-    if (!await checkMealieStatus()) {
-      return;
+    void chrome.storage.sync.set(settings);
+    const response = await runBackgroundPageAction(POPUP_SAVE_WEBSITE_REQUEST, settings);
+    if (response.preview) {
+      showPreview(response.preview);
     }
-
-    const extraction = lastExtraction || await extractCurrentTab();
-    lastExtraction = extraction;
-    showPreview(extraction.markdown);
-    const website = await createShoppingWebsiteFromBrowserPage(settings, extraction);
+    const website = response.website;
     setStatus(translator.t("status.website-saved", { name: website.name }), "success");
     showWebsiteLink(settings.mealieUrl);
   }
@@ -572,6 +566,30 @@ async function handleSaveWebsite() {
   finally {
     setBusy(false);
   }
+}
+
+async function runBackgroundPageAction(type, settings) {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.url) {
+    throw new Error(translator.t("errors.active-tab-missing"));
+  }
+  if (/^chrome:|^edge:|^about:|^chrome-extension:/i.test(tab.url)) {
+    throw new Error(translator.t("errors.unsupported-page"));
+  }
+
+  // The service worker owns extraction and the API request. Once this message
+  // is dispatched, closing the popup does not cancel the running operation.
+  const response = await chrome.runtime.sendMessage({
+    type,
+    payload: {
+      ...settings,
+      url: tab.url,
+    },
+  });
+  if (!response?.ok) {
+    throw new Error(response?.error || translator.t("errors.import-failed"));
+  }
+  return response;
 }
 
 function statusTextForMode(mode) {

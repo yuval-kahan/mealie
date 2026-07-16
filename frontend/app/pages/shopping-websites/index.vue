@@ -75,7 +75,36 @@
       can-confirm
       @confirm="deleteWebsite"
     >
-      <v-card-text>{{ $t("shopping-website.delete-confirm") }}</v-card-text>
+      <v-card-text>
+        {{ $t("shopping-website.delete-confirm") }}
+        <v-progress-linear v-if="deletePreviewLoading" indeterminate color="primary" class="mt-4" />
+        <template v-else-if="deletePreview">
+          <v-checkbox
+            v-if="deletePreview.recipeIds.length"
+            v-model="deleteLinkedRecipes"
+            :label="$t('shopping-website.delete-linked-recipes', { names: deletePreview.recipeNames.join(', ') })"
+            density="compact"
+            hide-details
+            class="mt-4"
+          />
+          <v-checkbox
+            v-if="deletePreview.shoppingListIds.length"
+            v-model="deleteLinkedShoppingLists"
+            :label="$t('shopping-website.delete-linked-shopping-lists', { names: deletePreview.shoppingListNames.join(', ') })"
+            density="compact"
+            hide-details
+          />
+          <v-alert
+            v-if="deletePreview.recipeIds.length || deletePreview.shoppingListIds.length"
+            type="info"
+            variant="tonal"
+            density="compact"
+            class="mt-4"
+          >
+            {{ $t("shopping-website.linked-items-remain-by-default") }}
+          </v-alert>
+        </template>
+      </v-card-text>
     </BaseDialog>
 
     <BasePageTitle divider>
@@ -148,7 +177,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ShoppingWebsite, ShoppingWebsiteCreate } from "~/lib/api/types/shopping-website";
+import type { ShoppingWebsite, ShoppingWebsiteCreate, ShoppingWebsiteDeletePreview } from "~/lib/api/types/shopping-website";
 import { useUserApi } from "~/composables/api/api-client";
 import { alert } from "~/composables/use-toast";
 
@@ -162,6 +191,10 @@ const dialogOpen = ref(false);
 const deleteDialogOpen = ref(false);
 const editingWebsite = ref<ShoppingWebsite | null>(null);
 const deletingWebsite = ref<ShoppingWebsite | null>(null);
+const deletePreview = ref<ShoppingWebsiteDeletePreview>();
+const deletePreviewLoading = ref(false);
+const deleteLinkedRecipes = ref(false);
+const deleteLinkedShoppingLists = ref(false);
 const formMode = ref<"manual" | "ai">("manual");
 const form = reactive<ShoppingWebsiteCreate>({ name: "", url: "", pageFood: "", offeredFoods: [] });
 
@@ -229,14 +262,28 @@ async function submitWebsite() {
   await loadWebsites();
 }
 
-function openDeleteDialog(website: ShoppingWebsite) {
+async function openDeleteDialog(website: ShoppingWebsite) {
   deletingWebsite.value = website;
+  deletePreview.value = undefined;
+  deleteLinkedRecipes.value = false;
+  deleteLinkedShoppingLists.value = false;
   deleteDialogOpen.value = true;
+  deletePreviewLoading.value = true;
+  try {
+    const { data } = await api.shoppingWebsites.deletePreview(website.id);
+    if (data) deletePreview.value = data;
+  }
+  finally {
+    deletePreviewLoading.value = false;
+  }
 }
 
 async function deleteWebsite() {
   if (!deletingWebsite.value) return;
-  const { error } = await api.shoppingWebsites.deleteOne(deletingWebsite.value.id);
+  const { error } = await api.shoppingWebsites.deleteOne(deletingWebsite.value.id, {
+    deleteRecipes: deleteLinkedRecipes.value,
+    deleteShoppingLists: deleteLinkedShoppingLists.value,
+  });
   if (error) {
     alert.error(i18n.t("events.something-went-wrong"));
     return;

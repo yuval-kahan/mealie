@@ -14,7 +14,7 @@ from pathlib import Path
 from shutil import copytree, rmtree
 from textwrap import dedent
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 from uuid import UUID, uuid4
 from zipfile import ZipFile
 
@@ -105,6 +105,91 @@ class RecipeServiceBase(BaseService):
 
 
 class RecipeService(RecipeServiceBase):
+    @staticmethod
+    def _short_recipe_attribution(created_by: str | None, source: str | None) -> str:
+        value = (created_by or "").strip()
+        if not value and source:
+            source_value = source.strip()
+            parsed = urlparse(external_url_from_text(source_value) or source_value)
+            value = parsed.netloc.removeprefix("www.") if parsed.netloc else source_value
+
+        value = re.sub(r"\s+", " ", value).strip(" -|,.;")
+        if not value:
+            return ""
+
+        return value[:48].rstrip(" -|,.;")
+
+    def _unique_recipe_identity(
+        self,
+        name: str,
+        *,
+        created_by: str | None = None,
+        source: str | None = None,
+        exclude_id: UUID | None = None,
+    ) -> tuple[str, str]:
+        base_name = re.sub(r"\s+", " ", name).strip() or "New Recipe"
+        model = self.group_recipes.model
+
+        def identity_exists(candidate_name: str, candidate_slug: str) -> bool:
+            query = sa.select(model.id).where(
+                model.group_id == self.user.group_id,
+                sa.or_(
+                    sa.func.lower(sa.func.trim(model.name)) == candidate_name.lower(),
+                    sa.func.lower(sa.func.trim(model.slug)) == candidate_slug.lower(),
+                ),
+            )
+            if exclude_id is not None:
+                query = query.where(model.id != exclude_id)
+            return self.group_recipes.session.execute(query.limit(1)).scalar_one_or_none() is not None
+
+        attribution = self._short_recipe_attribution(created_by, source)
+        attributed_name = f"{base_name} - {attribution}" if attribution else ""
+        candidates = [base_name]
+        if attributed_name and attributed_name.casefold() != base_name.casefold():
+            candidates.append(attributed_name[:180].rstrip())
+
+        for candidate in candidates:
+            slug = create_recipe_slug(candidate)
+            if not identity_exists(candidate, slug):
+                return candidate, slug
+
+        numbered_base = candidates[-1]
+        suffix = 2
+        while True:
+            suffix_text = f" {suffix}"
+            candidate = f"{numbered_base[: max(1, 180 - len(suffix_text))].rstrip()}{suffix_text}"
+            slug = create_recipe_slug(candidate)
+            if not identity_exists(candidate, slug):
+                return candidate, slug
+            suffix += 1
+
+    def apply_ai_recipe_attribution(self, recipe: Recipe) -> Recipe:
+        """Add a short, reliable attribution to an AI-created recipe title.
+
+        AI imports should be distinguishable at a glance, but the title must not
+        contain invented credits. Prefer the structured creator field and fall
+        back to the source website/domain only when it is available.
+        """
+
+        base_name = re.sub(r"\s+", " ", recipe.name or "").strip() or "New Recipe"
+        attribution = self._short_recipe_attribution(recipe.created_by, recipe.source)
+        if not attribution:
+            recipe.name = base_name
+            recipe.slug = create_recipe_slug(base_name)
+            return recipe
+
+        normalized_name = re.sub(r"[^\w]+", " ", base_name, flags=re.UNICODE).casefold().strip()
+        normalized_attribution = re.sub(r"[^\w]+", " ", attribution, flags=re.UNICODE).casefold().strip()
+        if normalized_attribution and normalized_attribution in normalized_name:
+            recipe.name = base_name
+            recipe.slug = create_recipe_slug(base_name)
+            return recipe
+
+        suffix = f" - {attribution}"
+        recipe.name = f"{base_name[: max(1, 180 - len(suffix))].rstrip()}{suffix}"
+        recipe.slug = create_recipe_slug(recipe.name)
+        return recipe
+
     def _get_recipe(self, data: str | UUID, key: str | None = None) -> Recipe:
         recipe = self.group_recipes.get_one(data, key)
         if recipe is None:
@@ -248,7 +333,15 @@ class RecipeService(RecipeServiceBase):
         if create_data.name is None:
             create_data.name = "New Recipe"
 
+        unique_name, unique_slug = self._unique_recipe_identity(
+            create_data.name,
+            created_by=getattr(create_data, "created_by", None),
+            source=getattr(create_data, "source", None),
+        )
+        create_data.name = unique_name
+
         data: Recipe = self._recipe_creation_factory(name=create_data.name, additional_attrs=create_data.model_dump())
+        data.slug = unique_slug
 
         if isinstance(create_data, CreateRecipe) or create_data.settings is None:
             if self.household.preferences is not None:
@@ -394,18 +487,42 @@ class RecipeService(RecipeServiceBase):
                     shutil.copyfileobj(image.file, buffer)
                 local_images.append(image_path)
 
-            recipe_data = await openai_recipe_service.build_recipe_from_images(
+            recipe_data, source_image_is_finished_dish = await openai_recipe_service.build_recipe_from_images(
                 local_images,
                 translate_language=translate_language,
                 include_ai_tips=include_ai_tips,
                 notes=notes,
             )
 
-            recipe = self.create_one(recipe_data)
-            data_service = RecipeDataService(recipe.id)
+            recipe = self.create_one(self.apply_ai_recipe_attribution(recipe_data))
 
-            with open(local_images[0], "rb") as f:
-                data_service.write_image(f.read(), "webp")
+            # Prefer a representative recipe photo discovered from the parsed
+            # recipe. The uploaded image is often a scan or screenshot, so it is
+            # deliberately kept as the final fallback only.
+            image_attached = await self.attach_best_effort_image(
+                recipe,
+                search_queries=[
+                    " ".join(
+                        part
+                        for part in [recipe.name, recipe.created_by, "finished plated dish food photography"]
+                        if part
+                    ),
+                    f"{recipe.name} finished plated dish food photography",
+                ],
+                source_url=recipe.source,
+            )
+            if not image_attached and source_image_is_finished_dish:
+                try:
+                    data_service = RecipeDataService(recipe.id)
+                    fallback_image = local_images[0]
+                    extension = fallback_image.suffix.lstrip(".") or "jpg"
+                    data_service.write_image(fallback_image, extension)
+                    recipe.image = cache.cache_key.new_key()
+                    recipe = self.update_one(recipe.slug, recipe)
+                except Exception:
+                    # The extracted recipe is still useful when the uploaded
+                    # fallback cannot be decoded or converted by Pillow.
+                    self.logger.exception("Failed to save the uploaded recipe cover image fallback")
             return recipe
 
     async def create_from_text(
@@ -417,7 +534,7 @@ class RecipeService(RecipeServiceBase):
     ) -> Recipe:
         openai_recipe_service = OpenAIRecipeService(self.repos, self.user, self.household, self.translator)
         recipe_data = await openai_recipe_service.build_recipe_from_text(text, translate_language, include_ai_tips)
-        recipe = self.create_one(recipe_data)
+        recipe = self.create_one(self.apply_ai_recipe_attribution(recipe_data))
         if auto_image:
             await self.attach_best_effort_image(recipe, search_query=recipe.name)
         return recipe
@@ -434,6 +551,29 @@ class RecipeService(RecipeServiceBase):
 
         Image import should never block recipe creation; failures are logged and ignored.
         """
+
+        try:
+            return await self._attach_best_effort_image(
+                recipe,
+                image_url=image_url,
+                search_query=search_query,
+                search_queries=search_queries,
+                source_url=source_url,
+            )
+        except Exception:
+            self.logger.exception("Failed to attach a best-effort image to recipe %s", getattr(recipe, "slug", ""))
+            self.repos.session.rollback()
+            return False
+
+    async def _attach_best_effort_image(
+        self,
+        recipe: Recipe,
+        image_url: str | None = None,
+        search_query: str | None = None,
+        search_queries: Sequence[str | None] | None = None,
+        source_url: str | None = None,
+    ) -> bool:
+        """Internal image lookup implementation guarded by ``attach_best_effort_image``."""
 
         if not recipe or not recipe.id:
             return False
@@ -857,9 +997,14 @@ class RecipeService(RecipeServiceBase):
             new_ingredient = ingredient.model_copy(update={"reference_id": new_reference_id})
             return new_ingredient
 
-        new_name = dup_data.name if dup_data.name else old_recipe.name or ""
+        requested_name = dup_data.name if dup_data.name else old_recipe.name or ""
+        new_name, new_slug = self._unique_recipe_identity(
+            requested_name,
+            created_by=old_recipe.created_by,
+            source=old_recipe.source,
+        )
         new_recipe.id = uuid4()
-        new_recipe.slug = create_recipe_slug(new_name)
+        new_recipe.slug = new_slug
         new_recipe.image = (
             old_recipe.image
             if is_external_recipe_image(old_recipe.image)
@@ -1007,6 +1152,14 @@ class RecipeService(RecipeServiceBase):
     def update_one(self, slug_or_id: str | UUID, update_data: Recipe) -> Recipe:
         recipe = self._pre_update_check(slug_or_id, update_data)
 
+        if update_data.name and update_data.name.strip().casefold() != (recipe.name or "").strip().casefold():
+            update_data.name, update_data.slug = self._unique_recipe_identity(
+                update_data.name,
+                created_by=update_data.created_by,
+                source=update_data.source,
+                exclude_id=recipe.id,
+            )
+
         update_data = self._remove_non_existent_ingredient_references(update_data)
         update_data = self._resolve_ingredient_sub_recipes(update_data)
 
@@ -1037,6 +1190,18 @@ class RecipeService(RecipeServiceBase):
 
     def patch_one(self, slug_or_id: str | UUID, patch_data: Recipe) -> Recipe:
         recipe: Recipe = self._pre_update_check(slug_or_id, patch_data)
+
+        if (
+            "name" in patch_data.model_fields_set
+            and patch_data.name
+            and patch_data.name.strip().casefold() != (recipe.name or "").strip().casefold()
+        ):
+            patch_data.name, patch_data.slug = self._unique_recipe_identity(
+                patch_data.name,
+                created_by=patch_data.created_by or recipe.created_by,
+                source=patch_data.source or recipe.source,
+                exclude_id=recipe.id,
+            )
 
         new_data = self.group_recipes.patch(recipe.slug, patch_data.model_dump(exclude_unset=True))
 
@@ -1645,9 +1810,13 @@ class OpenAIRecipeService(RecipeServiceBase):
         translate_language: str | None,
         include_ai_tips: bool = True,
         notes: str | None = None,
-    ) -> Recipe:
+    ) -> tuple[Recipe, bool]:
         openai_service = OpenAIService(self.repos)
-        if not (openai_service.provider_settings and openai_service.provider_settings.image_provider_enabled):
+        if not (
+            openai_service.provider_settings
+            and openai_service.provider_settings.ai_enabled
+            and (openai_service.image_provider or openai_service.default_provider)
+        ):
             raise ValueError("OpenAI image services are not available")
 
         prompt = openai_service.get_prompt("recipes.parse-recipe-image")
@@ -1676,8 +1845,14 @@ class OpenAIRecipeService(RecipeServiceBase):
             )
             if not response:
                 raise ValueError("Received empty response from OpenAI")
+            if not self._has_minimum_recipe_data(response):
+                raise exceptions.NotARecipe(
+                    "The image does not contain enough recipe data. Include a name, ingredients, and instructions."
+                )
 
         except Exception as e:
+            if isinstance(e, exceptions.NotARecipe):
+                raise
             raise Exception("Failed to call OpenAI services") from e
 
         try:
@@ -1685,7 +1860,7 @@ class OpenAIRecipeService(RecipeServiceBase):
         except Exception as e:
             raise ValueError("Unable to parse recipe from image") from e
 
-        return recipe
+        return recipe, bool(response.source_image_is_finished_dish)
 
     async def build_recipe_from_text(
         self,

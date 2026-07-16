@@ -16,6 +16,7 @@
       <template #activator="{ props: activatorProps }">
         <v-btn
           icon
+          class="recipe-context-menu__activator"
           :variant="fab ? 'flat' : undefined"
           :rounded="fab ? 'circle' : undefined"
           :size="fab ? 'small' : undefined"
@@ -62,6 +63,7 @@ interface ContextMenuIncludes {
   printPreferences?: boolean;
   share?: boolean;
   recipeActions?: boolean;
+  shoppingWebsites?: boolean;
 }
 
 interface ContextMenuItem {
@@ -106,6 +108,7 @@ const props = withDefaults(defineProps<Props>(), {
     printPreferences: true,
     share: true,
     recipeActions: true,
+    shoppingWebsites: true,
   }),
   appendItems: () => [],
   leadingItems: () => [],
@@ -180,3 +183,19 @@ defineExpose({
 
 const RecipeContextMenuContent = defineAsyncComponent(() => import("./RecipeContextMenuContent.vue"));
 </script>
+
+<style scoped>
+.recipe-context-menu__activator {
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease,
+    color 0.15s ease;
+}
+
+.recipe-context-menu__activator:not(.v-btn--variant-flat):hover,
+.recipe-context-menu__activator:not(.v-btn--variant-flat):focus-visible {
+  background-color: rgba(var(--v-theme-primary), 0.14) !important;
+  box-shadow: inset 0 0 0 1px rgba(var(--v-theme-primary), 0.28);
+  color: rgb(var(--v-theme-primary)) !important;
+}
+</style>

@@ -365,3 +365,65 @@ a{{color:#a64d00}} .cover{{min-height:60vh;display:flex;flex-direction:column;ju
         return await self.generate(
             AICookbookGenerateRequest.model_validate(config), uploaded_books_root, str(series_id)
         )
+
+    async def set_recipe_membership(
+        self,
+        book: UploadedBook,
+        recipe_slug: str,
+        included: bool,
+        uploaded_books_root: Path,
+    ) -> UploadedBookOut:
+        metadata = self._metadata(book)
+        if not metadata.get("generated_by_ai"):
+            raise ValueError("This is not an AI-generated cookbook")
+
+        slugs = [
+            slug
+            for slug in metadata.get("included_recipe_slugs", [])
+            if isinstance(slug, str) and slug
+        ]
+        if included and recipe_slug not in slugs:
+            slugs.append(recipe_slug)
+        elif not included:
+            slugs = [slug for slug in slugs if slug != recipe_slug]
+
+        recipes: list[Recipe] = []
+        retained_slugs: list[str] = []
+        for slug in slugs:
+            try:
+                recipes.append(self.recipe_service.get_one(slug))
+                retained_slugs.append(slug)
+            except Exception:
+                continue
+
+        config = metadata.get("generation_config")
+        query = ""
+        requested_title = re.sub(r"\s+-\s+Vol\.\s+\d+$", "", book.name or "AI Cookbook")
+        if isinstance(config, dict):
+            request = AICookbookGenerateRequest.model_validate(config)
+            query = self._query(request)
+            requested_title = request.title or requested_title
+
+        entries: list[tuple[str, Recipe]] = []
+        introduction = str((metadata.get("classification") or {}).get("summary") or "")
+        if recipes:
+            plan = await self._build_plan(query, requested_title, recipes)
+            recipe_by_slug = {recipe.slug: recipe for recipe in recipes}
+            for chapter in plan.chapters:
+                entries.extend(
+                    (chapter.title, recipe_by_slug[slug])
+                    for slug in chapter.recipe_slugs
+                    if slug in recipe_by_slug
+                )
+            introduction = plan.introduction or introduction
+
+        metadata["included_recipe_slugs"] = retained_slugs
+        classification = metadata.setdefault("classification", {})
+        if isinstance(classification, dict) and introduction:
+            classification["summary"] = introduction
+
+        volume_number = int(metadata.get("volume_number") or 1)
+        volume_count = int(metadata.get("volume_count") or 1)
+        content = self._render_html(requested_title, introduction, volume_number, volume_count, entries)
+        updated = self._write_volume(book, uploaded_books_root, book.name, content, metadata)
+        return UploadedBookOut.model_validate(updated)

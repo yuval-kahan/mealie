@@ -3,10 +3,12 @@ from collections.abc import Iterable, Iterator
 from datetime import UTC, datetime
 from typing import cast
 
+import sqlalchemy as sa
 from fastapi import HTTPException, status
 from pydantic import UUID4
 
 from mealie.core.exceptions import UnexpectedNone
+from mealie.db.models.household.shopping_list import ShoppingList
 from mealie.lang.locale_config import LOCALE_CONFIG
 from mealie.repos.all_repositories import get_repositories
 from mealie.repos.repository_factory import AllRepositories
@@ -62,6 +64,41 @@ class ShoppingListService:
         "ניקיון וחד פעמי": "#78909C",
         "שונות": "#959595",
     }
+
+    def validated_unique_list_name(self, name: str | None, exclude_id: UUID4 | None = None) -> str | None:
+        normalized_name = (name or "").strip()
+        if not normalized_name:
+            return name
+
+        query = sa.select(ShoppingList.id).where(
+            ShoppingList.group_id == self.repos.group_id,
+            sa.func.lower(sa.func.trim(ShoppingList.name)) == normalized_name.lower(),
+        )
+        if exclude_id is not None:
+            query = query.where(ShoppingList.id != exclude_id)
+        if self.repos.session.execute(query.limit(1)).scalar_one_or_none() is not None:
+            raise HTTPException(status.HTTP_409_CONFLICT, detail="Shopping list name already exists")
+
+        return normalized_name
+
+    def available_unique_list_name(self, name: str | None) -> str | None:
+        """Return a unique display name without loading every shopping list."""
+
+        base_name = " ".join((name or "").split()).strip()
+        if not base_name:
+            return name
+
+        candidate = base_name
+        suffix = 2
+        while True:
+            query = sa.select(ShoppingList.id).where(
+                ShoppingList.group_id == self.repos.group_id,
+                sa.func.lower(sa.func.trim(ShoppingList.name)) == candidate.casefold(),
+            )
+            if self.repos.session.execute(query.limit(1)).scalar_one_or_none() is None:
+                return candidate
+            candidate = f"{base_name} ({suffix})"
+            suffix += 1
 
     @staticmethod
     def _target_language_instruction(target_language: str | None) -> str:
@@ -888,15 +925,7 @@ class ShoppingListService:
         return self.shopping_lists.get_one(shopping_list.id), items  # type: ignore
 
     def create_one_list(self, data: ShoppingListCreate, owner_id: UUID4):
-        normalized_name = (data.name or "").strip()
-        existing_lists = self.shopping_lists.page_all(PaginationQuery(page=1, per_page=-1))
-        if normalized_name and any(
-            (shopping_list.name or "").strip().casefold() == normalized_name.casefold()
-            for shopping_list in existing_lists.items
-        ):
-            raise HTTPException(status.HTTP_409_CONFLICT, detail="Shopping list name already exists")
-
-        data = data.model_copy(update={"name": normalized_name or data.name})
+        data = data.model_copy(update={"name": self.validated_unique_list_name(data.name)})
         create_data = data.cast(ShoppingListSave, group_id=self.repos.group_id, user_id=owner_id)
         new_list = self.shopping_lists.create(create_data)  # type: ignore
 

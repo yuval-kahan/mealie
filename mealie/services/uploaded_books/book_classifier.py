@@ -1,5 +1,4 @@
 import json
-import re
 from pathlib import Path
 
 import sqlalchemy as sa
@@ -16,12 +15,9 @@ from mealie.services._base_service import BaseService
 from mealie.services.openai import OpenAIService
 
 from .book_cover_service import UploadedBookCoverService
-from .book_recipe_extractor import UploadedBookRecipeExtractor
 
 
 class UploadedBookClassifier(BaseService):
-    SAMPLE_MAX_CHARS = 45_000
-
     def __init__(
         self,
         repos: AllRepositories,
@@ -31,7 +27,6 @@ class UploadedBookClassifier(BaseService):
     ) -> None:
         self.repos = repos
         self.user = user
-        self.extractor = UploadedBookRecipeExtractor(repos, user, household, translator)
         super().__init__()
 
     def _get_book(self, book_id: UUID4) -> UploadedBook:
@@ -44,34 +39,6 @@ class UploadedBookClassifier(BaseService):
         if not book:
             raise ValueError("Uploaded book was not found")
         return book
-
-    @staticmethod
-    def _book_path(book: UploadedBook, uploaded_books_root: Path) -> Path:
-        root = uploaded_books_root.joinpath(str(book.group_id)).resolve()
-        path = root.joinpath(str(book.id), book.file_name).resolve()
-        if not path.is_relative_to(root):
-            raise ValueError("Invalid uploaded book file path")
-        return path
-
-    def _sample_text(self, book: UploadedBook, path: Path) -> str:
-        try:
-            pages = self.extractor._extract_pages(path, book.extension, max_pages=40)
-        except Exception:
-            self.logger.warning("Could not extract classification sample for %s", book.id, exc_info=True)
-            return ""
-
-        selected = pages[:8]
-        contents_pattern = re.compile(r"\b(contents?|table of contents|chapters?)\b|תוכן|פרקים", re.IGNORECASE)
-        selected_numbers = {page.number for page in selected}
-        for page in pages[:40]:
-            if page.number not in selected_numbers and contents_pattern.search(page.text):
-                selected.append(page)
-                selected_numbers.add(page.number)
-            if len(selected) >= 12:
-                break
-
-        sample = "\n\n".join(f"[Page {page.number}]\n{page.text}" for page in selected)
-        return sample[: self.SAMPLE_MAX_CHARS]
 
     async def classify(
         self,
@@ -90,11 +57,11 @@ class UploadedBookClassifier(BaseService):
             if not (openai_service.provider_settings and openai_service.provider_settings.ai_enabled):
                 raise ValueError("No default AI provider configured")
 
-            sample = self._sample_text(book, self._book_path(book, uploaded_books_root))
             prompt = (
-                "Classify a cooking book for a personal searchable library. Use the title, filename, table of contents "
-                "and sample pages together. Return concise metadata. Do not claim Michelin or restaurant affiliation "
-                "unless the supplied text supports it. Categories and tags should be useful search labels."
+                "Classify a cooking book for a personal searchable library using ONLY its title and original filename. "
+                "Do not request, infer from, or summarize the book contents. Return concise metadata and useful search "
+                "categories and tags. Be conservative: use 'unspecified' when the title does not support a difficulty, "
+                "teaching level, Michelin connection, restaurant, cuisine, chef, or technique."
             )
             if response_language:
                 prompt += (
@@ -104,8 +71,8 @@ class UploadedBookClassifier(BaseService):
             message = (
                 f"Book title: {book.name}\nOriginal filename: {book.original_file_name}\n"
                 f"File type: {book.extension}\n"
-                f"Requested metadata language: {response_language or 'same language as the book'}\n\nSample:\n"
-                f"{sample or '[No extractable sample; classify cautiously from title.]'}"
+                f"Requested metadata language: {response_language or 'same language as the title'}\n"
+                "No book pages or book text are provided. Classify cautiously from these filename fields only."
             )
             response = await openai_service.get_response(
                 prompt,

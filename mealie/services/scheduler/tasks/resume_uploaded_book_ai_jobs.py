@@ -111,9 +111,19 @@ async def _run_uploaded_book_ai_job(operation: str, book_id: UUID) -> None:
                     organize_shopping_lists_with_ai=extraction_options.get(
                         "organize_shopping_lists_with_ai", True
                     ),
+                    allow_duplicate_recipes=extraction_options.get("allow_duplicate_recipes", False),
                 )
             else:
                 service = UploadedBookTranslator(repos, private_user, household, translator)
+                try:
+                    book_metadata = json.loads(book.book_metadata_json or "{}")
+                except (TypeError, ValueError):
+                    book_metadata = {}
+                translation_options = (
+                    book_metadata.get("translation_options", {}) if isinstance(book_metadata, dict) else {}
+                )
+                if not isinstance(translation_options, dict):
+                    translation_options = {}
                 await service.translate_book(
                     book.id,
                     uploaded_books_root,
@@ -122,6 +132,7 @@ async def _run_uploaded_book_ai_job(operation: str, book_id: UUID) -> None:
                     resume=True,
                     page_start=book.translation_page_start,
                     page_end=book.translation_page_end,
+                    include_linked_recipes=translation_options.get("include_linked_recipes", True),
                 )
     except Exception as e:
         logger.error("Failed to resume uploaded book %s job for book %s", operation, book_id)

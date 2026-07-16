@@ -45,6 +45,7 @@ export interface RecipeAIShoppingListRequest {
   includeAiTips?: boolean;
   organizeShoppingListWithAi?: boolean;
   includeItemImages?: boolean;
+  translateLanguage?: string | null;
 }
 
 export interface ItemImagesEnsureResponse {
@@ -84,6 +85,13 @@ export interface RecipeIngredientsAdjustWithAIResponse {
   adjustmentNote: string;
 }
 
+export interface RecipeDeletePreview {
+  shoppingListIds: string[];
+  shoppingListNames: string[];
+  websiteIds: string[];
+  websiteNames: string[];
+}
+
 const prefix = "/api";
 
 const routes = {
@@ -113,6 +121,7 @@ const routes = {
   recipesRecipeSlugScaleFromText: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/scale-from-text`,
   recipesRecipeSlugAdjustIngredientsWithAi: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/ingredients/adjust-with-ai`,
   recipesRecipeSlugAssets: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/assets`,
+  recipesRecipeSlugDeletePreview: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/delete-preview`,
 
   recipesSlugComments: (slug: string) => `${prefix}/recipes/${slug}/comments`,
   recipesSlugCommentsId: (slug: string, id: number) => `${prefix}/recipes/${slug}/comments/${id}`,
@@ -199,6 +208,17 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
       { text },
       { suppressAlert: true },
     );
+  }
+
+  async getDeletePreview(slug: string) {
+    return await this.requests.get<RecipeDeletePreview>(routes.recipesRecipeSlugDeletePreview(slug));
+  }
+
+  async deleteWithLinks(slug: string, shoppingListIds: string[], websiteIds: string[]) {
+    return await this.requests.delete<Recipe>(route(routes.recipesRecipeSlug(slug), {
+      deleteShoppingListIds: shoppingListIds,
+      deleteWebsiteIds: websiteIds,
+    }));
   }
 
   async createAsset(recipeSlug: string, payload: CreateAsset) {
@@ -293,8 +313,13 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
     includeCategories: boolean,
     onProgress?: (message: string) => void,
     useOpenAI = false,
+    translateLanguage: string | null = null,
   ): Promise<RequestResponse<string>> {
-    return this.streamRecipeCreate(routes.recipesCreateUrl, { url, includeTags, includeCategories, useOpenAI }, onProgress);
+    return this.streamRecipeCreate(
+      routes.recipesCreateUrl,
+      { url, includeTags, includeCategories, useOpenAI, translateLanguage },
+      onProgress,
+    );
   }
 
   async createManyByUrl(payload: CreateRecipeByUrlBulk, videos: (File | null)[] = []) {
@@ -365,6 +390,7 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
         includeAiTips: payload.includeAiTips !== false,
         organizeShoppingListWithAi: payload.organizeShoppingListWithAi !== false,
         includeItemImages: payload.includeItemImages !== false,
+        translateLanguage: payload.translateLanguage || null,
       },
       { suppressAlert: true },
     );

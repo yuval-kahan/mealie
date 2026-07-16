@@ -1,5 +1,20 @@
 <template>
   <div :style="`height: ${height}px;`">
+    <RecipeShoppingListQuickDialog
+      v-model="shoppingListQuickDialog"
+      :recipe-slug="slug"
+      @resolved="handleShoppingListResolved"
+      @failed="shoppingListOverlayLoading = false"
+    />
+    <RecipeAICookbooksDialog
+      v-model="aiCookbooksDialog"
+      :recipe-slug="slug"
+    />
+    <RecipeQuickEditDialog
+      v-model="quickEditDialog"
+      :recipe-slug="slug"
+      @saved="handleQuickEditSaved"
+    />
     <v-expand-transition>
       <v-card
         :ripple="false"
@@ -116,6 +131,18 @@
                   size="x-small"
                   class="recipe-mobile-card-action-btn"
                   color="primary"
+                  :title="$t('recipe.quick-edit')"
+                  :aria-label="$t('recipe.quick-edit')"
+                  @click.stop.prevent="quickEditDialog = true"
+                >
+                  <v-icon>{{ $globals.icons.manageData }}</v-icon>
+                </v-btn>
+                <v-btn
+                  icon
+                  variant="text"
+                  size="x-small"
+                  class="recipe-mobile-card-action-btn"
+                  color="primary"
                   :loading="copyLoading"
                   :title="$t('recipe.copy-recipe')"
                   :aria-label="$t('recipe.copy-recipe')"
@@ -160,6 +187,30 @@
                 >
                   <v-icon>{{ $globals.icons.cartCheck }}</v-icon>
                 </v-btn>
+                <v-btn
+                  icon
+                  variant="text"
+                  size="x-small"
+                  class="recipe-mobile-card-action-btn"
+                  color="primary"
+                  :title="$t('recipe.open-or-create-shopping-list')"
+                  :aria-label="$t('recipe.open-or-create-shopping-list')"
+                  @click.stop.prevent="shoppingListQuickDialog = true"
+                >
+                  <v-icon>{{ $globals.icons.clipboardCheck }}</v-icon>
+                </v-btn>
+                <v-btn
+                  icon
+                  variant="text"
+                  size="x-small"
+                  class="recipe-mobile-card-action-btn"
+                  color="primary"
+                  :title="$t('cookbook.ai-generated-books')"
+                  :aria-label="$t('cookbook.ai-generated-books')"
+                  @click.stop.prevent="aiCookbooksDialog = true"
+                >
+                  <v-icon>{{ $globals.icons.book }}</v-icon>
+                </v-btn>
               </div>
 
               <!-- If we're not logged-in, no items display, so we hide this menu -->
@@ -186,6 +237,7 @@
                   print: false,
                   printPreferences: false,
                   share: true,
+                  shoppingWebsites: true,
                   delete: true,
                 }"
                 @deleted="$emit('delete', slug)"
@@ -223,6 +275,23 @@
         >
           <v-icon>{{ $globals.icons.fileImage }}</v-icon>
         </v-btn>
+        <v-btn
+          v-if="showCreateShoppingListOverlay"
+          icon
+          variant="flat"
+          size="x-small"
+          class="recipe-mobile-card-ai-shopping-list-btn"
+          :class="vertical
+            ? 'recipe-mobile-card-ai-shopping-list-btn--vertical'
+            : 'recipe-mobile-card-ai-shopping-list-btn--horizontal'"
+          color="success"
+          :loading="shoppingListOverlayLoading"
+          :title="$t('recipe.create-ai-shopping-list')"
+          :aria-label="$t('recipe.create-ai-shopping-list')"
+          @click.stop.prevent="createShoppingListFromCardImage"
+        >
+          <v-icon>{{ $globals.icons.cartCheck }}</v-icon>
+        </v-btn>
         <slot />
       </v-card>
     </v-expand-transition>
@@ -235,6 +304,9 @@ import RecipeContextMenu from "./RecipeContextMenu/RecipeContextMenu.vue";
 import RecipeCardImage from "./RecipeCardImage.vue";
 import RecipeCardRating from "./RecipeCardRating.vue";
 import RecipeChips from "./RecipeChips.vue";
+import RecipeShoppingListQuickDialog from "./RecipeShoppingListQuickDialog.vue";
+import RecipeAICookbooksDialog from "./RecipeAICookbooksDialog.vue";
+import RecipeQuickEditDialog from "./RecipeQuickEditDialog.vue";
 import { useUserApi } from "~/composables/api/api-client";
 import { useRecipeCopy } from "~/composables/recipes/use-recipe-copy";
 import { recipeItemImagesEnsured, useRecipeItemImages } from "~/composables/recipes/use-recipe-item-images";
@@ -289,8 +361,14 @@ const copyShoppingListLoading = ref(false);
 const aiImageLoading = ref(false);
 const itemImagesLoading = ref(false);
 const itemImagesEnsured = ref(recipeItemImagesEnsured(props.extras));
+const shoppingListStatusKnown = ref(hasShoppingListStatus(props.extras));
+const hasLinkedShoppingList = ref(Boolean(props.extras?.shoppingListLinked));
 const imageLoadFailed = ref(false);
 const localImageVersion = ref<string | null>(props.image ?? null);
+const shoppingListQuickDialog = ref(false);
+const shoppingListOverlayLoading = ref(false);
+const aiCookbooksDialog = ref(false);
+const quickEditDialog = ref(false);
 const recipeContextMenu = ref<{
   openMealplannerDialog: () => Promise<void>;
   openShoppingListDialog: () => Promise<void>;
@@ -315,8 +393,18 @@ watch(
   () => props.extras,
   (extras) => {
     itemImagesEnsured.value = recipeItemImagesEnsured(extras);
+    shoppingListStatusKnown.value = hasShoppingListStatus(extras);
+    if (shoppingListStatusKnown.value) {
+      hasLinkedShoppingList.value = Boolean(extras?.shoppingListLinked);
+    }
   },
 );
+
+watch(shoppingListQuickDialog, (open) => {
+  if (!open) {
+    shoppingListOverlayLoading.value = false;
+  }
+});
 
 const showRecipeContent = computed(() => props.recipeId && props.slug);
 const recipeRoute = computed<string>(() => {
@@ -326,12 +414,23 @@ const cursor = computed(() => (showRecipeContent.value ? "pointer" : "auto"));
 const hasAllGroceries = computed(() => hasAllGroceriesForRecipe(displayName.value));
 const showAiImageButton = computed(() => isOwnGroup.value && showRecipeContent.value && (!localImageVersion.value || imageLoadFailed.value));
 const showAiItemImagesButton = computed(() => isOwnGroup.value && showRecipeContent.value && !itemImagesEnsured.value);
+const showCreateShoppingListOverlay = computed(() => {
+  return isOwnGroup.value
+    && showRecipeContent.value
+    && shoppingListStatusKnown.value
+    && !hasLinkedShoppingList.value;
+});
 
 onMounted(() => {
   void ensureAvailability();
 });
 
 function handleRenamed(payload: { slug: string; name: string; recipe?: any }) {
+  displayName.value = payload.name;
+  emit("renamed", payload);
+}
+
+function handleQuickEditSaved(payload: { slug: string; name: string; recipe: any }) {
   displayName.value = payload.name;
   emit("renamed", payload);
 }
@@ -343,6 +442,24 @@ function handleImageStatus(hasImage: boolean) {
 function handleImageUpdated(payload: { slug: string; image: string }) {
   localImageVersion.value = payload.image;
   imageLoadFailed.value = false;
+}
+
+function hasShoppingListStatus(extras: Record<string, unknown> | null | undefined) {
+  return Boolean(extras && Object.prototype.hasOwnProperty.call(extras, "shoppingListLinked"));
+}
+
+function createShoppingListFromCardImage() {
+  if (shoppingListOverlayLoading.value) {
+    return;
+  }
+  shoppingListOverlayLoading.value = true;
+  shoppingListQuickDialog.value = true;
+}
+
+function handleShoppingListResolved() {
+  shoppingListStatusKnown.value = true;
+  hasLinkedShoppingList.value = true;
+  shoppingListOverlayLoading.value = false;
 }
 
 async function createAIImageFromCard() {
@@ -469,19 +586,19 @@ async function openShoppingListFromCard() {
   display: flex;
   flex: 0 0 auto;
   gap: 0;
-  max-width: 128px;
-  overflow: hidden;
+  max-width: none;
+  overflow: visible;
 }
 
 .recipe-mobile-card-action-btn {
-  flex: 0 0 32px;
-  height: 32px !important;
-  min-width: 32px !important;
+  flex: 0 0 22px;
+  height: 28px !important;
+  min-width: 22px !important;
   transition:
     background-color 0.15s ease,
     box-shadow 0.15s ease,
     color 0.15s ease;
-  width: 32px !important;
+  width: 22px !important;
 }
 
 .recipe-mobile-card-action-btn:hover,
@@ -525,6 +642,33 @@ async function openShoppingListFromCard() {
 .recipe-mobile-card-ai-item-images-btn:focus-visible {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
   transform: translateY(-1px);
+}
+
+.recipe-mobile-card-ai-shopping-list-btn {
+  position: absolute !important;
+  top: 8px;
+  z-index: 4;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+.recipe-mobile-card-ai-shopping-list-btn--vertical {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.recipe-mobile-card-ai-shopping-list-btn--horizontal {
+  inset-inline-start: 62px;
+  transform: translateX(-50%);
+}
+
+.recipe-mobile-card-ai-shopping-list-btn:hover,
+.recipe-mobile-card-ai-shopping-list-btn:focus-visible {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
+  transform: translate(-50%, -1px);
 }
 
 .recipe-mobile-card-tags {

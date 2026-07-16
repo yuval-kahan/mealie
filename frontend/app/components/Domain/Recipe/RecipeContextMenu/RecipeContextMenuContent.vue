@@ -7,6 +7,11 @@
     :recipe-scale="recipeScale"
   />
   <RecipeDialogPrintPreferences v-model="printPreferencesDialog" :recipe="recipeRef" />
+  <ShoppingWebsiteLinksDialog
+    v-model="shoppingWebsiteLinksDialog"
+    entity-type="recipe"
+    :entity-id="recipeId"
+  />
   <BaseDialog
     v-model="recipeDeleteDialog"
     :title="$t('recipe.delete-recipe')"
@@ -21,6 +26,43 @@
       </template>
       <template v-else>
         {{ $t("recipe.delete-confirmation") }}
+      </template>
+      <v-progress-linear v-if="deletePreviewLoading" indeterminate color="primary" class="mt-4" />
+      <template v-else>
+        <v-divider v-if="deleteShoppingListOptions.length || deleteWebsiteOptions.length" class="my-4" />
+        <p v-if="deleteShoppingListOptions.length" class="font-weight-medium mb-2">
+          {{ $t("recipe.delete-linked-shopping-lists") }}
+        </p>
+        <v-checkbox
+          v-for="item in deleteShoppingListOptions"
+          :key="item.id"
+          v-model="selectedDeleteShoppingListIds"
+          :value="item.id"
+          :label="item.name"
+          density="compact"
+          hide-details
+        />
+        <p v-if="deleteWebsiteOptions.length" class="font-weight-medium mt-4 mb-2">
+          {{ $t("recipe.delete-linked-websites") }}
+        </p>
+        <v-checkbox
+          v-for="item in deleteWebsiteOptions"
+          :key="item.id"
+          v-model="selectedDeleteWebsiteIds"
+          :value="item.id"
+          :label="item.name"
+          density="compact"
+          hide-details
+        />
+        <v-alert
+          v-if="deleteShoppingListOptions.length || deleteWebsiteOptions.length"
+          type="info"
+          variant="tonal"
+          density="compact"
+          class="mt-4"
+        >
+          {{ $t("recipe.linked-items-remain-by-default") }}
+        </v-alert>
       </template>
     </v-card-text>
   </BaseDialog>
@@ -135,7 +177,7 @@ import RecipeDialogPrintPreferences from "~/components/Domain/Recipe/RecipeDialo
 import RecipeDialogShare from "~/components/Domain/Recipe/RecipeDialogShare.vue";
 import RecipeRating from "~/components/Domain/Recipe/RecipeRating.vue";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
-import { useUserApi } from "~/composables/api";
+import { useUserApi } from "~/composables/api/api-client";
 import { useGroupRecipeActions } from "~/composables/use-group-recipe-actions";
 import { useHouseholdSelf } from "~/composables/use-households";
 import { alert } from "~/composables/use-toast";
@@ -143,6 +185,7 @@ import { usePlanTypeOptions } from "~/composables/use-group-mealplan";
 import { useRecipeCopy } from "~/composables/recipes/use-recipe-copy";
 import type { Recipe } from "~/lib/api/types/recipe";
 import type { GroupRecipeActionOut, ShoppingListSummary } from "~/lib/api/types/household";
+import type { RecipeDeletePreview } from "~/lib/api/user/recipes/recipe";
 import type { PlanEntryType } from "~/lib/api/types/meal-plan";
 import { useDownloader } from "~/composables/api/use-downloader";
 
@@ -162,6 +205,7 @@ export interface ContextMenuIncludes {
   printPreferences: boolean;
   share: boolean;
   recipeActions: boolean;
+  shoppingWebsites?: boolean;
 }
 
 export interface ContextMenuItem {
@@ -205,6 +249,7 @@ const props = withDefaults(defineProps<Props>(), {
     printPreferences: true,
     share: true,
     recipeActions: true,
+    shoppingWebsites: true,
   }),
   appendItems: () => [],
   leadingItems: () => [],
@@ -232,8 +277,13 @@ const { copyRecipeText } = useRecipeCopy();
 const printPreferencesDialog = ref(false);
 const shareDialog = ref(false);
 const recipeDeleteDialog = ref(false);
+const deletePreviewLoading = ref(false);
+const deletePreview = ref<RecipeDeletePreview>();
+const selectedDeleteShoppingListIds = ref<string[]>([]);
+const selectedDeleteWebsiteIds = ref<string[]>([]);
 const mealplannerDialog = ref(false);
 const shoppingListDialog = ref(false);
+const shoppingWebsiteLinksDialog = ref(false);
 const recipeDuplicateDialog = ref(false);
 const recipeRenameDialog = ref(false);
 const recipeName = ref(props.name);
@@ -375,6 +425,13 @@ const defaultItems: { [key: string]: ContextMenuItem } = {
     event: "share",
     isPublic: false,
   },
+  shoppingWebsites: {
+    title: i18n.t("shopping-website.link-websites"),
+    icon: $globals.icons.web,
+    color: undefined,
+    event: "shoppingWebsites",
+    isPublic: false,
+  },
 };
 
 // Add leading and Appending Items
@@ -404,6 +461,14 @@ const canDelete = computed(() => {
 
   return user.admin || user.id === recipe.userId;
 });
+const deleteShoppingListOptions = computed(() => (deletePreview.value?.shoppingListIds || []).map((id, index) => ({
+  id,
+  name: deletePreview.value?.shoppingListNames[index] || id,
+})));
+const deleteWebsiteOptions = computed(() => (deletePreview.value?.websiteIds || []).map((id, index) => ({
+  id,
+  name: deletePreview.value?.websiteNames[index] || id,
+})));
 
 // Get Default Menu Items Specified in Props
 for (const [key, value] of Object.entries(props.useItems)) {
@@ -450,7 +515,11 @@ async function executeRecipeAction(action: GroupRecipeActionOut) {
 }
 
 async function deleteRecipe() {
-  const { data, error } = await api.recipes.deleteOne(props.slug);
+  const { data, error } = await api.recipes.deleteWithLinks(
+    props.slug,
+    selectedDeleteShoppingListIds.value,
+    selectedDeleteWebsiteIds.value,
+  );
   if (error) {
     alert.error(i18n.t("recipe.unable-to-delete-recipe") as string);
     return;
@@ -463,6 +532,21 @@ async function deleteRecipe() {
     if (props.redirectOnDelete) {
       router.push(`/g/${groupSlug.value}`);
     }
+  }
+}
+
+async function openDeleteDialog() {
+  selectedDeleteShoppingListIds.value = [];
+  selectedDeleteWebsiteIds.value = [];
+  deletePreview.value = undefined;
+  recipeDeleteDialog.value = true;
+  deletePreviewLoading.value = true;
+  try {
+    const { data } = await api.recipes.getDeletePreview(props.slug);
+    if (data) deletePreview.value = data;
+  }
+  finally {
+    deletePreviewLoading.value = false;
   }
 }
 
@@ -584,7 +668,7 @@ async function createAIImage() {
 // eslint-disable-next-line @typescript-eslint/no-invalid-void-type
 const eventHandlers: { [key: string]: () => void | Promise<any> } = {
   delete: () => {
-    recipeDeleteDialog.value = true;
+    void openDeleteDialog();
   },
   edit: () => router.push(`/g/${groupSlug.value}/r/${props.slug}` + "?edit=true"),
   rename: () => {
@@ -606,6 +690,9 @@ const eventHandlers: { [key: string]: () => void | Promise<any> } = {
   shoppingList: openShoppingListDialog,
   aiShoppingList: createAIShoppingList,
   aiImage: createAIImage,
+  shoppingWebsites: () => {
+    shoppingWebsiteLinksDialog.value = true;
+  },
   share: async () => {
     if (!recipeRef.value) {
       await refreshRecipe();

@@ -305,9 +305,10 @@ class OpenAIService(BaseService):
             raise ValueError("Cannot process both images and audio in one request")
 
         if has_image:
-            if not self.image_provider:
+            provider = self.image_provider or self.default_provider
+            if not provider:
                 raise OpenAINotEnabledException("No image provider set")
-            return self.image_provider
+            return provider
 
         if has_audio:
             if not self.audio_provider:

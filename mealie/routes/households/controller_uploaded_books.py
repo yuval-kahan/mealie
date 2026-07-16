@@ -1,23 +1,26 @@
 import asyncio
+import json
 import shutil
 from pathlib import Path
 from uuid import uuid4
 
 import sqlalchemy as sa
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
 from pydantic import UUID4
 from sqlalchemy import select
 from starlette.responses import FileResponse, RedirectResponse
 
 from mealie.core.dependencies.dependencies import get_current_user
 from mealie.db.models._model_utils.datetime import get_utc_now
+from mealie.db.models.household.shopping_list import ShoppingList
 from mealie.db.models.household.uploaded_book import UploadedBook
 from mealie.db.models.recipe import RecipeModel
-from mealie.db.models.recipe.api_extras import ApiExtras
+from mealie.db.models.recipe.api_extras import ApiExtras, ShoppingListExtras
 from mealie.routes._base import controller
 from mealie.routes._base.base_controllers import BasePublicController
 from mealie.schema.cookbook.uploaded_book import (
     AICookbookGenerateRequest,
+    UploadedBookDeletePreview,
     UploadedBookExtractRequest,
     UploadedBookOut,
     UploadedBookRecipeDeleteRequest,
@@ -26,7 +29,6 @@ from mealie.schema.cookbook.uploaded_book import (
     UploadedBookTranslateRequest,
 )
 from mealie.schema.household.household import HouseholdInDB
-from mealie.schema.response.pagination import PaginationQuery
 from mealie.schema.user import PrivateUser
 from mealie.services.household_services.shopping_lists import ShoppingListService
 from mealie.services.recipe.recipe_service import RecipeService
@@ -306,6 +308,40 @@ class UploadedBooksController(BasePublicController):
 
         return list(books_by_id.values())
 
+    def _book_delete_preview(self, book: UploadedBook) -> UploadedBookDeletePreview:
+        recipes = self._book_recipe_models(book)
+        recipe_ids = {str(recipe.id) for recipe in recipes}
+        linked_list_ids = self.session.execute(
+            select(ShoppingListExtras.shopping_list_id)
+            .join(ShoppingList, ShoppingList.id == ShoppingListExtras.shopping_list_id)
+            .where(
+                ShoppingList.group_id == self.group_id,
+                sa.or_(
+                    sa.and_(
+                        ShoppingListExtras.key_name == "aiCreatedFromUploadedBookId",
+                        ShoppingListExtras.value == str(book.id),
+                    ),
+                    sa.and_(
+                        ShoppingListExtras.key_name == "aiCreatedFromRecipeId",
+                        ShoppingListExtras.value.in_(recipe_ids),
+                    ),
+                ),
+            )
+            .distinct()
+        ).scalars().all()
+        linked_lists = self.session.execute(
+            select(ShoppingList).where(
+                ShoppingList.group_id == self.group_id,
+                ShoppingList.id.in_(linked_list_ids),
+            )
+        ).scalars().all() if linked_list_ids else []
+        return UploadedBookDeletePreview(
+            recipe_ids=[recipe.id for recipe in recipes],
+            recipe_names=[recipe.name or recipe.slug for recipe in recipes],
+            shopping_list_ids=[shopping_list.id for shopping_list in linked_lists],
+            shopping_list_names=[shopping_list.name or str(shopping_list.id) for shopping_list in linked_lists],
+        )
+
     def _reset_translation_links(self, deleted_book_ids: set[UUID4]) -> None:
         linked_books = (
             self.session.execute(
@@ -367,6 +403,37 @@ class UploadedBooksController(BasePublicController):
         builder = AICookbookBuilder(self.repos, self.user, self.household, self.translator)
         try:
             return await builder.refresh(book, self.folders.DATA_DIR.joinpath("uploaded-books"))
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    @router.put("/{book_id}/ai-recipes/{recipe_slug}", response_model=UploadedBookOut)
+    async def add_recipe_to_ai_cookbook(self, book_id: UUID4, recipe_slug: str) -> UploadedBookOut:
+        book = self._get_book_or_404(book_id)
+        try:
+            RecipeService(self.repos, self.user, self.household, self.translator).get_one(recipe_slug)
+            return await AICookbookBuilder(
+                self.repos, self.user, self.household, self.translator
+            ).set_recipe_membership(
+                book,
+                recipe_slug,
+                True,
+                self.folders.DATA_DIR.joinpath("uploaded-books"),
+            )
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    @router.delete("/{book_id}/ai-recipes/{recipe_slug}", response_model=UploadedBookOut)
+    async def remove_recipe_from_ai_cookbook(self, book_id: UUID4, recipe_slug: str) -> UploadedBookOut:
+        book = self._get_book_or_404(book_id)
+        try:
+            return await AICookbookBuilder(
+                self.repos, self.user, self.household, self.translator
+            ).set_recipe_membership(
+                book,
+                recipe_slug,
+                False,
+                self.folders.DATA_DIR.joinpath("uploaded-books"),
+            )
         except ValueError as exc:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -450,6 +517,7 @@ class UploadedBooksController(BasePublicController):
             data.include_ai_tips,
             data.create_shopping_lists,
             data.organize_shopping_lists_with_ai,
+            data.allow_duplicate_recipes,
         )
 
         return UploadedBookOut.model_validate(book)
@@ -500,6 +568,22 @@ class UploadedBooksController(BasePublicController):
         book.translation_error = None
         book.translation_started_at = book.translation_started_at if resume else None
         book.translation_completed_at = None
+        try:
+            book_metadata = json.loads(book.book_metadata_json or "{}")
+        except (TypeError, ValueError):
+            book_metadata = {}
+        if not isinstance(book_metadata, dict):
+            book_metadata = {}
+        book_metadata["translation_options"] = {
+            "include_linked_recipes": data.include_linked_recipes,
+            "extract_recipes": data.extract_recipes,
+            "auto_recipe_images": data.auto_recipe_images,
+            "include_item_images": data.include_item_images,
+            "include_ai_tips": data.include_ai_tips,
+            "create_shopping_lists": data.create_shopping_lists,
+            "organize_shopping_lists_with_ai": data.organize_shopping_lists_with_ai,
+        }
+        book.book_metadata_json = json.dumps(book_metadata, ensure_ascii=False)
 
         self.session.add(book)
         self.session.commit()
@@ -507,7 +591,7 @@ class UploadedBooksController(BasePublicController):
 
         translator = UploadedBookTranslator(self.repos, self.user, self.household, self.translator)
         bg_tasks.add_task(
-            translator.translate_book,
+            translator.translate_with_optional_extraction,
             book.id,
             self.folders.DATA_DIR.joinpath("uploaded-books"),
             data.pages_per_chunk,
@@ -515,17 +599,47 @@ class UploadedBooksController(BasePublicController):
             resume,
             data.page_start,
             data.page_end,
+            data.include_linked_recipes,
+            data.extract_recipes,
+            data.auto_recipe_images,
+            data.include_item_images,
+            data.include_ai_tips,
+            data.create_shopping_lists,
+            data.organize_shopping_lists_with_ai,
         )
 
         return UploadedBookOut.model_validate(book)
 
+    @router.get("/{book_id}/delete-preview", response_model=UploadedBookDeletePreview)
+    def delete_book_preview(self, book_id: UUID4) -> UploadedBookDeletePreview:
+        return self._book_delete_preview(self._get_book_or_404(book_id))
+
     @router.delete("/{book_id}", status_code=status.HTTP_204_NO_CONTENT)
-    def delete_book(self, book_id: UUID4) -> None:
+    def delete_book(
+        self,
+        book_id: UUID4,
+        delete_recipes: bool = Query(False),
+        delete_shopping_lists: bool = Query(False),
+    ) -> None:
         book = self._get_book_or_404(book_id)
         books_to_delete = self._books_to_delete(book)
 
         for item in books_to_delete:
             self._assert_book_not_processing(item)
+
+        linked = self._book_delete_preview(book)
+        if delete_shopping_lists and linked.shopping_list_ids:
+            self.repos.group_shopping_lists.delete_many(linked.shopping_list_ids)
+        if delete_recipes and linked.recipe_ids:
+            recipe_slugs = list(
+                self.session.execute(
+                    select(RecipeModel.slug).where(
+                        RecipeModel.id.in_(linked.recipe_ids),
+                        RecipeModel.group_id == self.group_id,
+                    )
+                ).scalars()
+            )
+            RecipeService(self.repos, self.user, self.household, self.translator).delete_many(recipe_slugs)
 
         deleted_book_ids = {item.id for item in books_to_delete}
         book_dirs = [self._book_dir_path(item) for item in books_to_delete]
@@ -646,13 +760,23 @@ class UploadedBooksController(BasePublicController):
         selected_shopping_list_ids = []
         if payload.delete_shopping_lists and selected_recipe_ids:
             shopping_service = ShoppingListService(self.repos)
-            shopping_lists = shopping_service.shopping_lists.page_all(PaginationQuery(page=1, per_page=-1))
-            selected_shopping_list_ids = [
-                shopping_list.id
-                for shopping_list in shopping_lists.items
-                if str((shopping_list.extras or {}).get("aiCreatedFromUploadedBookId") or "") == str(book.id)
-                and str((shopping_list.extras or {}).get("aiCreatedFromRecipeId") or "") in selected_recipe_ids
-            ]
+            selected_shopping_list_ids = self.session.execute(
+                select(ShoppingListExtras.shopping_list_id)
+                .join(ShoppingList, ShoppingList.id == ShoppingListExtras.shopping_list_id)
+                .where(
+                    ShoppingList.group_id == self.group_id,
+                    ShoppingListExtras.key_name == "aiCreatedFromUploadedBookId",
+                    ShoppingListExtras.value == str(book.id),
+                    sa.exists(
+                        select(ShoppingListExtras.id).where(
+                            ShoppingListExtras.shopping_list_id == ShoppingList.id,
+                            ShoppingListExtras.key_name == "aiCreatedFromRecipeId",
+                            ShoppingListExtras.value.in_(selected_recipe_ids),
+                        )
+                    ),
+                )
+                .distinct()
+            ).scalars().all()
 
         if payload.delete_recipes and selected_recipes:
             recipe_service = RecipeService(self.repos, self.user, self.household, self.translator)

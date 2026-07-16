@@ -9,6 +9,8 @@ export interface ShoppingWebsite {
   offeredFoods: string[];
   createdAt?: string | null;
   updatedAt?: string | null;
+  recipeIds: string[];
+  shoppingListIds: string[];
 }
 
 export interface ShoppingWebsiteCreate {
@@ -27,4 +29,15 @@ export interface ShoppingWebsiteAIRequest {
 export interface ShoppingWebsiteBrowserPageRequest extends ShoppingWebsiteAIRequest {
   pageTitle?: string | null;
   pageText: string;
+}
+
+export interface ShoppingWebsiteEntityLinksUpdate {
+  websiteIds: string[];
+}
+
+export interface ShoppingWebsiteDeletePreview {
+  recipeIds: string[];
+  recipeNames: string[];
+  shoppingListIds: string[];
+  shoppingListNames: string[];
 }

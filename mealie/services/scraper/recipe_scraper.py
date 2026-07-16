@@ -33,7 +33,11 @@ class RecipeScraper:
     scrapers: list[type[ABCScraperStrategy]]
 
     def __init__(
-        self, repos: AllRepositories, translator: Translator, scrapers: list[type[ABCScraperStrategy]] | None = None
+        self,
+        repos: AllRepositories,
+        translator: Translator,
+        scrapers: list[type[ABCScraperStrategy]] | None = None,
+        target_language: str | None = None,
     ) -> None:
         if scrapers is None:
             scrapers = DEFAULT_SCRAPER_STRATEGIES
@@ -41,6 +45,7 @@ class RecipeScraper:
         self.scrapers = scrapers
         self.repos = repos
         self.translator = translator
+        self.target_language = target_language
         self.logger = get_logger()
 
     async def scrape(
@@ -64,7 +69,13 @@ class RecipeScraper:
                 return None, None
 
         for ScraperClass in self.scrapers:
-            scraper = ScraperClass(url, self.translator, self.repos, raw_html=html)
+            scraper = ScraperClass(
+                url,
+                self.translator,
+                self.repos,
+                raw_html=html,
+                target_language=self.target_language,
+            )
             if not scraper.can_scrape():
                 self.logger.debug(f"Skipping {scraper.__class__.__name__}")
                 continue

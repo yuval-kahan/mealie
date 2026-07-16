@@ -3,6 +3,12 @@
     v-if="shoppingListChoices && ready"
     class="narrow-container"
   >
+    <ShoppingWebsiteLinksDialog
+      v-if="shoppingWebsiteLinkTargetId"
+      v-model="shoppingWebsiteLinksDialog"
+      entity-type="shopping-list"
+      :entity-id="shoppingWebsiteLinkTargetId"
+    />
     <BaseDialog
       v-model="state.createDialog"
       :title="$t('shopping-list.create-shopping-list')"
@@ -70,6 +76,43 @@
     >
       <v-card-text>
         {{ deleteTargetIsMerged ? $t('shopping-list.cancel-merge-confirm') : $t('shopping-list.are-you-sure-you-want-to-delete-this-item') }}
+        <v-progress-linear v-if="deletePreviewLoading" indeterminate color="primary" class="mt-4" />
+        <template v-else>
+          <v-divider v-if="deleteRecipeOptions.length || deleteWebsiteOptions.length" class="my-4" />
+          <p v-if="deleteRecipeOptions.length" class="font-weight-medium mb-2">
+            {{ $t("shopping-list.delete-linked-recipes") }}
+          </p>
+          <v-checkbox
+            v-for="item in deleteRecipeOptions"
+            :key="item.id"
+            v-model="selectedDeleteRecipeIds"
+            :value="item.id"
+            :label="item.name"
+            density="compact"
+            hide-details
+          />
+          <p v-if="deleteWebsiteOptions.length" class="font-weight-medium mt-4 mb-2">
+            {{ $t("shopping-list.delete-linked-websites") }}
+          </p>
+          <v-checkbox
+            v-for="item in deleteWebsiteOptions"
+            :key="item.id"
+            v-model="selectedDeleteWebsiteIds"
+            :value="item.id"
+            :label="item.name"
+            density="compact"
+            hide-details
+          />
+          <v-alert
+            v-if="deleteRecipeOptions.length || deleteWebsiteOptions.length"
+            type="info"
+            variant="tonal"
+            density="compact"
+            class="mt-4"
+          >
+            {{ $t("shopping-list.linked-items-remain-by-default") }}
+          </v-alert>
+        </template>
       </v-card-text>
     </BaseDialog>
 
@@ -382,6 +425,17 @@
               <v-btn
                 icon
                 variant="plain"
+                :title="$t('shopping-website.link-websites')"
+                :aria-label="$t('shopping-website.link-websites')"
+                @click.prevent.stop="openShoppingWebsiteLinks(list.id)"
+              >
+                <v-icon>
+                  {{ $globals.icons.web }}
+                </v-icon>
+              </v-btn>
+              <v-btn
+                icon
+                variant="plain"
                 :title="$t('shopping-list.rename-shopping-list')"
                 :aria-label="$t('shopping-list.rename-shopping-list')"
                 @click.prevent.stop="openRename(list)"
@@ -512,7 +566,8 @@
                     class="shopping-list-inline-group"
                   >
                     <div class="shopping-list-inline-group-title">
-                      {{ group.label }}
+                      <span>{{ group.label }}</span>
+                      <span class="shopping-list-inline-group-count">{{ group.items.length }}</span>
                     </div>
                     <div
                       v-for="item in group.items"
@@ -641,6 +696,7 @@ import {
   useShoppingListAvailability,
 } from "~/composables/shopping-list-page/use-shopping-list-availability";
 import type { UserOut } from "~/lib/api/types/user";
+import type { ShoppingListDeletePreview } from "~/lib/api/user/group-shopping-lists";
 
 const auth = useMealieAuth();
 const i18n = useI18n();
@@ -663,9 +719,20 @@ const expandedShoppingLists = ref<Record<string, ShoppingListOut>>({});
 const shoppingListSearch = ref("");
 const mergeListSearch = ref("");
 const bulkDeleteListSearch = ref("");
+const shoppingWebsiteLinksDialog = ref(false);
+const shoppingWebsiteLinkTargetId = ref("");
 const mergeSelectedListIds = ref<string[]>([]);
 const bulkDeleteSelectedListIds = ref<string[]>([]);
+const deletePreview = ref<ShoppingListDeletePreview>();
+const deletePreviewLoading = ref(false);
+const selectedDeleteRecipeIds = ref<string[]>([]);
+const selectedDeleteWebsiteIds = ref<string[]>([]);
 const { updateAvailabilityForListName } = useShoppingListAvailability();
+
+function openShoppingWebsiteLinks(id: string) {
+  shoppingWebsiteLinkTargetId.value = id;
+  shoppingWebsiteLinksDialog.value = true;
+}
 
 useSeoMeta({
   title: i18n.t("shopping-list.shopping-list"),
@@ -845,6 +912,14 @@ const deleteTargetIsMerged = computed(() => {
   const target = availableShoppingListsById.value.get(state.deleteTarget);
   return Boolean(target && isMergedShoppingList(target));
 });
+const deleteRecipeOptions = computed(() => (deletePreview.value?.recipeIds || []).map((id, index) => ({
+  id,
+  name: deletePreview.value?.recipeNames[index] || id,
+})));
+const deleteWebsiteOptions = computed(() => (deletePreview.value?.websiteIds || []).map((id, index) => ({
+  id,
+  name: deletePreview.value?.websiteNames[index] || id,
+})));
 
 // This has to appear before the shoppingListChoices watcher, otherwise that runs first and the redirect is not disabled
 watch(
@@ -1256,11 +1331,10 @@ async function loadExpandedShoppingList(id: string) {
 
 function inlineShoppingListGroups(list?: ShoppingListOut) {
   const noLabelText = i18n.t("shopping-list.no-label");
-  const items = [...(list?.listItems || [])].sort(sortInlineShoppingListItems);
   const labelOrder = list?.labelSettings?.map(labelSetting => labelSetting.label.name).filter(Boolean) || [];
   const grouped = new Map<string, ShoppingListItemOut[]>();
 
-  items.forEach((item) => {
+  (list?.listItems || []).forEach((item) => {
     const label = item.label?.name || noLabelText;
     const labelItems = grouped.get(label) || [];
     labelItems.push(item);
@@ -1269,22 +1343,20 @@ function inlineShoppingListGroups(list?: ShoppingListOut) {
 
   const groups: Array<{ label: string; items: ShoppingListItemOut[] }> = [];
   if (grouped.has(noLabelText)) {
-    groups.push({ label: noLabelText, items: grouped.get(noLabelText)! });
+    groups.push({ label: noLabelText, items: [...grouped.get(noLabelText)!].sort(sortInlineShoppingListItems) });
     grouped.delete(noLabelText);
   }
 
   labelOrder.forEach((label) => {
     if (grouped.has(label)) {
-      groups.push({ label, items: grouped.get(label)! });
+      groups.push({ label, items: [...grouped.get(label)!].sort(sortInlineShoppingListItems) });
       grouped.delete(label);
     }
   });
 
-  Array.from(grouped.keys())
-    .sort((a, b) => a.localeCompare(b))
-    .forEach((label) => {
-      groups.push({ label, items: grouped.get(label)! });
-    });
+  grouped.forEach((items, label) => {
+    groups.push({ label, items: [...items].sort(sortInlineShoppingListItems) });
+  });
 
   return groups;
 }
@@ -1362,6 +1434,12 @@ async function saveInlineShoppingListItemName(listId: string, item: ShoppingList
   const optimisticItem = {
     ...item,
     display: draft,
+    food: null,
+    foodId: null,
+    note: draft,
+    quantity: 0,
+    unit: null,
+    unitId: null,
     updatedAt: new Date().toISOString(),
   };
 
@@ -1746,14 +1824,29 @@ async function updateOwner() {
   }
 }
 
-function openDelete(id: string) {
+async function openDelete(id: string) {
+  selectedDeleteRecipeIds.value = [];
+  selectedDeleteWebsiteIds.value = [];
+  deletePreview.value = undefined;
   state.deleteDialog = true;
   state.deleteTarget = id;
+  deletePreviewLoading.value = true;
+  try {
+    const { data } = await userApi.shopping.lists.getDeletePreview(id);
+    if (data) deletePreview.value = data;
+  }
+  finally {
+    deletePreviewLoading.value = false;
+  }
 }
 
 async function deleteOne() {
   const targetList = shoppingLists.value?.find(list => list.id === state.deleteTarget);
-  const { data } = await userApi.shopping.lists.deleteOne(state.deleteTarget);
+  const { data } = await userApi.shopping.lists.deleteWithLinks(
+    state.deleteTarget,
+    selectedDeleteRecipeIds.value,
+    selectedDeleteWebsiteIds.value,
+  );
   if (data) {
     updateAvailabilityForListName(targetList?.name, false);
     const nextMergedSources = new Set(expandedMergedSourceIds.value);
@@ -1940,12 +2033,29 @@ async function deleteOne() {
   margin-top: 10px;
 }
 
+.shopping-list-inline-group {
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 6px;
+  overflow: hidden;
+}
+
 .shopping-list-inline-group-title {
-  color: rgba(var(--v-theme-on-surface), 0.72);
+  align-items: center;
+  background: rgba(var(--v-theme-primary), 0.09);
+  color: rgb(var(--v-theme-on-surface));
+  display: flex;
   font-size: 0.85rem;
   font-weight: 700;
-  margin: 6px 0;
+  justify-content: space-between;
+  min-height: 38px;
+  padding: 8px 14px;
   text-align: start;
+}
+
+.shopping-list-inline-group-count {
+  color: rgba(var(--v-theme-on-surface), 0.72);
+  font-size: 0.75rem;
+  font-weight: 500;
 }
 
 .shopping-list-inline-item {
@@ -1954,6 +2064,11 @@ async function deleteOne() {
   display: flex;
   gap: 8px;
   min-height: 34px;
+  padding: 4px 10px;
+}
+
+.shopping-list-inline-item:last-child {
+  border-bottom: 0;
 }
 
 .shopping-list-inline-item--checked {

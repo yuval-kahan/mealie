@@ -123,6 +123,33 @@
       <v-card-text>
         {{ $t("cookbook.delete-uploaded-book-confirm") }}
         <strong v-if="uploadedBookDeleteTarget" class="d-block mt-3">{{ uploadedBookDeleteTarget.name }}</strong>
+        <v-progress-linear v-if="uploadedBookDeletePreviewLoading" indeterminate color="primary" class="mt-4" />
+        <template v-else-if="uploadedBookDeletePreview">
+          <v-checkbox
+            v-if="uploadedBookDeletePreview.recipeIds.length"
+            v-model="uploadedBookDeleteRecipes"
+            :label="$t('cookbook.delete-linked-recipes', { count: uploadedBookDeletePreview.recipeIds.length })"
+            density="compact"
+            hide-details
+            class="mt-4"
+          />
+          <v-checkbox
+            v-if="uploadedBookDeletePreview.shoppingListIds.length"
+            v-model="uploadedBookDeleteShoppingLists"
+            :label="$t('cookbook.delete-linked-shopping-lists', { count: uploadedBookDeletePreview.shoppingListIds.length })"
+            density="compact"
+            hide-details
+          />
+          <v-alert
+            v-if="uploadedBookDeletePreview.recipeIds.length || uploadedBookDeletePreview.shoppingListIds.length"
+            type="info"
+            variant="tonal"
+            density="compact"
+            class="mt-4"
+          >
+            {{ $t('cookbook.linked-items-remain-by-default') }}
+          </v-alert>
+        </template>
       </v-card-text>
     </BaseDialog>
 
@@ -131,6 +158,176 @@
       :book="bookRecipeDeleteTarget"
       @deleted="handleBookRecipesDeleted"
     />
+
+    <BaseDialog
+      v-model="bookExtractionDialog"
+      :title="$t('cookbook.extract-recipes-with-ai')"
+      :icon="$globals.icons.robot"
+      width="680"
+      max-width="96vw"
+      can-submit
+      keep-open
+      :loading="bookExtractionStarting"
+      :submit-disabled="!bookExtractionTarget || bookExtractionRangeInvalid"
+      @submit="startBookExtraction"
+    >
+      <v-card-text v-if="bookExtractionTarget">
+        <p class="font-weight-medium mb-4">
+          {{ bookExtractionTarget.name }}
+        </p>
+        <v-checkbox
+          v-model="bookExtractionAllPages"
+          :label="$t('cookbook.all-pages')"
+          density="compact"
+          hide-details
+          class="mb-3"
+        />
+        <v-row v-if="!bookExtractionAllPages" dense>
+          <v-col cols="12" sm="6">
+            <v-number-input
+              v-model="bookExtractionPageStart"
+              :min="1"
+              :label="$t('cookbook.page-start')"
+              variant="outlined"
+              control-variant="stacked"
+            />
+          </v-col>
+          <v-col cols="12" sm="6">
+            <v-number-input
+              v-model="bookExtractionPageEnd"
+              :min="1"
+              :label="$t('cookbook.page-end')"
+              variant="outlined"
+              control-variant="stacked"
+            />
+          </v-col>
+        </v-row>
+        <v-number-input
+          v-model="bookExtractionPagesPerChunk"
+          :min="1"
+          :max="100"
+          :label="$t('cookbook.pages-per-ai-chunk')"
+          variant="outlined"
+          control-variant="stacked"
+        />
+        <v-checkbox v-model="bookExtractionCreateLists" :label="$t('cookbook.extraction-shopping-lists')" density="compact" hide-details />
+        <v-checkbox
+          v-model="bookExtractionOrganizeLists"
+          :disabled="!bookExtractionCreateLists"
+          :label="$t('cookbook.extraction-organize-shopping-lists')"
+          density="compact"
+          hide-details
+        />
+        <v-checkbox v-model="bookExtractionRecipeImages" :label="$t('cookbook.extraction-recipe-images')" density="compact" hide-details />
+        <v-checkbox v-model="bookExtractionItemImages" :label="$t('cookbook.extraction-item-images')" density="compact" hide-details />
+        <v-checkbox v-model="bookExtractionTips" :label="$t('cookbook.extraction-ai-tips')" density="compact" hide-details />
+        <v-alert
+          v-if="bookExtractionTarget.extractionRecipesCreated > 0"
+          type="warning"
+          variant="tonal"
+          density="compact"
+          class="mt-4"
+        >
+          {{ $t('cookbook.extraction-existing-recipes', { count: bookExtractionTarget.extractionRecipesCreated }) }}
+          <v-checkbox
+            v-model="bookExtractionAllowDuplicates"
+            :label="$t('cookbook.extraction-create-new-copies')"
+            density="compact"
+            hide-details
+            class="mt-2"
+          />
+        </v-alert>
+      </v-card-text>
+    </BaseDialog>
+
+    <BaseDialog
+      v-model="bookTranslationDialog"
+      :title="$t('cookbook.translate-book-with-ai')"
+      :icon="$globals.icons.translate"
+      width="720"
+      max-width="96vw"
+      can-submit
+      keep-open
+      :loading="bookTranslationStarting"
+      :submit-disabled="!bookTranslationTarget || bookTranslationRangeInvalid"
+      :submit-text="$t('cookbook.start-translation')"
+      @submit="startBookTranslation"
+    >
+      <v-card-text v-if="bookTranslationTarget">
+        <p class="font-weight-medium mb-4">
+          {{ bookTranslationTarget.name }}
+        </p>
+        <v-combobox
+          v-model="bookTranslationLanguage"
+          :items="bookTranslationLanguageOptions"
+          :label="$t('cookbook.translation-language')"
+          variant="outlined"
+        />
+        <v-checkbox
+          v-model="bookTranslationAllPages"
+          :label="$t('cookbook.all-pages')"
+          density="compact"
+          hide-details
+          class="mb-3"
+        />
+        <v-row v-if="!bookTranslationAllPages" dense>
+          <v-col cols="12" sm="6">
+            <v-number-input
+              v-model="bookTranslationPageStart"
+              :min="1"
+              :label="$t('cookbook.page-start')"
+              variant="outlined"
+              control-variant="stacked"
+            />
+          </v-col>
+          <v-col cols="12" sm="6">
+            <v-number-input
+              v-model="bookTranslationPageEnd"
+              :min="1"
+              :label="$t('cookbook.page-end')"
+              variant="outlined"
+              control-variant="stacked"
+            />
+          </v-col>
+        </v-row>
+        <v-number-input
+          v-model="bookTranslationPagesPerChunk"
+          :min="1"
+          :max="100"
+          :label="$t('cookbook.pages-per-ai-chunk')"
+          variant="outlined"
+          control-variant="stacked"
+        />
+        <v-checkbox
+          v-model="bookTranslationIncludeLinkedRecipes"
+          :label="$t('cookbook.translation-include-linked-recipes')"
+          density="compact"
+          hide-details
+        />
+        <v-checkbox
+          v-model="bookTranslationExtractRecipes"
+          :label="$t('cookbook.translation-extract-recipes')"
+          density="compact"
+          hide-details
+        />
+        <div v-if="bookTranslationExtractRecipes" class="mt-2 ps-3 border-s-sm">
+          <v-checkbox v-model="bookTranslationCreateLists" :label="$t('cookbook.extraction-shopping-lists')" density="compact" hide-details />
+          <v-checkbox
+            v-model="bookTranslationOrganizeLists"
+            :disabled="!bookTranslationCreateLists"
+            :label="$t('cookbook.extraction-organize-shopping-lists')"
+            density="compact"
+            hide-details
+          />
+          <v-checkbox v-model="bookTranslationRecipeImages" :label="$t('cookbook.extraction-recipe-images')" density="compact" hide-details />
+          <v-checkbox v-model="bookTranslationItemImages" :label="$t('cookbook.extraction-item-images')" density="compact" hide-details />
+          <v-checkbox v-model="bookTranslationTips" :label="$t('cookbook.extraction-ai-tips')" density="compact" hide-details />
+        </div>
+        <v-alert type="info" variant="tonal" density="compact" class="mt-4">
+          {{ $t('cookbook.translation-professional-contents-hint') }}
+        </v-alert>
+      </v-card-text>
+    </BaseDialog>
 
     <!-- Cookbook Page -->
     <!-- Page Title -->
@@ -400,6 +597,26 @@
                 <v-icon :icon="$globals.icons.robot" />
               </v-btn>
               <v-btn
+                v-if="!isGeneratedBook(book) && !book.isTranslatedBook"
+                icon
+                variant="text"
+                :disabled="book.translationStatus === 'processing' || book.translationStatus === 'retrying'"
+                :title="$t('cookbook.translate-book-with-ai')"
+                @click="openBookTranslationDialog(book)"
+              >
+                <v-icon :icon="$globals.icons.translate" />
+              </v-btn>
+              <v-btn
+                v-if="!isGeneratedBook(book)"
+                icon
+                variant="text"
+                :disabled="book.extractionStatus === 'processing' || book.extractionStatus === 'retrying'"
+                :title="$t('cookbook.extract-recipes-with-ai')"
+                @click="openBookExtractionDialog(book)"
+              >
+                <v-icon :icon="$globals.icons.potSteam" />
+              </v-btn>
+              <v-btn
                 v-if="bookRecipeSource(book)?.extractionRecipesCreated"
                 icon
                 variant="text"
@@ -427,8 +644,8 @@ import { useHouseholdSelf } from "@/composables/use-households";
 import CookbookEditor from "~/components/Domain/Cookbook/CookbookEditor.vue";
 import type { CreateCookBook, ReadCookBook } from "~/lib/api/types/cookbook";
 import { useCookbookPreferences } from "~/composables/use-users/preferences";
-import type { AICookbookGenerateRequest, UploadedBook, UploadedBookClassification } from "~/lib/api/types/uploaded-book";
-import { useUserApi } from "~/composables/api";
+import type { AICookbookGenerateRequest, UploadedBook, UploadedBookClassification, UploadedBookDeletePreview } from "~/lib/api/types/uploaded-book";
+import { useUserApi } from "~/composables/api/api-client";
 import { alert } from "~/composables/use-toast";
 
 definePageMeta({
@@ -486,8 +703,40 @@ const refreshingBookIds = ref(new Set<string>());
 const uploadedBookDeleteDialog = ref(false);
 const uploadedBookDeleteTarget = ref<UploadedBook | null>(null);
 const uploadedBookDeleting = ref(false);
+const uploadedBookDeletePreview = ref<UploadedBookDeletePreview>();
+const uploadedBookDeletePreviewLoading = ref(false);
+const uploadedBookDeleteRecipes = ref(false);
+const uploadedBookDeleteShoppingLists = ref(false);
 const bookRecipeDeleteDialog = ref(false);
 const bookRecipeDeleteTarget = ref<UploadedBook | null>(null);
+const bookExtractionDialog = ref(false);
+const bookExtractionTarget = ref<UploadedBook | null>(null);
+const bookExtractionStarting = ref(false);
+const bookExtractionAllPages = ref(true);
+const bookExtractionPageStart = ref<number | null>(null);
+const bookExtractionPageEnd = ref<number | null>(null);
+const bookExtractionPagesPerChunk = ref(10);
+const bookExtractionCreateLists = ref(true);
+const bookExtractionOrganizeLists = ref(true);
+const bookExtractionRecipeImages = ref(true);
+const bookExtractionItemImages = ref(true);
+const bookExtractionTips = ref(true);
+const bookExtractionAllowDuplicates = ref(false);
+const bookTranslationDialog = ref(false);
+const bookTranslationTarget = ref<UploadedBook | null>(null);
+const bookTranslationStarting = ref(false);
+const bookTranslationAllPages = ref(true);
+const bookTranslationPageStart = ref<number | null>(null);
+const bookTranslationPageEnd = ref<number | null>(null);
+const bookTranslationPagesPerChunk = ref(10);
+const bookTranslationLanguage = ref("Hebrew");
+const bookTranslationIncludeLinkedRecipes = ref(true);
+const bookTranslationExtractRecipes = ref(false);
+const bookTranslationCreateLists = ref(true);
+const bookTranslationOrganizeLists = ref(true);
+const bookTranslationRecipeImages = ref(true);
+const bookTranslationItemImages = ref(true);
+const bookTranslationTips = ref(true);
 let classificationRefreshTimer: number | null = null;
 
 const aiBookPresetOptions = computed(() => [
@@ -507,6 +756,26 @@ const bookTypeOptions = computed(() => [
 const aiBookSubmitDisabled = computed(() =>
   aiBookMode.value === "preset" ? !aiBookPreset.value.trim() : !aiBookPrompt.value.trim(),
 );
+const bookExtractionRangeInvalid = computed(() => !bookExtractionAllPages.value && (
+  !bookExtractionPageStart.value
+  || !bookExtractionPageEnd.value
+  || bookExtractionPageEnd.value < bookExtractionPageStart.value
+));
+const bookTranslationRangeInvalid = computed(() => !bookTranslationAllPages.value && (
+  !bookTranslationPageStart.value
+  || !bookTranslationPageEnd.value
+  || bookTranslationPageEnd.value < bookTranslationPageStart.value
+));
+const bookTranslationLanguageOptions = computed(() => [
+  { title: i18n.t("cookbook.language-hebrew"), value: "Hebrew" },
+  { title: i18n.t("cookbook.language-english"), value: "English" },
+  { title: i18n.t("cookbook.language-arabic"), value: "Arabic" },
+  { title: i18n.t("cookbook.language-french"), value: "French" },
+  { title: i18n.t("cookbook.language-italian"), value: "Italian" },
+  { title: i18n.t("cookbook.language-spanish"), value: "Spanish" },
+  { title: i18n.t("cookbook.language-german"), value: "German" },
+  { title: i18n.t("cookbook.language-russian"), value: "Russian" },
+]);
 
 function bookClassification(book: UploadedBook): UploadedBookClassification | undefined {
   return book.bookMetadata?.classification;
@@ -630,14 +899,120 @@ async function refreshAIBook(book: UploadedBook) {
   }
 }
 
-function confirmUploadedBookDelete(book: UploadedBook) {
+async function confirmUploadedBookDelete(book: UploadedBook) {
   uploadedBookDeleteTarget.value = book;
+  uploadedBookDeletePreview.value = undefined;
+  uploadedBookDeleteRecipes.value = false;
+  uploadedBookDeleteShoppingLists.value = false;
   uploadedBookDeleteDialog.value = true;
+  uploadedBookDeletePreviewLoading.value = true;
+  try {
+    const { data } = await api.uploadedBooks.deletePreview(book.id);
+    if (data) uploadedBookDeletePreview.value = data;
+  }
+  finally {
+    uploadedBookDeletePreviewLoading.value = false;
+  }
 }
 
 function openBookRecipeDeleteDialog(book: UploadedBook) {
   bookRecipeDeleteTarget.value = bookRecipeSource(book) || book;
   bookRecipeDeleteDialog.value = true;
+}
+
+function openBookExtractionDialog(book: UploadedBook) {
+  bookExtractionTarget.value = book;
+  bookExtractionAllPages.value = true;
+  bookExtractionPageStart.value = null;
+  bookExtractionPageEnd.value = null;
+  bookExtractionPagesPerChunk.value = book.extractionPagesPerChunk || 10;
+  bookExtractionCreateLists.value = true;
+  bookExtractionOrganizeLists.value = true;
+  bookExtractionRecipeImages.value = true;
+  bookExtractionItemImages.value = true;
+  bookExtractionTips.value = true;
+  bookExtractionAllowDuplicates.value = false;
+  bookExtractionDialog.value = true;
+}
+
+function openBookTranslationDialog(book: UploadedBook) {
+  const options = book.bookMetadata?.translation_options as Record<string, unknown> | undefined;
+  bookTranslationTarget.value = book;
+  bookTranslationAllPages.value = !book.translationPageStart && !book.translationPageEnd;
+  bookTranslationPageStart.value = book.translationPageStart || null;
+  bookTranslationPageEnd.value = book.translationPageEnd || null;
+  bookTranslationPagesPerChunk.value = book.translationPagesPerChunk || 10;
+  bookTranslationLanguage.value = book.translationLanguage
+    || (String(i18n.locale.value || "").toLowerCase().startsWith("he") ? "Hebrew" : "English");
+  bookTranslationIncludeLinkedRecipes.value = options?.include_linked_recipes !== false;
+  bookTranslationExtractRecipes.value = options?.extract_recipes === true;
+  bookTranslationCreateLists.value = options?.create_shopping_lists !== false;
+  bookTranslationOrganizeLists.value = options?.organize_shopping_lists_with_ai !== false;
+  bookTranslationRecipeImages.value = options?.auto_recipe_images !== false;
+  bookTranslationItemImages.value = options?.include_item_images !== false;
+  bookTranslationTips.value = options?.include_ai_tips !== false;
+  bookTranslationDialog.value = true;
+}
+
+async function startBookExtraction() {
+  if (!bookExtractionTarget.value || bookExtractionRangeInvalid.value || bookExtractionStarting.value) return;
+  bookExtractionStarting.value = true;
+  try {
+    const { data, error } = await api.uploadedBooks.extractRecipes(bookExtractionTarget.value.id, {
+      pagesPerChunk: Math.min(100, Math.max(1, Number(bookExtractionPagesPerChunk.value) || 10)),
+      translateLanguage: String(i18n.locale.value || "en-US"),
+      pageStart: bookExtractionAllPages.value ? null : bookExtractionPageStart.value,
+      pageEnd: bookExtractionAllPages.value ? null : bookExtractionPageEnd.value,
+      autoRecipeImages: bookExtractionRecipeImages.value,
+      includeItemImages: bookExtractionItemImages.value,
+      includeAiTips: bookExtractionTips.value,
+      createShoppingLists: bookExtractionCreateLists.value,
+      organizeShoppingListsWithAi: bookExtractionCreateLists.value && bookExtractionOrganizeLists.value,
+      allowDuplicateRecipes: bookExtractionAllowDuplicates.value,
+    });
+    if (error || !data) {
+      alert.error(i18n.t("cookbook.extraction-start-failed"));
+      return;
+    }
+    const index = uploadedBooks.value.findIndex(book => book.id === data.id);
+    if (index >= 0) uploadedBooks.value[index] = data;
+    bookExtractionDialog.value = false;
+    alert.success(i18n.t("cookbook.extraction-started"));
+  }
+  finally {
+    bookExtractionStarting.value = false;
+  }
+}
+
+async function startBookTranslation() {
+  if (!bookTranslationTarget.value || bookTranslationRangeInvalid.value || bookTranslationStarting.value) return;
+  bookTranslationStarting.value = true;
+  try {
+    const { data, error } = await api.uploadedBooks.translate(bookTranslationTarget.value.id, {
+      pagesPerChunk: Math.min(100, Math.max(1, Number(bookTranslationPagesPerChunk.value) || 10)),
+      targetLanguage: bookTranslationLanguage.value,
+      pageStart: bookTranslationAllPages.value ? null : bookTranslationPageStart.value,
+      pageEnd: bookTranslationAllPages.value ? null : bookTranslationPageEnd.value,
+      includeLinkedRecipes: bookTranslationIncludeLinkedRecipes.value,
+      extractRecipes: bookTranslationExtractRecipes.value,
+      autoRecipeImages: bookTranslationRecipeImages.value,
+      includeItemImages: bookTranslationItemImages.value,
+      includeAiTips: bookTranslationTips.value,
+      createShoppingLists: bookTranslationCreateLists.value,
+      organizeShoppingListsWithAi: bookTranslationCreateLists.value && bookTranslationOrganizeLists.value,
+    });
+    if (error || !data) {
+      alert.error(i18n.t("cookbook.translation-start-failed"));
+      return;
+    }
+    const index = uploadedBooks.value.findIndex(book => book.id === data.id);
+    if (index >= 0) uploadedBooks.value[index] = data;
+    bookTranslationDialog.value = false;
+    alert.success(i18n.t("cookbook.translation-started"));
+  }
+  finally {
+    bookTranslationStarting.value = false;
+  }
 }
 
 function handleBookRecipesDeleted(bookId: string, _deletedCount: number, remainingCount: number) {
@@ -653,7 +1028,10 @@ async function deleteUploadedBook() {
   if (!uploadedBookDeleteTarget.value) return;
   uploadedBookDeleting.value = true;
   try {
-    const { error } = await api.uploadedBooks.delete(uploadedBookDeleteTarget.value.id);
+    const { error } = await api.uploadedBooks.delete(uploadedBookDeleteTarget.value.id, {
+      deleteRecipes: uploadedBookDeleteRecipes.value,
+      deleteShoppingLists: uploadedBookDeleteShoppingLists.value,
+    });
     if (error) alert.error(i18n.t("cookbook.delete-book-failed"));
     else uploadedBooks.value = uploadedBooks.value.filter(book => book.id !== uploadedBookDeleteTarget.value?.id);
     uploadedBookDeleteDialog.value = false;

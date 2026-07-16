@@ -361,7 +361,24 @@
           >
             {{ $t("cookbook.gemini-multi-key-recommendation") }}
           </v-alert>
-          <div v-if="uploadedBookAction === 'extract'" class="mt-3">
+          <div v-if="uploadedBookAction === 'translate'" class="mt-3">
+            <v-checkbox
+              v-model="uploadedBookTranslationIncludeLinkedRecipes"
+              density="compact"
+              hide-details
+              :label="$t('cookbook.translation-include-linked-recipes')"
+            />
+            <v-checkbox
+              v-model="uploadedBookTranslationExtractRecipes"
+              density="compact"
+              hide-details
+              :label="$t('cookbook.translation-extract-recipes')"
+            />
+          </div>
+          <div
+            v-if="uploadedBookAction === 'extract' || (uploadedBookAction === 'translate' && uploadedBookTranslationExtractRecipes)"
+            class="mt-3"
+          >
             <v-checkbox v-model="uploadedBookAutoRecipeImages" density="compact" hide-details :label="$t('cookbook.extraction-recipe-images')" />
             <v-checkbox v-model="uploadedBookIncludeItemImages" density="compact" hide-details :label="$t('cookbook.extraction-item-images')" />
             <v-checkbox v-model="uploadedBookIncludeAiTips" density="compact" hide-details :label="$t('cookbook.extraction-ai-tips')" />
@@ -454,6 +471,31 @@
           >
             {{ $t("cookbook.gemini-multi-key-recommendation") }}
           </v-alert>
+          <v-checkbox
+            v-model="uploadedBookTranslationIncludeLinkedRecipes"
+            density="compact"
+            hide-details
+            :label="$t('cookbook.translation-include-linked-recipes')"
+          />
+          <v-checkbox
+            v-model="uploadedBookTranslationExtractRecipes"
+            density="compact"
+            hide-details
+            :label="$t('cookbook.translation-extract-recipes')"
+          />
+          <div v-if="uploadedBookTranslationExtractRecipes" class="mt-2 mb-3 ps-3 border-s-sm">
+            <v-checkbox v-model="uploadedBookAutoRecipeImages" density="compact" hide-details :label="$t('cookbook.extraction-recipe-images')" />
+            <v-checkbox v-model="uploadedBookIncludeItemImages" density="compact" hide-details :label="$t('cookbook.extraction-item-images')" />
+            <v-checkbox v-model="uploadedBookIncludeAiTips" density="compact" hide-details :label="$t('cookbook.extraction-ai-tips')" />
+            <v-checkbox v-model="uploadedBookCreateShoppingLists" density="compact" hide-details :label="$t('cookbook.extraction-shopping-lists')" />
+            <v-checkbox
+              v-model="uploadedBookOrganizeShoppingListsWithAi"
+              density="compact"
+              hide-details
+              :disabled="!uploadedBookCreateShoppingLists"
+              :label="$t('cookbook.extraction-organize-shopping-lists')"
+            />
+          </div>
           <v-alert
             v-if="selectedUploadedBook"
             density="compact"
@@ -1031,6 +1073,8 @@ const uploadedBookExtractionDialog = ref(false);
 const uploadedBookExtractionStarting = ref(false);
 const uploadedBookTranslationDialog = ref(false);
 const uploadedBookTranslationStarting = ref(false);
+const uploadedBookTranslationIncludeLinkedRecipes = ref(true);
+const uploadedBookTranslationExtractRecipes = ref(false);
 const uploadedBookDeleteDialog = ref(false);
 const uploadedBookDeleting = ref(false);
 const uploadedBookRecipeDeleteDialog = ref(false);
@@ -1528,6 +1572,8 @@ function resetUploadBookForm() {
   uploadedBookIncludeAiTips.value = true;
   uploadedBookCreateShoppingLists.value = true;
   uploadedBookOrganizeShoppingListsWithAi.value = true;
+  uploadedBookTranslationIncludeLinkedRecipes.value = true;
+  uploadedBookTranslationExtractRecipes.value = false;
   uploadedBookTargetLanguage.value = defaultUploadedBookTargetLanguage();
 }
 
@@ -2034,6 +2080,14 @@ function openUploadedBookTranslationDialog(book: UploadedBook) {
   uploadedBookTargetLanguage.value = book.translationLanguage || defaultUploadedBookTargetLanguage();
   uploadedBookPageStart.value = book.translationPageStart || null;
   uploadedBookPageEnd.value = book.translationPageEnd || null;
+  const translationOptions = book.bookMetadata?.translation_options as Record<string, unknown> | undefined;
+  uploadedBookTranslationIncludeLinkedRecipes.value = translationOptions?.include_linked_recipes !== false;
+  uploadedBookTranslationExtractRecipes.value = translationOptions?.extract_recipes === true;
+  uploadedBookAutoRecipeImages.value = translationOptions?.auto_recipe_images !== false;
+  uploadedBookIncludeItemImages.value = translationOptions?.include_item_images !== false;
+  uploadedBookIncludeAiTips.value = translationOptions?.include_ai_tips !== false;
+  uploadedBookCreateShoppingLists.value = translationOptions?.create_shopping_lists !== false;
+  uploadedBookOrganizeShoppingListsWithAi.value = translationOptions?.organize_shopping_lists_with_ai !== false;
   uploadedBookTranslationDialog.value = true;
 }
 
@@ -2148,6 +2202,13 @@ async function startUploadedBookTranslation(book: UploadedBook, closeDialog: boo
     targetLanguage,
     pageStart: uploadedBookNormalizedPageStart.value,
     pageEnd: uploadedBookNormalizedPageEnd.value,
+    includeLinkedRecipes: uploadedBookTranslationIncludeLinkedRecipes.value,
+    extractRecipes: uploadedBookTranslationExtractRecipes.value,
+    autoRecipeImages: uploadedBookAutoRecipeImages.value,
+    includeItemImages: uploadedBookIncludeItemImages.value,
+    includeAiTips: uploadedBookIncludeAiTips.value,
+    createShoppingLists: uploadedBookCreateShoppingLists.value,
+    organizeShoppingListsWithAi: uploadedBookCreateShoppingLists.value && uploadedBookOrganizeShoppingListsWithAi.value,
   }).finally(() => {
     uploadedBookTranslationStarting.value = false;
   });
