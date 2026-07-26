@@ -6,7 +6,19 @@ const STORAGE_KEYS = {
   createShoppingList: "createShoppingList",
   organizeShoppingList: "organizeShoppingList",
   includeAiTips: "includeAiTips",
+  includeMiseEnPlace: "includeMiseEnPlace",
   includeItemImages: "includeItemImages",
+  downloadVideo: "downloadVideo",
+  videoCreateRecipe: "videoCreateRecipe",
+  videoQuality: "videoQuality",
+  videoContainer: "videoContainer",
+  videoCodec: "videoCodec",
+  videoAudioOnly: "videoAudioOnly",
+  videoAudioQuality: "videoAudioQuality",
+  videoSaveSubtitles: "videoSaveSubtitles",
+  videoSaveThumbnail: "videoSaveThumbnail",
+  videoSaveMetadata: "videoSaveMetadata",
+  videoFallbackQuality: "videoFallbackQuality",
 };
 
 const DEFAULT_SETTINGS = {
@@ -17,12 +29,26 @@ const DEFAULT_SETTINGS = {
   createShoppingList: true,
   organizeShoppingList: true,
   includeAiTips: true,
+  includeMiseEnPlace: true,
   includeItemImages: true,
+  downloadVideo: true,
+  videoCreateRecipe: true,
+  videoQuality: "best",
+  videoContainer: "mp4",
+  videoCodec: "auto",
+  videoAudioOnly: false,
+  videoAudioQuality: "best",
+  videoSaveSubtitles: false,
+  videoSaveThumbnail: true,
+  videoSaveMetadata: true,
+  videoFallbackQuality: true,
 };
 
 const MAX_EXTRACTED_TEXT_LENGTH = 180000;
 const POPUP_IMPORT_REQUEST = "MEALIE_EXTENSION_POPUP_IMPORT";
 const POPUP_SAVE_WEBSITE_REQUEST = "MEALIE_EXTENSION_POPUP_SAVE_WEBSITE";
+const POPUP_SAVE_RESTAURANT_REQUEST = "MEALIE_EXTENSION_POPUP_SAVE_RESTAURANT";
+const POPUP_SAVE_VIDEO_REQUEST = "MEALIE_EXTENSION_POPUP_SAVE_VIDEO";
 const AUTH_COOKIE_NAME = "mealie.access_token";
 const SITE_LOCALE_COOKIE_NAME = "i18n_redirected";
 const extensionI18n = globalThis.MealieExtensionI18n;
@@ -35,10 +61,25 @@ const elements = {
   createShoppingList: document.getElementById("createShoppingList"),
   organizeShoppingList: document.getElementById("organizeShoppingList"),
   includeAiTips: document.getElementById("includeAiTips"),
+  includeMiseEnPlace: document.getElementById("includeMiseEnPlace"),
   includeItemImages: document.getElementById("includeItemImages"),
+  downloadVideo: document.getElementById("downloadVideo"),
+  videoCreateRecipe: document.getElementById("videoCreateRecipe"),
+  videoQuality: document.getElementById("videoQuality"),
+  videoContainer: document.getElementById("videoContainer"),
+  videoCodec: document.getElementById("videoCodec"),
+  videoAudioOnly: document.getElementById("videoAudioOnly"),
+  videoAudioQuality: document.getElementById("videoAudioQuality"),
+  videoSaveSubtitles: document.getElementById("videoSaveSubtitles"),
+  videoSaveThumbnail: document.getElementById("videoSaveThumbnail"),
+  videoSaveMetadata: document.getElementById("videoSaveMetadata"),
+  videoFallbackQuality: document.getElementById("videoFallbackQuality"),
+  saveVideoSettings: document.getElementById("saveVideoSettings"),
   extractOnly: document.getElementById("extractOnly"),
   sendToMealie: document.getElementById("sendToMealie"),
   saveWebsite: document.getElementById("saveWebsite"),
+  saveRestaurant: document.getElementById("saveRestaurant"),
+  saveVideo: document.getElementById("saveVideo"),
   connectMealie: document.getElementById("connectMealie"),
   previewPanel: document.getElementById("previewPanel"),
   previewText: document.getElementById("previewText"),
@@ -72,7 +113,19 @@ async function init() {
     elements.createShoppingList,
     elements.organizeShoppingList,
     elements.includeAiTips,
+    elements.includeMiseEnPlace,
     elements.includeItemImages,
+    elements.downloadVideo,
+    elements.videoCreateRecipe,
+    elements.videoQuality,
+    elements.videoContainer,
+    elements.videoCodec,
+    elements.videoAudioOnly,
+    elements.videoAudioQuality,
+    elements.videoSaveSubtitles,
+    elements.videoSaveThumbnail,
+    elements.videoSaveMetadata,
+    elements.videoFallbackQuality,
   ].forEach((element) => {
     element.addEventListener("change", saveSettingsFromForm);
     element.addEventListener("input", saveSettingsFromForm);
@@ -81,13 +134,18 @@ async function init() {
   elements.extractOnly.addEventListener("click", handleExtractOnly);
   elements.sendToMealie.addEventListener("click", handleSendToMealie);
   elements.saveWebsite.addEventListener("click", handleSaveWebsite);
+  elements.saveRestaurant.addEventListener("click", handleSaveRestaurant);
+  elements.saveVideo.addEventListener("click", handleSaveVideo);
+  elements.saveVideoSettings.addEventListener("click", handleSaveVideoSettings);
   elements.connectMealie.addEventListener("click", handleConnectMealie);
   elements.extractMode.addEventListener("change", updateModeText);
   elements.interfaceLanguage.addEventListener("change", handleInterfaceLanguageChange);
   elements.mealieUrl.addEventListener("input", scheduleMealieStatusCheck);
   elements.mealieUrl.addEventListener("change", checkMealieStatus);
 
-  await checkMealieStatus();
+  if (await checkMealieStatus()) {
+    await loadSharedVideoSettings();
+  }
 }
 
 async function loadSettings() {
@@ -156,7 +214,19 @@ function applySettings(settings) {
   elements.createShoppingList.checked = settings.createShoppingList !== false;
   elements.organizeShoppingList.checked = settings.organizeShoppingList !== false;
   elements.includeAiTips.checked = settings.includeAiTips !== false;
+  elements.includeMiseEnPlace.checked = settings.includeMiseEnPlace !== false;
   elements.includeItemImages.checked = settings.includeItemImages !== false;
+  elements.downloadVideo.checked = settings.downloadVideo !== false;
+  elements.videoCreateRecipe.checked = settings.videoCreateRecipe !== false;
+  elements.videoQuality.value = settings.videoQuality || DEFAULT_SETTINGS.videoQuality;
+  elements.videoContainer.value = settings.videoContainer || DEFAULT_SETTINGS.videoContainer;
+  elements.videoCodec.value = settings.videoCodec || DEFAULT_SETTINGS.videoCodec;
+  elements.videoAudioOnly.checked = settings.videoAudioOnly === true;
+  elements.videoAudioQuality.value = settings.videoAudioQuality || DEFAULT_SETTINGS.videoAudioQuality;
+  elements.videoSaveSubtitles.checked = settings.videoSaveSubtitles === true;
+  elements.videoSaveThumbnail.checked = settings.videoSaveThumbnail !== false;
+  elements.videoSaveMetadata.checked = settings.videoSaveMetadata !== false;
+  elements.videoFallbackQuality.checked = settings.videoFallbackQuality !== false;
   updateModeText();
   updateActionState();
 }
@@ -198,7 +268,19 @@ function currentSettings() {
     createShoppingList: elements.createShoppingList.checked,
     organizeShoppingList: elements.organizeShoppingList.checked,
     includeAiTips: elements.includeAiTips.checked,
+    includeMiseEnPlace: elements.includeMiseEnPlace.checked,
     includeItemImages: elements.includeItemImages.checked,
+    downloadVideo: elements.downloadVideo.checked,
+    videoCreateRecipe: elements.videoCreateRecipe.checked,
+    videoQuality: elements.videoQuality.value,
+    videoContainer: elements.videoContainer.value,
+    videoCodec: elements.videoCodec.value,
+    videoAudioOnly: elements.videoAudioOnly.checked,
+    videoAudioQuality: elements.videoAudioQuality.value,
+    videoSaveSubtitles: elements.videoSaveSubtitles.checked,
+    videoSaveThumbnail: elements.videoSaveThumbnail.checked,
+    videoSaveMetadata: elements.videoSaveMetadata.checked,
+    videoFallbackQuality: elements.videoFallbackQuality.checked,
   };
 }
 
@@ -568,6 +650,130 @@ async function handleSaveWebsite() {
   }
 }
 
+async function handleSaveRestaurant() {
+  setBusy(true);
+  hideRecipeLink();
+  setStatus(translator.t("status.saving-restaurant"));
+
+  try {
+    const settings = currentSettings();
+    void chrome.storage.sync.set(settings);
+    const response = await runBackgroundPageAction(POPUP_SAVE_RESTAURANT_REQUEST, settings);
+    if (response.preview) {
+      showPreview(response.preview);
+    }
+    const restaurant = response.restaurant;
+    setStatus(translator.t("status.restaurant-saved", { name: restaurant.name }), "success");
+    showRestaurantLink(settings.mealieUrl);
+  }
+  catch (error) {
+    setStatus(errorMessage(error), "error");
+  }
+  finally {
+    setBusy(false);
+  }
+}
+
+async function handleSaveVideo() {
+  setBusy(true);
+  hideRecipeLink();
+  setStatus(translator.t("status.saving-video"));
+
+  try {
+    const settings = currentSettings();
+    void chrome.storage.sync.set(settings);
+    const response = await runBackgroundPageAction(POPUP_SAVE_VIDEO_REQUEST, settings);
+    const video = response.video;
+    setStatus(translator.t("status.video-saved", { title: video.title }), "success");
+    showVideoLink(settings.mealieUrl);
+  }
+  catch (error) {
+    setStatus(errorMessage(error), "error");
+  }
+  finally {
+    setBusy(false);
+  }
+}
+
+async function handleSaveVideoSettings() {
+  setBusy(true);
+  try {
+    const settings = currentSettings();
+    await chrome.storage.sync.set(settings);
+    await syncVideoSettingsToMealie(settings);
+    setStatus(translator.t("status.video-settings-saved"), "success");
+  }
+  catch (error) {
+    setStatus(errorMessage(error), "error");
+  }
+  finally {
+    setBusy(false);
+  }
+}
+
+async function loadSharedVideoSettings() {
+  const settings = currentSettings();
+  const authToken = await findMealieAuthToken(settings.mealieUrl);
+  if (!authToken) return;
+  try {
+    const response = await fetch(`${settings.mealieUrl}/api/households/videos/settings`, {
+      credentials: "include",
+      headers: authHeaders(authToken),
+    });
+    const payload = await safeJson(response);
+    if (!response.ok || !payload) return;
+    const merged = {
+      ...settings,
+      downloadVideo: payload.downloadByDefault ?? payload.download_by_default ?? settings.downloadVideo,
+      videoQuality: payload.quality ?? settings.videoQuality,
+      videoContainer: payload.container ?? settings.videoContainer,
+      videoCodec: payload.codec ?? settings.videoCodec,
+      videoAudioOnly: payload.audioOnly ?? payload.audio_only ?? settings.videoAudioOnly,
+      videoAudioQuality: payload.audioQuality ?? payload.audio_quality ?? settings.videoAudioQuality,
+      videoSaveSubtitles: payload.saveSubtitles ?? payload.save_subtitles ?? settings.videoSaveSubtitles,
+      videoSaveThumbnail: payload.saveThumbnail ?? payload.save_thumbnail ?? settings.videoSaveThumbnail,
+      videoSaveMetadata: payload.saveMetadata ?? payload.save_metadata ?? settings.videoSaveMetadata,
+      videoFallbackQuality: payload.fallbackToLowerQuality ?? payload.fallback_to_lower_quality ?? settings.videoFallbackQuality,
+    };
+    applySettings(merged);
+    await chrome.storage.sync.set(merged);
+  }
+  catch {
+    // Local extension settings remain usable when the shared settings endpoint is unavailable.
+  }
+}
+
+async function syncVideoSettingsToMealie(settings) {
+  const authToken = await findMealieAuthToken(settings.mealieUrl);
+  if (!authToken) {
+    throw new Error(translator.t("status.open-and-login"));
+  }
+  const response = await fetch(`${settings.mealieUrl}/api/households/videos/settings`, {
+    method: "PUT",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(authToken),
+    },
+    body: JSON.stringify({
+      download_by_default: settings.downloadVideo,
+      quality: settings.videoQuality,
+      container: settings.videoContainer,
+      codec: settings.videoCodec,
+      audio_only: settings.videoAudioOnly,
+      audio_quality: settings.videoAudioQuality,
+      save_subtitles: settings.videoSaveSubtitles,
+      save_thumbnail: settings.videoSaveThumbnail,
+      save_metadata: settings.videoSaveMetadata,
+      fallback_to_lower_quality: settings.videoFallbackQuality,
+    }),
+  });
+  const payload = await safeJson(response);
+  if (!response.ok) {
+    throw new Error(apiErrorMessage(payload, response.status));
+  }
+}
+
 async function runBackgroundPageAction(type, settings) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.url) {
@@ -584,6 +790,7 @@ async function runBackgroundPageAction(type, settings) {
     payload: {
       ...settings,
       url: tab.url,
+      pageTitle: tab.title || "",
     },
   });
   if (!response?.ok) {
@@ -649,6 +856,7 @@ async function createRecipeFromBrowserPage(settings, extraction) {
       image_url: extraction.imageUrl,
       translate_language: translateLanguage,
       include_ai_tips: settings.includeAiTips,
+      include_mise_en_place: settings.includeMiseEnPlace !== false,
       include_item_images: settings.includeItemImages !== false,
       create_shopping_list: settings.createShoppingList,
       organize_shopping_list_with_ai: settings.organizeShoppingList,
@@ -688,6 +896,7 @@ async function createArticleFromBrowserPage(settings, extraction) {
       create_shopping_list: settings.createShoppingList,
       organize_shopping_list_with_ai: settings.organizeShoppingList,
       include_ai_tips: settings.includeAiTips,
+      include_mise_en_place: settings.includeMiseEnPlace !== false,
       include_item_images: settings.includeItemImages !== false,
     }),
   });
@@ -766,6 +975,9 @@ function updateActionState() {
   elements.extractOnly.disabled = isBusy;
   elements.sendToMealie.disabled = isBusy || !mealieSiteReady;
   elements.saveWebsite.disabled = isBusy || !mealieSiteReady;
+  elements.saveRestaurant.disabled = isBusy || !mealieSiteReady;
+  elements.saveVideo.disabled = isBusy || !mealieSiteReady;
+  elements.saveVideoSettings.disabled = isBusy || !mealieSiteReady;
 }
 
 function setStatus(message, type = "") {
@@ -802,6 +1014,20 @@ function showWebsiteLink(baseUrl) {
   showResultLink(
     `${normalizeBaseUrl(baseUrl)}/shopping-websites`,
     translator.t("links.open-websites"),
+  );
+}
+
+function showRestaurantLink(baseUrl) {
+  showResultLink(
+    `${normalizeBaseUrl(baseUrl)}/restaurants`,
+    translator.t("links.open-restaurants"),
+  );
+}
+
+function showVideoLink(baseUrl) {
+  showResultLink(
+    `${normalizeBaseUrl(baseUrl)}/videos`,
+    translator.t("links.open-videos"),
   );
 }
 

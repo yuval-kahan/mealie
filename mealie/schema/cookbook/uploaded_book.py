@@ -69,6 +69,60 @@ class UploadedBookOut(MealieModel):
             return {}
 
 
+class UploadedBookReaderPreferences(MealieModel):
+    font_size: int = Field(18, ge=12, le=36)
+    font_family: str = Field("serif", pattern="^(serif|sans-serif|dyslexic)$")
+    line_height: float = Field(1.75, ge=1.2, le=2.6)
+    word_spacing: float = Field(0, ge=0, le=12)
+    page_width: int = Field(980, ge=600, le=1500)
+
+
+class UploadedBookReaderNote(MealieModel):
+    id: str = Field(..., min_length=1, max_length=80)
+    title: str = Field("", max_length=200)
+    text: str = Field(..., min_length=1, max_length=4000)
+    page: int = Field(0, ge=0, le=100000)
+    page_index: int = Field(0, ge=0, le=100000)
+    chapter_id: str | None = Field(None, max_length=160)
+    created_at: str | None = Field(None, max_length=80)
+
+
+class UploadedBookReaderHighlight(MealieModel):
+    id: str = Field(..., min_length=1, max_length=80)
+    text: str = Field(..., min_length=1, max_length=2000)
+    page: int = Field(0, ge=0, le=100000)
+    page_index: int = Field(0, ge=0, le=100000)
+    chapter_id: str | None = Field(None, max_length=160)
+    start: int = Field(..., ge=0, le=2000000)
+    end: int = Field(..., ge=0, le=2000000)
+    created_at: str | None = Field(None, max_length=80)
+
+    @model_validator(mode="after")
+    def validate_offsets(self):
+        if self.end <= self.start:
+            raise ValueError("Highlight end must be greater than start")
+        return self
+
+
+class UploadedBookReadingStateUpdate(MealieModel):
+    current_page: int = Field(0, ge=0, le=100000)
+    current_page_index: int = Field(0, ge=0, le=100000)
+    current_chapter_id: str | None = Field(None, max_length=160)
+    reading_percent: float = Field(0, ge=0, le=100)
+    completed_chapters: list[str] = Field(default_factory=list, max_length=1000)
+    total_chapters: int = Field(0, ge=0, le=1000)
+    notes: list[UploadedBookReaderNote] = Field(default_factory=list, max_length=500)
+    highlights: list[UploadedBookReaderHighlight] = Field(default_factory=list, max_length=500)
+    preferences: UploadedBookReaderPreferences = Field(default_factory=UploadedBookReaderPreferences)
+
+
+class UploadedBookReadingStateOut(UploadedBookReadingStateUpdate):
+    id: UUID4
+    book_id: UUID4
+    user_id: UUID4
+    updated_at: datetime | None = UpdatedAtField(default=None)
+
+
 class UploadedBookExtractRequest(MealieModel):
     pages_per_chunk: int = Field(10, ge=1, le=100)
     translate_language: str = "Hebrew"
@@ -94,6 +148,15 @@ class UploadedBookTranslateRequest(MealieModel):
     include_ai_tips: bool = True
     create_shopping_lists: bool = True
     organize_shopping_lists_with_ai: bool = True
+
+
+class UploadedBookCoverURLRequest(MealieModel):
+    url: str = Field(..., min_length=8, max_length=4000)
+
+
+class UploadedBookManualTranslationPageRequest(MealieModel):
+    page: int = Field(..., ge=1, le=100000)
+    text: str = Field(..., min_length=1, max_length=200000)
 
 
 class UploadedBookRecipeSummary(MealieModel):

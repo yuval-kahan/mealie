@@ -24,6 +24,7 @@
     "create-shopping-list": "Also create an automatic shopping list",
     "organize-shopping-list": "Organize the shopping list with AI",
     "include-ai-tips": "Add AI notes, tips, and ingredient-variety recommendations",
+    "include-mise-en-place": "Add mise en place tasks with ingredients and tools",
     "include-item-images": "Find and save images for ingredients, tools, and shopping-list items"
   },
   "actions": {
@@ -32,7 +33,26 @@
     "send-recipe": "Send recipe to AI",
     "send-article": "Send article to AI",
     "save-website": "Save website",
+    "save-restaurant": "Save restaurant",
+    "save-video": "Save video",
     "connect-mealie": "Open / connect Mealie"
+  },
+  "video": {
+    "settings-title": "Video download settings",
+    "download": "Download and keep the video",
+    "create-recipe": "Create a recipe when a complete recipe is present",
+    "quality": "Quality",
+    "format": "Format",
+    "codec": "Codec",
+    "audio-quality": "Audio quality",
+    "audio-only": "Audio only",
+    "subtitles": "Save subtitles",
+    "thumbnail": "Save thumbnail",
+    "metadata": "Save metadata",
+    "fallback": "Use lower quality if needed",
+    "best": "Best available",
+    "automatic": "Automatic",
+    "save-settings": "Save video settings"
   },
   "preview": {
     "title": "Preview"
@@ -40,7 +60,9 @@
   "links": {
     "open-recipe": "Open recipe in Mealie",
     "open-article": "Open article in Mealie",
-    "open-websites": "Open saved websites in Mealie"
+    "open-websites": "Open saved websites in Mealie",
+    "open-restaurants": "Open saved restaurants in Mealie",
+    "open-videos": "Open saved videos in Mealie"
   },
   "status": {
     "open-and-login": "Open Mealie in a tab in this browser and sign in before using the extension.",
@@ -64,11 +86,17 @@
     "attention": "Attention: {message}",
     "extraction-finished": "Extraction completed",
     "saving-website": "Analyzing and saving the current food website...",
-    "website-saved": "Website saved: {name}"
+    "website-saved": "Website saved: {name}",
+    "saving-restaurant": "Analyzing and saving the current restaurant...",
+    "restaurant-saved": "Restaurant saved: {name}",
+    "saving-video": "Saving the video. Download and AI processing will continue in the background...",
+    "video-saved": "Video saved and background processing started: {title}",
+    "video-settings-saved": "Video download settings saved"
   },
   "errors": {
     "invalid-mealie-url": "The Mealie address is invalid.",
     "invalid-recipe-url": "The recipe link is invalid.",
+    "invalid-video-url": "The video link is invalid.",
     "active-tab-missing": "No active tab was found.",
     "unsupported-page": "This page cannot be extracted. Open a regular recipe page and try again.",
     "text-extraction-failed": "Could not extract text from the page.",

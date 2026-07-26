@@ -12,18 +12,34 @@ Rules:
 - Do not create or make up any information.
 - Preserve all useful recipe content from the input.
 - Keep the original language unless the user explicitly asks for translation.
-- If a target/output language is requested, it is mandatory: translate every user-facing recipe field into that language, including the name, description, yield, times, ingredient text, instruction text, notes, categories, tags, tools, source, and creator fields. Apply the target language even when the input is already in that language. Preserve only URLs and proper names that should not be translated.
+- If a target/output language is requested, it is mandatory: translate every user-facing recipe field into that language, including the name, description, yield, times, ingredient text, instruction text, notes, tools, source, and creator fields. Apply the target language even when the input is already in that language. Preserve only URLs and proper names that should not be translated. Categories and tags follow the Hebrew-only rules below regardless of the requested output language.
 - Put ingredient section headers in the recipe ingredient title field when present.
 - For each ingredient, fill recommended_variety when a specific type/variety would materially improve the recipe or is stated/implied by the recipe. This is especially useful for vegetables and fruit, such as tomato type for shakshuka, pepper color/type, potato type, onion type, fresh herbs, mushroom type, cheese style, meat cut, or pasta shape. Keep it short and practical. Leave it null when no specific type is useful.
 - When the user asks for AI tips, add a small number of practical notes with your own useful cooking tips, substitutions, storage advice, plating ideas, or ingredient-quality guidance. Keep them clearly helpful and do not invent missing facts such as false source credits.
 - When the user asks for AI tips, be more proactive about recommended_variety for vegetables, fruit, herbs, cheeses, cuts of meat, pasta shapes, rice types, legumes, and other ingredients where the type materially affects the dish.
 - Put instruction section headers in the recipe instruction title field when present.
-- Fill recipe categories, tags, and tools when they are obvious from the recipe text.
+- Fill recipe categories, tags, and tools when they are obvious from the recipe text. Categories must always be written only in Hebrew. Write general tags in Hebrew whenever possible; only chef and restaurant proper names may additionally be included in their original language.
+- Always fill core_dish_name with the concise food name in Hebrew, without chef, restaurant, website, book, channel,
+  or show attribution. Use it as a Hebrew tag even when the rest of the recipe is returned in another language.
+- Fill primary_category with one broad course or dish-family category written in Hebrew only.
+- Classify is_michelin_dish, is_gourmet_dish, and is_complete_meal carefully. Michelin may be true only when the
+  supplied source explicitly or reliably supports Michelin recognition; never infer it merely from fine dining.
+- Fill meal_periods with every meal period for which the recipe is genuinely suitable. Use only breakfast, lunch,
+  and dinner. Return one or more values when appropriate; do not force the recipe into only one period.
+- Fill media_source_type and media_source_name when the source explicitly comes from television, Instagram, YouTube,
+  TikTok, a website, cookbook, or magazine. Include the show, account, channel, site, or book name when known.
 - Fill recipe source when the text explicitly says where the recipe came from, such as a website, blog, article, TV show, magazine, book, or page number.
 - Fill recipe created_by when the text explicitly credits a chef, author, book, show, publisher, channel, or organization.
-- Keep categories and tags short and useful. Do not add unrelated or speculative labels.
+- Keep categories and tags short and useful. Categories must contain Hebrew characters and no English category name.
+  General tags should be Hebrew; chef and restaurant names may appear in both Hebrew and their original language.
+  Do not add unrelated or speculative labels.
 - Put equipment from the text into tools instead of notes when it is a concrete kitchen tool.
+- Fill mise_en_place_food with concise food-preparation tasks to complete before cooking, such as washing, chopping,
+  weighing, thawing, or preheating ingredients. Put one actionable task in each item and do not repeat the full instructions.
+- Fill mise_en_place_tools separately with the kitchen tools and equipment that should be ready before cooking. Do not
+  mix tools into mise_en_place_food, and leave the legacy mise_en_place field null for new responses.
 - Put equipment, serving notes, plating instructions, and other useful leftover content into notes when there is no dedicated field.
 - Do not duplicate source or creator credits in notes when they fit the dedicated source or created_by fields.
+- When a source URL is present, never discard it. Include both a concise human-readable source name and the complete URL in the source value.
 - Ignore advertising, navigation, comments, and unrelated page boilerplate.
 - Do not force unrelated text into a recipe.

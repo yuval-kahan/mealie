@@ -28,12 +28,18 @@ class ShoppingWebsiteOut(ShoppingWebsiteBase):
     updated_at: datetime | None = UpdatedAtField(default=None)
     recipe_ids: list[UUID4] = Field(default_factory=list)
     shopping_list_ids: list[UUID4] = Field(default_factory=list)
+    has_image: bool = False
+    image_version: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class ShoppingWebsiteAIRequest(MealieModel):
     url: str = Field(..., min_length=1, max_length=2000)
+
+
+class ShoppingWebsiteImageURLRequest(MealieModel):
+    url: str = Field(..., min_length=1, max_length=4000)
 
 
 class ShoppingWebsiteBrowserPageRequest(ShoppingWebsiteAIRequest):

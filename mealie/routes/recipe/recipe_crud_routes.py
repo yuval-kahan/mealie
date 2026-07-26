@@ -39,6 +39,7 @@ from mealie.db.models.household.shopping_list import (
     ShoppingListRecipeReference,
 )
 from mealie.db.models.household.shopping_website import RecipeShoppingWebsite, ShoppingWebsite
+from mealie.db.models.household.video import RecipeVideo, Video
 from mealie.db.models.recipe.api_extras import ShoppingListExtras
 from mealie.pkgs import cache
 from mealie.repos.all_repositories import get_repositories
@@ -51,7 +52,7 @@ from mealie.schema.household.group_shopping_list import (
     ShoppingListCreate,
 )
 from mealie.schema.make_dependable import make_dependable
-from mealie.schema.openai.recipe import OpenAIRecipeIngredientAdjustment, OpenAIRecipeIngredientScale
+from mealie.schema.openai.recipe import OpenAIRecipe, OpenAIRecipeIngredientAdjustment, OpenAIRecipeIngredientScale
 from mealie.schema.recipe import Recipe, ScrapeRecipe, ScrapeRecipeData
 from mealie.schema.recipe.recipe import (
     CreateRecipe,
@@ -93,6 +94,7 @@ from mealie.services.recipe.recipe_data_service import (
     NotAnImageError,
     RecipeDataService,
 )
+from mealie.services.recipe.recipe_service import OpenAIRecipeService
 from mealie.services.recipe.video_asset_service import (
     VIDEO_ASSET_EXTENSIONS,
     VideoTranscodeError,
@@ -132,12 +134,21 @@ class CreateRecipeFromText(MealieModel):
     text: str = Field(..., min_length=1, max_length=200000)
     translate_language: str | None = None
     include_ai_tips: bool = True
+    include_mise_en_place: bool = True
     auto_image: bool = True
     include_item_images: bool = True
 
 
 class RecipeIngredientsAdjustWithAIRequest(MealieModel):
     text: str = Field(..., min_length=2, max_length=4000)
+
+
+class RecipeAIEditRequest(MealieModel):
+    instruction: str = Field(..., min_length=2, max_length=12000)
+
+
+class RecipeAIImageRequest(MealieModel):
+    prompt: str | None = Field(None, max_length=2000)
 
 
 class RecipeIngredientsAdjustWithAIResponse(MealieModel):
@@ -667,6 +678,7 @@ class RecipeController(BaseRecipeController):
         notes: str | None = Form(None, max_length=5000),
         translate_language: str | None = Query(None, alias="translateLanguage"),
         include_ai_tips: bool = Query(True, alias="includeAiTips"),
+        include_mise_en_place: bool = Query(True, alias="includeMiseEnPlace"),
         include_item_images: bool = Query(True, alias="includeItemImages"),
     ):
         """
@@ -681,7 +693,13 @@ class RecipeController(BaseRecipeController):
             )
 
         try:
-            recipe = await self.service.create_from_images(images, translate_language, include_ai_tips, notes)
+            recipe = await self.service.create_from_images(
+                images,
+                translate_language,
+                include_ai_tips,
+                notes,
+                include_mise_en_place=include_mise_en_place,
+            )
         except exceptions.NotARecipe as e:
             raise HTTPException(
                 status_code=400,
@@ -733,6 +751,7 @@ class RecipeController(BaseRecipeController):
                 recipe_text,
                 translate_language=data.translate_language,
                 include_ai_tips=data.include_ai_tips,
+                include_mise_en_place=data.include_mise_en_place,
                 auto_image=data.auto_image,
             )
             if data.include_item_images:
@@ -798,7 +817,13 @@ class RecipeController(BaseRecipeController):
                 recipe_text,
                 data.translate_language,
                 data.include_ai_tips,
+                include_mise_en_place=data.include_mise_en_place,
                 auto_image=not data.image_url,
+            )
+            recipe = self.service.apply_source_metadata(
+                recipe,
+                source_title=data.source_title,
+                source_url=data.source_url,
             )
             if data.include_item_images:
                 await self._ensure_recipe_item_images(recipe)
@@ -1000,9 +1025,38 @@ class RecipeController(BaseRecipeController):
                 linked_ids.update(name_to_ids.get((name or "").strip().casefold(), set()))
 
         linked_id_values = {str(recipe_id) for recipe_id in linked_ids}
+        video_counts = dict(
+            self.session.execute(
+                sqlalchemy.select(RecipeVideo.recipe_id, sqlalchemy.func.count(RecipeVideo.video_id))
+                .join(Video, Video.id == RecipeVideo.video_id)
+                .where(RecipeVideo.recipe_id.in_(recipe_ids), Video.group_id == self.group_id)
+                .group_by(RecipeVideo.recipe_id)
+            ).all()
+        )
+        website_counts = dict(
+            self.session.execute(
+                sqlalchemy.select(
+                    RecipeShoppingWebsite.recipe_id,
+                    sqlalchemy.func.count(RecipeShoppingWebsite.shopping_website_id),
+                )
+                .join(ShoppingWebsite, ShoppingWebsite.id == RecipeShoppingWebsite.shopping_website_id)
+                .where(
+                    RecipeShoppingWebsite.recipe_id.in_(recipe_ids),
+                    ShoppingWebsite.group_id == self.group_id,
+                )
+                .group_by(RecipeShoppingWebsite.recipe_id)
+            ).all()
+        )
         for item in items:
             extras = dict(item.get("extras") or {})
-            extras["shoppingListLinked"] = str(item.get("id")) in linked_id_values
+            item_id = UUID(str(item["id"])) if item.get("id") else None
+            has_shopping_list = str(item.get("id")) in linked_id_values
+            extras["shoppingListLinked"] = has_shopping_list
+            extras["linkedResourcesCount"] = (
+                int(has_shopping_list)
+                + int(video_counts.get(item_id, 0))
+                + int(website_counts.get(item_id, 0))
+            )
             item["extras"] = extras
 
     async def _create_browser_recipe_shopping_list(
@@ -1718,8 +1772,8 @@ class RecipeController(BaseRecipeController):
     # ==================================================================================================================
     # Image and Assets
 
-    @router.post("/{slug}/image", tags=["Recipe: Images and Assets"])
-    async def scrape_image_url(self, slug: str, url: ScrapeRecipe):
+    @router.post("/{slug}/image", response_model=UpdateImageResponse, tags=["Recipe: Images and Assets"])
+    async def scrape_image_url(self, slug: str, url: ScrapeRecipe) -> UpdateImageResponse:
         recipe = self.mixins.get_one(slug)
         data_service = RecipeDataService(recipe.id)
 
@@ -1743,11 +1797,71 @@ class RecipeController(BaseRecipeController):
             )
 
         recipe.image = cache.cache_key.new_key()
-        self.service.update_one(recipe.slug, recipe)
+        updated_recipe = self.service.update_one(recipe.slug, recipe)
+        return UpdateImageResponse(image=updated_recipe.image or recipe.image)
+
+    @router.post("/{slug}/ai-edit", response_model=Recipe, tags=["Recipe: AI"])
+    async def create_ai_recipe_edit(self, slug: str, data: RecipeAIEditRequest) -> Recipe:
+        recipe = self.mixins.get_one(slug)
+        openai_service = OpenAIService(self.repos)
+        if not (openai_service.provider_settings and openai_service.provider_settings.ai_enabled):
+            raise HTTPException(status_code=400, detail=ErrorResponse.respond("AI services are not available"))
+
+        recipe_payload = recipe.model_dump(
+            mode="json",
+            exclude={"assets", "comments", "nutrition", "settings", "image"},
+        )
+        message = (
+            f"User edit request:\n{data.instruction.strip()}\n\n"
+            "Current structured recipe JSON:\n"
+            f"{orjson.dumps(recipe_payload).decode('utf-8')}"
+        )
+        try:
+            response = await openai_service.get_response(
+                openai_service.get_prompt("recipes.edit-recipe"),
+                message,
+                response_schema=OpenAIRecipe,
+            )
+            converted = OpenAIRecipeService(
+                self.repos,
+                self.user,
+                self.household,
+                self.translator,
+            ).convert_recipe(response)
+        except Exception as error:
+            self.handle_exceptions(error)
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("AI could not edit this recipe"),
+            ) from error
+
+        result = recipe.model_dump()
+        editable_fields = (
+            "name",
+            "description",
+            "recipe_yield",
+            "total_time",
+            "prep_time",
+            "perform_time",
+            "recipe_ingredient",
+            "recipe_instructions",
+            "recipe_category",
+            "tags",
+            "tools",
+            "notes",
+        )
+        for field_name in editable_fields:
+            result[field_name] = getattr(converted, field_name)
+        result["source"] = converted.source or recipe.source
+        result["created_by"] = converted.created_by or recipe.created_by
+        result["extras"] = {**(recipe.extras or {}), **(converted.extras or {})}
+        result["slug"] = recipe.slug
+        return Recipe.model_validate(result)
 
     @router.post("/{slug}/image/ai", response_model=UpdateImageResponse, tags=["Recipe: Images and Assets"])
-    async def create_ai_recipe_image(self, slug: str):
+    async def create_ai_recipe_image(self, slug: str, data: RecipeAIImageRequest):
         recipe = self.mixins.get_one(slug)
+        user_prompt = " ".join((data.prompt or "").split()).strip()[:2000]
         category_names = [category.name for category in recipe.recipe_category or [] if category.name]
         tag_names = [tag.name for tag in recipe.tags or [] if tag.name]
         ingredient_names = [
@@ -1757,6 +1871,7 @@ class RecipeController(BaseRecipeController):
         ingredient_names = [name.strip() for name in ingredient_names if name and name.strip()]
         recipe_name = recipe.name or recipe.slug
         search_queries = [
+            user_prompt or None,
             recipe_name,
             " ".join([recipe_name, *category_names[:2], *tag_names[:2]]),
             " ".join([recipe_name, *ingredient_names[:3]]),

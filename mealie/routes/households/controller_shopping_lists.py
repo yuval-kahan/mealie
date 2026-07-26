@@ -5,12 +5,14 @@ import sqlalchemy as sa
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import UUID4, Field
 
+from mealie.core.exceptions import UnexpectedNone
 from mealie.db.models.household.shopping_list import (
     ShoppingListItem,
     ShoppingListItemRecipeReference,
     ShoppingListRecipeReference,
 )
 from mealie.db.models.household.shopping_website import ShoppingListShoppingWebsite, ShoppingWebsite
+from mealie.db.models.household.video import ShoppingListVideo
 from mealie.db.models.recipe.recipe import RecipeModel
 from mealie.routes._base.base_controllers import BaseCrudController
 from mealie.routes._base.controller import controller
@@ -53,6 +55,10 @@ item_router = APIRouter(prefix="/households/shopping/items", tags=["Households: 
 class ShoppingListOrganizeAIRequest(MealieModel):
     include_ai_tips: bool = False
     target_language: str | None = None
+
+
+class ShoppingListAdjustQuantitiesAIRequest(MealieModel):
+    request: str = Field(..., min_length=2, max_length=2000)
 
 
 class ShoppingListItemImagesEnsureResponse(MealieModel):
@@ -234,6 +240,67 @@ class ShoppingListController(BaseCrudController):
             website_names=list(linked_websites.values()),
         )
 
+    def _annotate_linked_resource_counts(self, items: list[ShoppingListSummary]) -> None:
+        list_ids = [item.id for item in items]
+        if not list_ids:
+            return
+
+        recipe_links = sa.union(
+            sa.select(
+                ShoppingListRecipeReference.shopping_list_id.label("shopping_list_id"),
+                ShoppingListRecipeReference.recipe_id.label("resource_id"),
+            ).where(
+                ShoppingListRecipeReference.shopping_list_id.in_(list_ids),
+                ShoppingListRecipeReference.recipe_id.is_not(None),
+            ),
+            sa.select(
+                ShoppingListItem.shopping_list_id.label("shopping_list_id"),
+                ShoppingListItemRecipeReference.recipe_id.label("resource_id"),
+            )
+            .join(
+                ShoppingListItemRecipeReference,
+                ShoppingListItemRecipeReference.shopping_list_item_id == ShoppingListItem.id,
+            )
+            .where(
+                ShoppingListItem.shopping_list_id.in_(list_ids),
+                ShoppingListItemRecipeReference.recipe_id.is_not(None),
+            ),
+        ).subquery()
+        recipe_counts = dict(
+            self.session.execute(
+                sa.select(recipe_links.c.shopping_list_id, sa.func.count(recipe_links.c.resource_id)).group_by(
+                    recipe_links.c.shopping_list_id
+                )
+            ).all()
+        )
+        video_counts = dict(
+            self.session.execute(
+                sa.select(ShoppingListVideo.shopping_list_id, sa.func.count(ShoppingListVideo.video_id))
+                .where(ShoppingListVideo.shopping_list_id.in_(list_ids))
+                .group_by(ShoppingListVideo.shopping_list_id)
+            ).all()
+        )
+        website_counts = dict(
+            self.session.execute(
+                sa.select(
+                    ShoppingListShoppingWebsite.shopping_list_id,
+                    sa.func.count(ShoppingListShoppingWebsite.shopping_website_id),
+                )
+                .where(ShoppingListShoppingWebsite.shopping_list_id.in_(list_ids))
+                .group_by(ShoppingListShoppingWebsite.shopping_list_id)
+            ).all()
+        )
+
+        for item in items:
+            item.extras = {
+                **(item.extras or {}),
+                "linkedResourcesCount": (
+                    int(recipe_counts.get(item.id, 0))
+                    + int(video_counts.get(item.id, 0))
+                    + int(website_counts.get(item.id, 0))
+                ),
+            }
+
     # =======================================================================
     # CRUD Operations
 
@@ -248,6 +315,7 @@ class ShoppingListController(BaseCrudController):
             override=ShoppingListSummary,
         )
 
+        self._annotate_linked_resource_counts(response.items)
         response.set_pagination_guides(router.url_path_for("get_all"), q.model_dump())
         return response
 
@@ -405,6 +473,43 @@ class ShoppingListController(BaseCrudController):
             message=self.t("notifications.generic-updated", name=shopping_list.name),
         )
 
+        return shopping_list
+
+    @router.post("/{item_id}/adjust-quantities-ai", response_model=ShoppingListOut)
+    async def adjust_shopping_list_quantities_with_ai(
+        self,
+        item_id: UUID4,
+        data: ShoppingListAdjustQuantitiesAIRequest,
+    ):
+        ai_settings = self.group.ai_provider_settings
+        if not (ai_settings and ai_settings.ai_enabled):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=ErrorResponse.respond("OpenAI services are not enabled"),
+            )
+
+        try:
+            shopping_list, items, _reason = await self.service.adjust_quantities_with_ai(item_id, data.request)
+        except (ValueError, UnexpectedNone) as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=ErrorResponse.respond(str(e)),
+            ) from e
+        except Exception as e:
+            self.logger.exception("Failed to adjust shopping list quantities with AI")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=ErrorResponse.respond("AI shopping list quantity adjustment failed"),
+            ) from e
+
+        publish_list_item_events(self.publish_event, items)
+        self.publish_event(
+            event_type=EventTypes.shopping_list_updated,
+            document_data=EventShoppingListData(operation=EventOperation.update, shopping_list_id=shopping_list.id),
+            group_id=shopping_list.group_id,
+            household_id=shopping_list.household_id,
+            message=self.t("notifications.generic-updated", name=shopping_list.name),
+        )
         return shopping_list
 
     @router.post("/merge", response_model=ShoppingListOut, status_code=201)

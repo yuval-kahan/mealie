@@ -45,6 +45,7 @@
     "create-shopping-list": "צור גם רשימת קניות אוטומטית",
     "organize-shopping-list": "ארגן את רשימת הקניות בעזרת AI",
     "include-ai-tips": "הוסף הערות, טיפים והמלצות לגיוון רכיבים מ-AI",
+    "include-mise-en-place": "הוסף הכנה מראש עם רכיבים וכלים",
     "include-item-images": "מצא ושמור תמונות עבור רכיבים, כלים ופריטי רשימת קניות"
   },
   "actions": {
@@ -53,7 +54,26 @@
     "send-recipe": "שלח מתכון ל-AI",
     "send-article": "שלח מאמר ל-AI",
     "save-website": "שמור אתר",
+    "save-restaurant": "שמור מסעדה",
+    "save-video": "שמור סרטון",
     "connect-mealie": "פתח / התחבר ל-Mealie"
+  },
+  "video": {
+    "settings-title": "הגדרות הורדת סרטונים",
+    "download": "הורד ושמור את הסרטון",
+    "create-recipe": "צור מתכון אם קיים מתכון מלא",
+    "quality": "איכות",
+    "format": "פורמט",
+    "codec": "מקודד",
+    "audio-quality": "איכות שמע",
+    "audio-only": "שמע בלבד",
+    "subtitles": "שמור כתוביות",
+    "thumbnail": "שמור תמונה ממוזערת",
+    "metadata": "שמור פרטי סרטון",
+    "fallback": "השתמש באיכות נמוכה יותר במידת הצורך",
+    "best": "האיכות הטובה ביותר",
+    "automatic": "אוטומטי",
+    "save-settings": "שמור הגדרות סרטון"
   },
   "preview": {
     "title": "תצוגה מקדימה"
@@ -61,7 +81,9 @@
   "links": {
     "open-recipe": "פתח מתכון ב-Mealie",
     "open-article": "פתח מאמר ב-Mealie",
-    "open-websites": "פתח אתרים שמורים ב-Mealie"
+    "open-websites": "פתח אתרים שמורים ב-Mealie",
+    "open-restaurants": "פתח מסעדות שמורות ב-Mealie",
+    "open-videos": "פתח סרטונים שמורים ב-Mealie"
   },
   "status": {
     "open-and-login": "פתח את Mealie בלשונית בדפדפן זה והתחבר לפני השימוש בתוסף.",
@@ -85,11 +107,17 @@
     "attention": "שים לב: {message}",
     "extraction-finished": "החילוץ הושלם",
     "saving-website": "מנתח ושומר את אתר האוכל הנוכחי...",
-    "website-saved": "האתר נשמר: {name}"
+    "website-saved": "האתר נשמר: {name}",
+    "saving-restaurant": "מנתח ושומר את המסעדה הנוכחית...",
+    "restaurant-saved": "המסעדה נשמרה: {name}",
+    "saving-video": "שומר את הסרטון. ההורדה ועיבוד ה-AI ימשיכו ברקע...",
+    "video-saved": "הסרטון נשמר והעיבוד ברקע התחיל: {title}",
+    "video-settings-saved": "הגדרות הורדת הסרטונים נשמרו"
   },
   "errors": {
     "invalid-mealie-url": "כתובת Mealie אינה תקינה.",
     "invalid-recipe-url": "קישור המתכון אינו תקין.",
+    "invalid-video-url": "קישור הסרטון אינו תקין.",
     "active-tab-missing": "לא נמצאה לשונית פעילה.",
     "unsupported-page": "לא ניתן לחלץ דף זה. פתח דף מתכון רגיל ונסה שוב.",
     "text-extraction-failed": "לא ניתן היה לחלץ טקסט מהדף.",

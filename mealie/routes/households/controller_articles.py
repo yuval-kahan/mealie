@@ -1,5 +1,6 @@
 import json
 import re
+from uuid import uuid4
 
 import httpx
 import sqlalchemy as sa
@@ -113,8 +114,7 @@ class ArticlesController(BaseUserController):
     def _unique_slug(self, title: str, current_article_id: UUID4 | None = None) -> str:
         base_slug = slugify(title, max_length=80) or "article"
         slug = base_slug
-        suffix = 2
-        while True:
+        for suffix in range(2, 10_002):
             query = sa.select(Article.id).where(Article.group_id == self.group_id, Article.slug == slug)
             if current_article_id:
                 query = query.where(Article.id != current_article_id)
@@ -122,7 +122,8 @@ class ArticlesController(BaseUserController):
             if not exists:
                 return slug
             slug = f"{base_slug}-{suffix}"
-            suffix += 1
+
+        return f"{base_slug}-{uuid4().hex[:8]}"
 
     def _apply_article_data(self, article: Article, data: ArticleCreate | ArticleUpdate) -> Article:
         article.title = data.title.strip()
@@ -286,6 +287,7 @@ class ArticlesController(BaseUserController):
             create_shopping_list=data.create_shopping_list,
             organize_shopping_list_with_ai=data.organize_shopping_list_with_ai,
             include_ai_tips=data.include_ai_tips,
+            include_mise_en_place=data.include_mise_en_place,
             include_item_images=data.include_item_images,
         )
         return await self.create_article_from_browser_page(browser_data)
@@ -324,7 +326,13 @@ class ArticlesController(BaseUserController):
                         recipe_text,
                         data.translate_language,
                         data.include_ai_tips,
+                        data.include_mise_en_place,
                         auto_image=not data.image_url,
+                    )
+                    recipe = recipe_service.apply_source_metadata(
+                        recipe,
+                        source_title=data.source_title,
+                        source_url=data.source_url,
                     )
                     if data.image_url:
                         await recipe_service.attach_best_effort_image(

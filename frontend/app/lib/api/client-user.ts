@@ -28,6 +28,10 @@ import { AIProvidersAPI } from "./user/group-ai-providers";
 import { UploadedBooksAPI } from "./user/uploaded-books";
 import { ArticlesAPI } from "./user/articles";
 import { ShoppingWebsitesAPI } from "./user/shopping-websites";
+import { RestaurantsAPI } from "./user/restaurants";
+import { VideosAPI } from "./user/videos";
+import { LinkedResourcesAPI } from "./user/linked-resources";
+import { PantryItemsAPI } from "./user/pantry-items";
 import type { ApiRequestInstance } from "~/lib/api/types/non-generated";
 
 export class UserApiClient {
@@ -61,6 +65,10 @@ export class UserApiClient {
   public uploadedBooks: UploadedBooksAPI;
   public articles: ArticlesAPI;
   public shoppingWebsites: ShoppingWebsitesAPI;
+  public restaurants: RestaurantsAPI;
+  public videos: VideosAPI;
+  public linkedResources: LinkedResourcesAPI;
+  public pantryItems: PantryItemsAPI;
 
   constructor(requests: ApiRequestInstance) {
     // Recipes
@@ -92,6 +100,10 @@ export class UserApiClient {
     this.uploadedBooks = new UploadedBooksAPI(requests);
     this.articles = new ArticlesAPI(requests);
     this.shoppingWebsites = new ShoppingWebsitesAPI(requests);
+    this.restaurants = new RestaurantsAPI(requests);
+    this.videos = new VideosAPI(requests);
+    this.linkedResources = new LinkedResourcesAPI(requests);
+    this.pantryItems = new PantryItemsAPI(requests);
 
     // Admin
     this.backups = new BackupAPI(requests);

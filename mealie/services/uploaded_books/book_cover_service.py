@@ -3,7 +3,7 @@ import json
 from io import BytesIO
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import httpx
 from PIL import Image, ImageOps
@@ -42,6 +42,71 @@ class UploadedBookCoverService(BaseService):
             return {}
         return value if isinstance(value, dict) else {}
 
+    def _save_metadata(self, book: UploadedBook, source: str, source_url: str | None = None) -> None:
+        metadata = self._metadata(book)
+        metadata["cover_file_name"] = BOOK_COVER_FILE_NAME
+        metadata["cover_source"] = source
+        if source_url:
+            metadata["cover_source_url"] = source_url
+        else:
+            metadata.pop("cover_source_url", None)
+        book.book_metadata_json = json.dumps(metadata, ensure_ascii=False)
+        self.repos.session.add(book)
+        self.repos.session.commit()
+        self.repos.session.refresh(book)
+
+    async def save_content(
+        self,
+        book: UploadedBook,
+        uploaded_books_root: Path,
+        content: bytes,
+        source: str = "upload",
+    ) -> bool:
+        if not content or len(content) > BOOK_COVER_MAX_BYTES:
+            raise ValueError("Cookbook cover is empty or exceeds the size limit")
+        target = self.cover_path(uploaded_books_root, book)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        await asyncio.to_thread(self._write_cover, content, target)
+        self._save_metadata(book, source)
+        return True
+
+    async def save_url(self, book: UploadedBook, uploaded_books_root: Path, url: str) -> bool:
+        normalized_url = url.strip()
+        parts = urlsplit(normalized_url)
+        if parts.scheme.lower() not in {"http", "https"} or not parts.netloc:
+            raise ValueError("A valid HTTP or HTTPS cover address is required")
+        target = self.cover_path(uploaded_books_root, book)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        limits = httpx.Limits(max_connections=2, max_keepalive_connections=1)
+        async with httpx.AsyncClient(
+            transport=safehttp.AsyncSafeTransport(impersonate="chrome"),
+            timeout=20.0,
+            follow_redirects=True,
+            limits=limits,
+        ) as client:
+            if not await self._download_cover(client, normalized_url, target):
+                raise ValueError("The cookbook cover could not be downloaded")
+        self._save_metadata(book, "url", normalized_url)
+        return True
+
+    async def refresh_cover(self, book: UploadedBook, uploaded_books_root: Path) -> bool:
+        target = self.cover_path(uploaded_books_root, book)
+        backup = target.with_suffix(".previous.webp")
+        backup.unlink(missing_ok=True)
+        if target.exists():
+            target.replace(backup)
+        try:
+            if await self.ensure_cover(book, uploaded_books_root):
+                backup.unlink(missing_ok=True)
+                return True
+            if backup.exists():
+                backup.replace(target)
+            return False
+        except Exception:
+            if backup.exists():
+                backup.replace(target)
+            raise
+
     async def ensure_cover(self, book: UploadedBook, uploaded_books_root: Path) -> bool:
         target = self.cover_path(uploaded_books_root, book)
         if target.exists() and target.stat().st_size > 0:
@@ -62,13 +127,7 @@ class UploadedBookCoverService(BaseService):
         ) as client:
             for url, source in candidates[:BOOK_COVER_SEARCH_LIMIT]:
                 if await self._download_cover(client, url, target):
-                    metadata["cover_file_name"] = BOOK_COVER_FILE_NAME
-                    metadata["cover_source_url"] = url
-                    metadata["cover_source"] = source
-                    book.book_metadata_json = json.dumps(metadata, ensure_ascii=False)
-                    self.repos.session.add(book)
-                    self.repos.session.commit()
-                    self.repos.session.refresh(book)
+                    self._save_metadata(book, source, url)
                     return True
 
         return False
@@ -202,14 +261,19 @@ class UploadedBookCoverService(BaseService):
 
     async def _download_cover(self, client: httpx.AsyncClient, url: str, target: Path) -> bool:
         try:
-            response = await client.get(url, headers={"User-Agent": "Mealie cookbook cover cache"})
-            if response.status_code != 200:
-                return False
-            if "image" not in response.headers.get("content-type", "").lower():
-                return False
-            if len(response.content) > BOOK_COVER_MAX_BYTES:
-                return False
-            await asyncio.to_thread(self._write_cover, response.content, target)
+            chunks: list[bytes] = []
+            total = 0
+            async with client.stream("GET", url, headers={"User-Agent": "Mealie cookbook cover cache"}) as response:
+                if response.status_code != 200:
+                    return False
+                if "image" not in response.headers.get("content-type", "").lower():
+                    return False
+                async for chunk in response.aiter_bytes():
+                    total += len(chunk)
+                    if total > BOOK_COVER_MAX_BYTES:
+                        return False
+                    chunks.append(chunk)
+            await asyncio.to_thread(self._write_cover, b"".join(chunks), target)
             return target.exists() and target.stat().st_size > 0
         except Exception:
             self.logger.exception("Failed to cache cookbook cover from %s", url)

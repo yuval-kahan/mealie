@@ -9,6 +9,32 @@
       :entity-id="id"
     />
     <BaseDialog
+      v-model="aiQuantityDialog"
+      :title="$t('shopping-list.adjust-quantities-with-ai')"
+      :icon="$globals.icons.robot"
+      :submit-text="$t('general.apply')"
+      :loading="aiQuantityLoading"
+      :submit-disabled="aiQuantityRequest.trim().length < 2"
+      can-submit
+      @submit="adjustShoppingListQuantities"
+      @close="aiQuantityRequest = ''"
+    >
+      <v-card-text>
+        <p class="text-body-2 text-medium-emphasis mb-3">
+          {{ $t("shopping-list.adjust-quantities-with-ai-description") }}
+        </p>
+        <v-textarea
+          v-model="aiQuantityRequest"
+          :label="$t('shopping-list.quantity-change')"
+          :placeholder="$t('shopping-list.adjust-quantities-with-ai-placeholder')"
+          rows="4"
+          maxlength="2000"
+          counter
+          autofocus
+        />
+      </v-card-text>
+    </BaseDialog>
+    <BaseDialog
       v-model="state.checkAllDialog"
       :title="$t('general.confirm')"
       :icon="$globals.icons.checkboxOutline"
@@ -115,6 +141,15 @@
               {{ $t("shopping-list.organize-with-ai") }}
             </v-btn>
             <v-btn
+              color="success"
+              variant="tonal"
+              :prepend-icon="$globals.icons.robot"
+              :disabled="!hasShoppingListItems || isOffline"
+              @click="aiQuantityDialog = true"
+            >
+              {{ $t("shopping-list.adjust-quantities-with-ai") }}
+            </v-btn>
+            <v-btn
               class="shopping-list-image-toggle"
               :color="preferences.showItemImages ? 'primary' : 'grey'"
               :variant="preferences.showItemImages ? 'tonal' : 'outlined'"
@@ -153,6 +188,11 @@
             >
               {{ $t("shopping-website.link-websites") }}
             </v-btn>
+            <LinkedResourcesButton
+              entity-type="shopping-list"
+              :entity-id="id"
+              probe
+            />
             <v-btn
               color="primary"
               variant="tonal"
@@ -427,6 +467,7 @@
 
 <script setup lang="ts">
 import { VueDraggable } from "vue-draggable-plus";
+import LinkedResourcesButton from "~/components/Domain/LinkedResources/LinkedResourcesButton.vue";
 import RecipeList from "~/components/Domain/Recipe/RecipeList.vue";
 import MultiPurposeLabelSection from "~/components/Domain/ShoppingList/MultiPurposeLabelSection.vue";
 import ShoppingListAddItemForm from "~/components/Domain/ShoppingList/ShoppingListAddItemForm.vue";
@@ -436,10 +477,12 @@ import { useShoppingListPage } from "~/composables/shopping-list-page/use-shoppi
 import { useLabelStore, useUnitStore, useFoodStore } from "~/composables/store";
 import { alert } from "~/composables/use-toast";
 import { useShoppingListPreferences } from "~/composables/use-users/preferences";
+import { useUserApi } from "~/composables/api/api-client";
 import type { ShoppingListItemOut } from "~/lib/api/types/household";
 
 const { mdAndUp } = useDisplay();
 const i18n = useI18n();
+const userApi = useUserApi();
 
 useSeoMeta({
   title: i18n.t("shopping-list.shopping-list"),
@@ -454,6 +497,9 @@ const { store: allUnits } = useUnitStore();
 const { store: allFoods } = useFoodStore();
 const preferences = useShoppingListPreferences();
 const shoppingWebsiteLinksDialog = ref(false);
+const aiQuantityDialog = ref(false);
+const aiQuantityLoading = ref(false);
+const aiQuantityRequest = ref("");
 
 function itemCheckedToast(item: ShoppingListItemOut) {
   setTimeout(() => {
@@ -516,6 +562,28 @@ const {
 const hasShoppingListItems = computed(() => {
   return Boolean(listItems.unchecked.length || listItems.checked.length);
 });
+
+async function adjustShoppingListQuantities() {
+  if (!shoppingList.value || aiQuantityLoading.value || aiQuantityRequest.value.trim().length < 2) return;
+  aiQuantityLoading.value = true;
+  try {
+    const { data, error } = await userApi.shopping.lists.adjustQuantitiesWithAi(
+      shoppingList.value.id,
+      aiQuantityRequest.value.trim(),
+    );
+    if (error || !data) {
+      alert.error(i18n.t("shopping-list.ai-quantity-adjustment-failed"));
+      return;
+    }
+    shoppingList.value = data;
+    aiQuantityRequest.value = "";
+    aiQuantityDialog.value = false;
+    alert.success(i18n.t("shopping-list.ai-quantities-adjusted"));
+  }
+  finally {
+    aiQuantityLoading.value = false;
+  }
+}
 
 function parseStringArrayExtra(value: unknown): string[] {
   if (Array.isArray(value)) {

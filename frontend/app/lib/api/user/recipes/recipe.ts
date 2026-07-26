@@ -37,6 +37,7 @@ export interface CreateRecipeFromText {
   text: string;
   translateLanguage?: string | null;
   includeAiTips?: boolean;
+  includeMiseEnPlace?: boolean;
   autoImage?: boolean;
   includeItemImages?: boolean;
 }
@@ -117,6 +118,7 @@ const routes = {
   recipesRecipeSlugShoppingListOpenOrCreate: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/shopping-list/open-or-create`,
   recipesRecipeSlugImage: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/image`,
   recipesRecipeSlugImageAi: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/image/ai`,
+  recipesRecipeSlugAiEdit: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/ai-edit`,
   recipesRecipeSlugItemImagesEnsure: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/item-images/ensure`,
   recipesRecipeSlugScaleFromText: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/scale-from-text`,
   recipesRecipeSlugAdjustIngredientsWithAi: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/ingredients/adjust-with-ai`,
@@ -243,8 +245,12 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
     return this.requests.post<UpdateImageResponse>(routes.recipesRecipeSlugImage(slug), { url });
   }
 
-  createAIImage(slug: string) {
-    return this.requests.post<UpdateImageResponse>(routes.recipesRecipeSlugImageAi(slug), {});
+  createAIImage(slug: string, prompt?: string) {
+    return this.requests.post<UpdateImageResponse>(routes.recipesRecipeSlugImageAi(slug), { prompt: prompt || null });
+  }
+
+  createAIEdit(slug: string, instruction: string) {
+    return this.requests.post<Recipe>(routes.recipesRecipeSlugAiEdit(slug), { instruction });
   }
 
   deleteImage(slug: string) {
@@ -258,6 +264,7 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
   private streamRecipeCreate(streamRoute: string, payload: object, onProgress?: (message: string) => void): Promise<RequestResponse<string>> {
     return new Promise((resolve) => {
       const { token } = useMealieAuth();
+      let settled = false;
 
       const sse = new SSE(streamRoute, {
         headers: {
@@ -269,6 +276,15 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
         autoReconnect: false,
       });
 
+      const finish = (result: RequestResponse<string>) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        sse.close();
+        resolve(result);
+      };
+
       if (onProgress) {
         sse.addEventListener(SSEDataEventStatus.Progress, (e: SSEvent) => {
           const { message } = JSON.parse(e.data) as SSEDataEventMessage;
@@ -278,18 +294,20 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
 
       sse.addEventListener(SSEDataEventStatus.Done, (e: SSEvent) => {
         const { slug } = JSON.parse(e.data) as SSEDataEventDone;
-        sse.close();
-        resolve({ response: { status: 201, data: slug } as any, data: slug, error: null });
+        finish({ response: { status: 201, data: slug } as any, data: slug, error: null });
       });
 
       sse.addEventListener(SSEDataEventStatus.Error, (e: SSEvent) => {
         try {
           const { message } = JSON.parse(e.data) as SSEDataEventMessage;
-          sse.close();
-          resolve({ response: null, data: null, error: new Error(message) });
+          finish({ response: null, data: null, error: new Error(message) });
         }
         catch {
-          // Not a backend error payload (e.g. XHR connection-close event); ignore
+          finish({
+            response: null,
+            data: null,
+            error: new Error("Recipe import stream closed unexpectedly"),
+          });
         }
       });
 
@@ -346,6 +364,7 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
     includeAiTips = true,
     includeItemImages = true,
     notes: string | null = null,
+    includeMiseEnPlace = true,
   ) {
     const formData = new FormData();
 
@@ -362,6 +381,7 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
       query.set("translateLanguage", translateLanguage);
     }
     query.set("includeAiTips", String(includeAiTips));
+    query.set("includeMiseEnPlace", String(includeMiseEnPlace));
     query.set("includeItemImages", String(includeItemImages));
     const queryString = query.toString();
     if (queryString) {

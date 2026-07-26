@@ -123,6 +123,214 @@
         </v-card-actions>
       </v-card-text>
     </BaseDialog>
+    <BaseDialog
+      v-model="aiMeal.dialog"
+      :title="$t('meal-plan.create-ai-meal')"
+      :submit-text="aiMeal.result ? $t('meal-plan.add-ai-meal-to-plan') : $t('meal-plan.suggest-meal')"
+      color="primary"
+      :icon="$globals.icons.robot"
+      width="760"
+      max-width="96vw"
+      keep-open
+      can-submit
+      :loading="aiMeal.loading"
+      :submit-disabled="isAIMealSubmitDisabled"
+      @submit="handleAIMealSubmit"
+      @close="resetAIMealDialog"
+    >
+      <v-card-text class="pt-4">
+        <v-text-field
+          :model-value="aiMealDateString"
+          :label="$t('meal-plan.selected-date')"
+          :prepend-inner-icon="$globals.icons.calendar"
+          readonly
+          variant="outlined"
+          density="comfortable"
+        />
+        <v-select
+          v-model="aiMeal.mealPeriod"
+          :items="aiMealPeriodOptions"
+          :label="$t('meal-plan.meal-type')"
+          item-title="text"
+          item-value="value"
+          :rules="[requiredRule]"
+          variant="outlined"
+          density="comfortable"
+          @update:model-value="clearAIMealResult"
+        />
+        <v-textarea
+          v-model="aiMeal.request"
+          :label="$t('meal-plan.ai-meal-request')"
+          :placeholder="$t('meal-plan.ai-meal-request-example')"
+          :rules="[requiredRule]"
+          rows="3"
+          maxlength="1000"
+          counter
+          variant="outlined"
+          @update:model-value="clearAIMealResult"
+        />
+        <div class="text-subtitle-2 mb-2">
+          {{ $t("meal-plan.course-quantities") }}
+        </div>
+        <v-row dense class="mb-2">
+          <v-col
+            v-for="course in aiMealCourseOptions"
+            :key="course.value"
+            cols="12"
+            sm="6"
+          >
+            <div class="d-flex ga-2">
+              <v-select
+                v-model="aiMealCountSelections[course.value]"
+                :items="aiMealCountOptions"
+                :label="course.text"
+                item-title="text"
+                item-value="value"
+                hide-details
+                variant="outlined"
+                density="comfortable"
+                class="flex-grow-1"
+                @update:model-value="clearAIMealResult"
+              />
+              <v-text-field
+                v-if="aiMealCountSelections[course.value] === 'custom'"
+                v-model.number="aiMealCustomCourseCounts[course.value]"
+                :label="$t('meal-plan.custom-count')"
+                type="number"
+                min="0"
+                max="100"
+                step="1"
+                hide-details
+                variant="outlined"
+                density="comfortable"
+                class="ai-meal-custom-count"
+                @update:model-value="clearAIMealResult"
+              />
+            </div>
+          </v-col>
+        </v-row>
+        <div class="text-subtitle-2 mb-2">
+          {{ $t("meal-plan.filter-ai-meal-recipes") }}
+        </div>
+        <v-row dense class="mb-2">
+          <v-col cols="12" sm="6">
+            <v-autocomplete
+              v-model="aiMealCategorySlugs"
+              :items="mealPlanCategories"
+              :label="$t('category.categories')"
+              :prepend-inner-icon="$globals.icons.categories"
+              :custom-filter="normalizeFilter"
+              item-title="name"
+              item-value="slug"
+              multiple
+              chips
+              closable-chips
+              clearable
+              hide-details
+              variant="outlined"
+              density="comfortable"
+              @update:model-value="clearAIMealResult"
+            />
+          </v-col>
+          <v-col cols="12" sm="6">
+            <v-autocomplete
+              v-model="aiMealTagSlugs"
+              :items="mealPlanTags"
+              :label="$t('tag.tags')"
+              :prepend-inner-icon="$globals.icons.tags"
+              :custom-filter="normalizeFilter"
+              item-title="name"
+              item-value="slug"
+              multiple
+              chips
+              closable-chips
+              clearable
+              hide-details
+              variant="outlined"
+              density="comfortable"
+              @update:model-value="clearAIMealResult"
+            />
+          </v-col>
+        </v-row>
+        <v-row dense>
+          <v-col cols="12" sm="8">
+            <v-autocomplete
+              v-model="aiMeal.anchorRecipeId"
+              v-model:search="aiRecipeSearch.query.value"
+              :items="aiRecipeSearch.data.value"
+              :label="$t('meal-plan.anchor-recipe')"
+              :hint="$t('meal-plan.anchor-recipe-hint')"
+              :prepend-inner-icon="$globals.icons.foods"
+              :loading="aiRecipeSearch.loading.value"
+              :custom-filter="normalizeFilter"
+              :no-data-text="$t('search.no-results')"
+              item-title="name"
+              item-value="id"
+              clearable
+              persistent-hint
+              variant="outlined"
+              density="comfortable"
+              @update:model-value="clearAIMealResult"
+            />
+          </v-col>
+          <v-col cols="12" sm="4">
+            <v-select
+              v-model="aiMeal.anchorCourse"
+              :items="aiMealCourseOptions"
+              :label="$t('meal-plan.anchor-course')"
+              item-title="text"
+              item-value="value"
+              :disabled="!aiMeal.anchorRecipeId"
+              variant="outlined"
+              density="comfortable"
+              @update:model-value="clearAIMealResult"
+            />
+          </v-col>
+        </v-row>
+
+        <template v-if="aiMeal.result">
+          <v-divider class="my-3" />
+          <h3 class="text-h6 mb-1">
+            {{ aiMeal.result.title || $t('meal-plan.ai-meal-suggestion') }}
+          </h3>
+          <p v-if="aiMeal.result.explanation" class="text-body-2 text-medium-emphasis mb-3">
+            {{ aiMeal.result.explanation }}
+          </p>
+          <div
+            v-for="item in aiMeal.result.items || []"
+            :key="aiMealSuggestionKey(item)"
+            class="ai-meal-suggestion-row"
+          >
+            <v-checkbox-btn
+              v-model="aiMeal.selectedKeys"
+              :value="aiMealSuggestionKey(item)"
+              color="primary"
+            />
+            <div class="ai-meal-suggestion-image mx-2">
+              <RecipeCardImage
+                :recipe-id="item.recipe.id!"
+                :slug="item.recipe.slug"
+                :image-version="recipeImageVersion(item.recipe)"
+                tiny
+                icon-size="30"
+                height="56"
+              />
+            </div>
+            <div class="min-width-0 flex-grow-1">
+              <div class="d-flex align-center ga-2 flex-wrap">
+                <v-chip size="x-small" color="accent" label>
+                  {{ aiMealCourseText(item.course) }}
+                </v-chip>
+                <strong>{{ item.recipe.name }}</strong>
+              </div>
+              <div v-if="item.reason" class="text-caption text-medium-emphasis mt-1">
+                {{ item.reason }}
+              </div>
+            </div>
+          </div>
+        </template>
+      </v-card-text>
+    </BaseDialog>
     <v-row>
       <v-col
         v-for="(plan, index) in mealplans"
@@ -136,9 +344,8 @@
         class="col-borders my-1 d-flex flex-column"
       >
         <v-card
-          class="mb-2 border-left-primary rounded-sm pa-2"
-          :class="{ 'meal-plan-today-toggle': isToday(plan.date) }"
-          @click="toggleTodayEdit(plan.date)"
+          class="mb-2 border-left-primary rounded-sm pa-2 meal-plan-day-toggle"
+          @click="toggleDayView"
         >
           <p class="pl-2 mb-1" :class="{ 'text-primary': isToday(plan.date) }">
             {{ $d(plan.date, "short") }}
@@ -275,11 +482,17 @@
                 event: 'randomSide',
               },
               {
+                icon: $globals.icons.robot,
+                text: $t('meal-plan.ai-meal'),
+                event: 'aiMeal',
+              },
+              {
                 icon: $globals.icons.createAlt,
                 text: $t('general.new'),
                 event: 'create',
               },
             ]"
+            @ai-meal="openAIMealDialog(plan.date)"
             @create="openDialog(plan.date)"
             @random-breakfast="randomMeal(plan.date, 'breakfast')"
             @random-lunch="randomMeal(plan.date, 'lunch')"
@@ -303,9 +516,17 @@ import type { MealsByDate } from "./view.vue";
 import type { useMealplans } from "~/composables/use-group-mealplan";
 import { usePlanTypeOptions, getEntryTypeText } from "~/composables/use-group-mealplan";
 import RecipeCardImage from "~/components/Domain/Recipe/RecipeCardImage.vue";
-import type { PlanEntryType, UpdatePlanEntry } from "~/lib/api/types/meal-plan";
+import type {
+  AIMealCourse,
+  AIMealCourseCounts,
+  AIMealPeriod,
+  AIMealSuggestionItem,
+  AIMealSuggestResponse,
+  PlanEntryType,
+  UpdatePlanEntry,
+} from "~/lib/api/types/meal-plan";
 import type { Recipe } from "~/lib/api/types/recipe";
-import { useUserApi } from "~/composables/api";
+import { useUserApi } from "~/composables/api/api-client";
 import { useHouseholdSelf } from "~/composables/use-households";
 import { normalizeFilter } from "~/composables/use-utils";
 import { useRecipeSearch } from "~/composables/recipes/use-recipe-search";
@@ -384,6 +605,68 @@ const dialog = reactive({
   loading: false,
   error: false,
   note: false,
+});
+
+const aiMeal = reactive({
+  dialog: false,
+  loading: false,
+  date: new Date(Date.now() - new Date().getTimezoneOffset() * 60000),
+  mealPeriod: null as AIMealPeriod | null,
+  request: "",
+  anchorRecipeId: null as string | null,
+  anchorCourse: "main" as AIMealCourse,
+  result: null as AIMealSuggestResponse | null,
+  selectedKeys: [] as string[],
+});
+const aiMealCategorySlugs = ref<string[]>([]);
+const aiMealTagSlugs = ref<string[]>([]);
+type AIMealCountSelection = number | "custom";
+
+const aiMealCountSelections = reactive<Record<AIMealCourse, AIMealCountSelection>>({
+  starter: 1,
+  main: 1,
+  side: 1,
+  dessert: 1,
+});
+const aiMealCustomCourseCounts = reactive<Record<AIMealCourse, number>>({
+  starter: 1,
+  main: 1,
+  side: 1,
+  dessert: 1,
+});
+
+const aiMealDateString = computed(() => format(aiMeal.date, "yyyy-MM-dd"));
+const aiMealPeriodOptions = computed(() => [
+  { value: "breakfast" as AIMealPeriod, text: i18n.t("meal-plan.breakfast") },
+  { value: "lunch" as AIMealPeriod, text: i18n.t("meal-plan.lunch") },
+  { value: "dinner" as AIMealPeriod, text: i18n.t("meal-plan.dinner") },
+]);
+const aiMealCourseOptions = computed(() => [
+  { value: "starter" as AIMealCourse, text: i18n.t("meal-plan.starter") },
+  { value: "main" as AIMealCourse, text: i18n.t("meal-plan.main-course") },
+  { value: "side" as AIMealCourse, text: i18n.t("meal-plan.side") },
+  { value: "dessert" as AIMealCourse, text: i18n.t("meal-plan.dessert") },
+]);
+const aiMealCountOptions = computed(() => [
+  ...Array.from({ length: 21 }, (_, value) => ({ value, text: String(value) })),
+  { value: "custom" as const, text: i18n.t("general.custom") },
+]);
+const resolvedAIMealCourseCounts = computed<AIMealCourseCounts>(() => {
+  const result = {} as AIMealCourseCounts;
+  for (const course of Object.keys(aiMealCountSelections) as AIMealCourse[]) {
+    const selected = aiMealCountSelections[course];
+    const value = selected === "custom" ? aiMealCustomCourseCounts[course] : selected;
+    result[course] = Math.max(0, Math.min(100, Math.trunc(Number(value) || 0)));
+  }
+  return result;
+});
+
+const isAIMealSubmitDisabled = computed(() => {
+  if (aiMeal.result) {
+    return !aiMeal.selectedKeys.length;
+  }
+  const requestedCourses = Object.values(resolvedAIMealCourseCounts.value).reduce((sum, count) => sum + count, 0);
+  return !aiMeal.mealPeriod || aiMeal.request.trim().length < 2 || requestedCourses < 1;
 });
 
 const selectedMealRecipeIds = ref<string[]>([]);
@@ -490,11 +773,7 @@ function isToday(date: Date) {
   return isSameDay(date, new Date());
 }
 
-function toggleTodayEdit(date: Date) {
-  if (!isToday(date)) {
-    return;
-  }
-
+function toggleDayView() {
   void router.push({
     name: "household-mealplan-planner-view",
     query: route.query,
@@ -553,6 +832,114 @@ async function randomMeal(date: Date, type: PlanEntryType) {
   }
 }
 
+function aiMealSuggestionKey(item: AIMealSuggestionItem) {
+  return `${item.course}:${item.recipe.slug}`;
+}
+
+function aiMealCourseText(course: AIMealCourse) {
+  return i18n.t(course === "main" ? "meal-plan.main-course" : `meal-plan.${course}`);
+}
+
+function recipeImageVersion(recipe: Recipe) {
+  return typeof recipe.image === "string" ? recipe.image : null;
+}
+
+function clearAIMealResult() {
+  aiMeal.result = null;
+  aiMeal.selectedKeys = [];
+}
+
+function openAIMealDialog(date: Date) {
+  resetAIMealDialog();
+  aiMeal.date = date;
+  aiMeal.dialog = true;
+}
+
+function resetAIMealDialog() {
+  aiMeal.dialog = false;
+  aiMeal.loading = false;
+  aiMeal.date = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
+  aiMeal.mealPeriod = null;
+  aiMeal.request = "";
+  aiMeal.anchorRecipeId = null;
+  aiMeal.anchorCourse = "main";
+  aiMeal.result = null;
+  aiMeal.selectedKeys = [];
+  aiMealCategorySlugs.value = [];
+  aiMealTagSlugs.value = [];
+  for (const course of Object.keys(aiMealCountSelections) as AIMealCourse[]) {
+    aiMealCountSelections[course] = 1;
+    aiMealCustomCourseCounts[course] = 1;
+  }
+  aiRecipeSearch.query.value = "";
+}
+
+async function suggestAIMeal() {
+  if (!aiMeal.mealPeriod || aiMeal.request.trim().length < 2) return;
+
+  const { data, error } = await api.mealplans.suggestWithAI({
+    mealPeriod: aiMeal.mealPeriod,
+    request: aiMeal.request.trim(),
+    anchorRecipeId: aiMeal.anchorRecipeId,
+    anchorCourse: aiMeal.anchorCourse,
+    courseCounts: resolvedAIMealCourseCounts.value,
+    categoryNames: organizerNames(mealPlanCategories.value, aiMealCategorySlugs.value),
+    tagNames: organizerNames(mealPlanTags.value, aiMealTagSlugs.value),
+  });
+  if (error || !data?.items?.length) {
+    alert.error(i18n.t("meal-plan.ai-meal-suggestion-failed"));
+    return;
+  }
+
+  aiMeal.result = data;
+  aiMeal.selectedKeys = data.items.map(aiMealSuggestionKey);
+}
+
+async function addAIMealToPlan() {
+  if (!aiMeal.result?.items?.length) return;
+
+  const selectedKeys = new Set(aiMeal.selectedKeys);
+  const selectedItems = aiMeal.result.items.filter(item => selectedKeys.has(aiMealSuggestionKey(item)));
+  let failed = false;
+  for (const item of selectedItems) {
+    if (!item.recipe.id) {
+      failed = true;
+      continue;
+    }
+    const { error } = await api.mealplans.createOne({
+      date: aiMealDateString.value,
+      entryType: item.entryType,
+      recipeId: item.recipe.id,
+    });
+    failed ||= !!error;
+  }
+
+  await props.actions.refreshAll();
+  if (failed) {
+    alert.error(i18n.t("meal-plan.mealplan-creation-failed"));
+    return;
+  }
+
+  alert.success(i18n.t("meal-plan.ai-meal-added"));
+  resetAIMealDialog();
+}
+
+async function handleAIMealSubmit() {
+  if (aiMeal.loading || isAIMealSubmitDisabled.value) return;
+  aiMeal.loading = true;
+  try {
+    if (aiMeal.result) {
+      await addAIMealToPlan();
+    }
+    else {
+      await suggestAIMeal();
+    }
+  }
+  finally {
+    aiMeal.loading = false;
+  }
+}
+
 // =====================================================
 // Search
 
@@ -563,6 +950,16 @@ const search = useRecipeSearch(api, {
   tags: selectedMealTagSlugs,
   perPage: 100,
 });
+const aiRecipeSearch = useRecipeSearch(api, {
+  categories: aiMealCategorySlugs,
+  tags: aiMealTagSlugs,
+  perPage: 100,
+});
+
+function organizerNames(items: Array<{ name: string; slug: string }>, selectedSlugs: string[]) {
+  const selected = new Set(selectedSlugs);
+  return items.filter(item => selected.has(item.slug)).map(item => item.name);
+}
 const mealPlanRecipeOptions = computed(() => {
   const recipesById = new Map<string, Recipe>();
   Object.values(selectedMealRecipeCache.value).forEach(recipe => recipesById.set(recipe.id, recipe));
@@ -595,21 +992,60 @@ function rememberSelectedMealRecipes(recipeIds: string[] | null) {
 const planTypeOptions = usePlanTypeOptions();
 
 onMounted(async () => {
-  await search.trigger();
+  await Promise.all([search.trigger(), aiRecipeSearch.trigger()]);
 });
 </script>
 
 <style scoped>
-.meal-plan-today-toggle {
+.meal-plan-day-toggle {
   cursor: pointer;
   transition:
     box-shadow 0.15s ease,
     transform 0.15s ease;
 }
 
-.meal-plan-today-toggle:hover,
-.meal-plan-today-toggle:focus-within {
+.meal-plan-day-toggle:hover,
+.meal-plan-day-toggle:focus-within {
   box-shadow: 0 2px 10px rgba(var(--v-theme-primary), 0.18);
   transform: translateY(-1px);
+}
+
+.ai-meal-suggestion-row {
+  display: flex;
+  align-items: center;
+  min-height: 64px;
+  padding: 8px 4px;
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+.ai-meal-suggestion-row:last-child {
+  border-bottom: 0;
+}
+
+.ai-meal-suggestion-image {
+  flex: 0 0 72px;
+  width: 72px;
+  height: 56px;
+  overflow: hidden;
+  border-radius: 4px;
+}
+
+.ai-meal-suggestion-image :deep(.v-img),
+.ai-meal-suggestion-image :deep(.icon-slot) {
+  width: 100%;
+  height: 56px;
+  min-height: 56px !important;
+}
+
+.ai-meal-suggestion-image :deep(.v-img__img) {
+  object-fit: contain !important;
+}
+
+.ai-meal-custom-count {
+  flex: 0 0 120px;
+}
+
+.min-width-0 {
+  min-width: 0;
 }
 </style>

@@ -16,6 +16,14 @@ if TYPE_CHECKING:
 class RecipeShoppingWebsite(SqlAlchemyBase):
     __tablename__ = "recipe_shopping_websites"
 
+    # Pure association rows use the linked entity IDs as their composite key.
+    # Suppress the columns inherited from SqlAlchemyBase so the ORM matches the
+    # intentionally minimal association table created by the migration.
+    id = None
+    created_at = None
+    update_at = None
+    updated_at = None
+
     recipe_id: Mapped[guid.GUID] = mapped_column(
         guid.GUID,
         ForeignKey("recipes.id", ondelete="CASCADE"),
@@ -36,6 +44,11 @@ class RecipeShoppingWebsite(SqlAlchemyBase):
 
 class ShoppingListShoppingWebsite(SqlAlchemyBase):
     __tablename__ = "shopping_list_shopping_websites"
+
+    id = None
+    created_at = None
+    update_at = None
+    updated_at = None
 
     shopping_list_id: Mapped[guid.GUID] = mapped_column(
         guid.GUID,

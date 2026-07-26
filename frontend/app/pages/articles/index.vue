@@ -156,6 +156,14 @@
             :label="$t('recipe.include-ai-tips-description')"
           />
           <v-checkbox
+            v-model="includeExtractedMiseEnPlace"
+            hide-details
+            color="primary"
+            density="compact"
+            :disabled="!extractRecipeIfPresent"
+            :label="$t('recipe.include-mise-en-place-description')"
+          />
+          <v-checkbox
             v-model="includeExtractedItemImages"
             hide-details
             color="primary"
@@ -359,6 +367,7 @@ const extractRecipeIfPresent = ref(true);
 const createShoppingListForExtractedRecipes = ref(true);
 const organizeExtractedShoppingListWithAI = ref(true);
 const includeExtractedAiTips = ref(true);
+const includeExtractedMiseEnPlace = ref(true);
 const includeExtractedItemImages = ref(true);
 
 const form = reactive<ArticleCreate>({
@@ -478,6 +487,7 @@ function resetArticleForm() {
   createShoppingListForExtractedRecipes.value = true;
   organizeExtractedShoppingListWithAI.value = true;
   includeExtractedAiTips.value = true;
+  includeExtractedMiseEnPlace.value = true;
   includeExtractedItemImages.value = true;
 }
 
@@ -526,6 +536,7 @@ async function submitArticle() {
         && createShoppingListForExtractedRecipes.value
         && organizeExtractedShoppingListWithAI.value,
       includeAiTips: includeExtractedAiTips.value,
+      includeMiseEnPlace: includeExtractedMiseEnPlace.value,
       includeItemImages: includeExtractedItemImages.value,
     });
   })().finally(() => {

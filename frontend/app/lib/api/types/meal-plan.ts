@@ -6,6 +6,8 @@
 */
 
 export type PlanEntryType = "breakfast" | "lunch" | "dinner" | "side" | "snack" | "drink" | "dessert";
+export type AIMealPeriod = "breakfast" | "lunch" | "dinner";
+export type AIMealCourse = "starter" | "main" | "side" | "dessert";
 export type PlanRulesDay = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday" | "unset";
 export type PlanRulesType = "breakfast" | "lunch" | "dinner" | "side" | "snack" | "drink" | "dessert" | "unset";
 export type LogicalOperator = "AND" | "OR";
@@ -18,6 +20,33 @@ export interface CreatePlanEntry {
   title?: string;
   text?: string;
   recipeId?: string | null;
+}
+export interface AIMealSuggestRequest {
+  mealPeriod: AIMealPeriod;
+  request: string;
+  anchorRecipeId?: string | null;
+  anchorCourse?: AIMealCourse;
+  courseCounts?: AIMealCourseCounts;
+  categoryNames?: string[];
+  tagNames?: string[];
+}
+export interface AIMealCourseCounts {
+  starter?: number;
+  main?: number;
+  side?: number;
+  dessert?: number;
+}
+export interface AIMealSuggestionItem {
+  course: AIMealCourse;
+  entryType: PlanEntryType;
+  recipe: RecipeSummary;
+  reason?: string;
+}
+export interface AIMealSuggestResponse {
+  title?: string;
+  explanation?: string;
+  recipeCount?: number;
+  items?: AIMealSuggestionItem[];
 }
 export interface CreateRandomEntry {
   date: string;

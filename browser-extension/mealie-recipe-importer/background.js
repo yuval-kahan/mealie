@@ -1,10 +1,14 @@
 importScripts("i18n.js");
 
 const BRIDGE_REQUEST = "MEALIE_EXTENSION_IMPORT_RECIPE_URL";
+const IMAGE_BRIDGE_REQUEST = "MEALIE_EXTENSION_IMPORT_RECIPE_IMAGE_URL";
 const POPUP_IMPORT_REQUEST = "MEALIE_EXTENSION_POPUP_IMPORT";
 const POPUP_SAVE_WEBSITE_REQUEST = "MEALIE_EXTENSION_POPUP_SAVE_WEBSITE";
+const POPUP_SAVE_RESTAURANT_REQUEST = "MEALIE_EXTENSION_POPUP_SAVE_RESTAURANT";
+const POPUP_SAVE_VIDEO_REQUEST = "MEALIE_EXTENSION_POPUP_SAVE_VIDEO";
 const MAX_EXTRACTED_TEXT_LENGTH = 180000;
 const MAX_RETURNED_PREVIEW_LENGTH = 30000;
+const MAX_RECIPE_IMAGE_BYTES = 20 * 1024 * 1024;
 const AUTH_COOKIE_NAME = "mealie.access_token";
 const SITE_LOCALE_COOKIE_NAME = "i18n_redirected";
 const extensionI18n = globalThis.MealieExtensionI18n;
@@ -12,20 +16,56 @@ let activeBackgroundJobs = 0;
 let backgroundKeepAliveTimer = null;
 
 void updateActionTitle();
-chrome.runtime.onInstalled.addListener(updateActionTitle);
-chrome.runtime.onStartup.addListener(updateActionTitle);
+void injectBridgeIntoConfiguredMealieTabs();
+chrome.runtime.onInstalled.addListener(() => {
+  void updateActionTitle();
+  void injectBridgeIntoConfiguredMealieTabs();
+});
+chrome.runtime.onStartup.addListener(() => {
+  void updateActionTitle();
+  void injectBridgeIntoConfiguredMealieTabs();
+});
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName === "sync" && (changes.interfaceLanguage || changes.mealieUrl)) {
     void updateActionTitle();
+    if (changes.mealieUrl) {
+      void injectBridgeIntoConfiguredMealieTabs();
+    }
   }
 });
+
+async function injectBridgeIntoConfiguredMealieTabs() {
+  try {
+    const settings = await chrome.storage.sync.get(["mealieUrl"]);
+    const mealieUrl = normalizeBaseUrl(settings.mealieUrl);
+    if (!mealieUrl) {
+      return;
+    }
+    const mealieOrigin = new URL(mealieUrl).origin;
+    const tabs = await chrome.tabs.query({});
+    const matchingTabs = tabs.filter(tab => tab.id && tab.url && sameOrigin(tab.url, mealieOrigin));
+    await Promise.allSettled(matchingTabs.map(tab => chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ["i18n.js", "mealie-bridge.js"],
+    })));
+  }
+  catch {
+    // Static content scripts still load on the next Mealie page refresh.
+  }
+}
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   const handler = message?.type === POPUP_SAVE_WEBSITE_REQUEST
     ? saveWebsiteFromUrl
-    : message?.type === BRIDGE_REQUEST || message?.type === POPUP_IMPORT_REQUEST
-      ? importRecipeFromUrl
-      : null;
+    : message?.type === POPUP_SAVE_RESTAURANT_REQUEST
+      ? saveRestaurantFromUrl
+      : message?.type === POPUP_SAVE_VIDEO_REQUEST
+        ? saveVideoFromUrl
+        : message?.type === IMAGE_BRIDGE_REQUEST
+          ? updateRecipeImageFromBrowser
+          : message?.type === BRIDGE_REQUEST || message?.type === POPUP_IMPORT_REQUEST
+            ? importRecipeFromUrl
+            : null;
   if (!handler) {
     return false;
   }
@@ -126,6 +166,54 @@ async function importRecipeFromUrl(payload) {
   return withExtractionPreview(result, extraction);
 }
 
+async function updateRecipeImageFromBrowser(payload) {
+  const translator = await extensionI18n.create(payload?.interfaceLanguage);
+  const t = translator.t;
+  const mealieUrl = normalizeBaseUrl(payload?.mealieUrl);
+  const imageUrl = String(payload?.url || "").trim();
+  const recipeSlug = String(payload?.recipeSlug || "").trim();
+  if (!mealieUrl || !/^https?:\/\//i.test(mealieUrl)) {
+    throw new Error(t("errors.invalid-mealie-url"));
+  }
+  if (!imageUrl || !/^https?:\/\//i.test(imageUrl)) {
+    throw new Error(t("errors.invalid-recipe-url"));
+  }
+  if (!recipeSlug || recipeSlug.length > 255) {
+    throw new Error(t("errors.request-failed", { status: 400 }));
+  }
+
+  const authToken = payload?.authToken || await findMealieAuthToken(mealieUrl);
+  if (!authToken) {
+    throw new Error(t("status.open-and-login"));
+  }
+
+  const downloaded = await downloadImageInBackgroundTab(imageUrl, translator);
+  const imageBlob = dataUrlToBlob(downloaded.dataUrl, downloaded.contentType);
+  const extension = imageExtension(downloaded.contentType, downloaded.finalUrl || imageUrl);
+  if (!extension) {
+    throw new Error(t("errors.request-failed", { status: 415 }));
+  }
+  const formData = new FormData();
+  formData.append("image", imageBlob, `recipe-image.${extension}`);
+  formData.append("extension", extension);
+
+  const response = await fetch(
+    `${mealieUrl}/api/recipes/${encodeURIComponent(recipeSlug)}/image`,
+    {
+      method: "PUT",
+      credentials: "include",
+      headers: authHeaders(authToken),
+      body: formData,
+    },
+  );
+  const body = await safeJson(response);
+  if (!response.ok) {
+    throw new Error(apiErrorMessage(body, response.status, t));
+  }
+
+  return { ok: true, image: body?.image || null };
+}
+
 async function saveWebsiteFromUrl(payload) {
   const translator = await extensionI18n.create(
     payload?.interfaceLanguage || payload?.translateLanguage,
@@ -170,6 +258,135 @@ async function saveWebsiteFromUrl(payload) {
   }
 
   return withExtractionPreview({ ok: true, website: body }, extraction);
+}
+
+async function saveRestaurantFromUrl(payload) {
+  const translator = await extensionI18n.create(
+    payload?.interfaceLanguage || payload?.translateLanguage,
+  );
+  const t = translator.t;
+  const mealieUrl = normalizeBaseUrl(payload?.mealieUrl);
+  const pageUrl = String(payload?.url || "").trim();
+  if (!mealieUrl || !/^https?:\/\//i.test(mealieUrl)) {
+    throw new Error(t("errors.invalid-mealie-url"));
+  }
+  if (!pageUrl || !/^https?:\/\//i.test(pageUrl)) {
+    throw new Error(t("errors.invalid-recipe-url"));
+  }
+
+  const authToken = payload?.authToken || await findMealieAuthToken(mealieUrl);
+  if (!authToken) {
+    throw new Error(t("status.open-and-login"));
+  }
+
+  const status = await checkMealieStatus(mealieUrl, authToken, t);
+  if (!statusAiEnabled(status)) {
+    throw new Error(aiProviderStatusMessage(status, t));
+  }
+
+  const extraction = await extractPageInBackgroundTab(pageUrl, translator);
+  const response = await fetch(`${mealieUrl}/api/households/restaurants/browser-page`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(authToken),
+    },
+    body: JSON.stringify({
+      url: extraction.url,
+      page_title: extraction.title,
+      page_text: extraction.markdown,
+    }),
+  });
+  const body = await safeJson(response);
+  if (!response.ok) {
+    throw new Error(apiErrorMessage(body, response.status, t));
+  }
+
+  return withExtractionPreview({ ok: true, restaurant: body }, extraction);
+}
+
+async function saveVideoFromUrl(payload) {
+  const translator = await extensionI18n.create(
+    payload?.interfaceLanguage || payload?.translateLanguage,
+  );
+  const t = translator.t;
+  const mealieUrl = normalizeBaseUrl(payload?.mealieUrl);
+  const videoUrl = String(payload?.url || "").trim();
+  if (!mealieUrl || !/^https?:\/\//i.test(mealieUrl)) {
+    throw new Error(t("errors.invalid-mealie-url"));
+  }
+  if (!videoUrl || !/^https?:\/\//i.test(videoUrl)) {
+    throw new Error(t("errors.invalid-video-url"));
+  }
+
+  const authToken = payload?.authToken || await findMealieAuthToken(mealieUrl);
+  if (!authToken) {
+    throw new Error(t("status.open-and-login"));
+  }
+
+  const status = await checkMealieStatus(mealieUrl, authToken, t);
+  if (!statusAiEnabled(status)) {
+    throw new Error(aiProviderStatusMessage(status, t));
+  }
+
+  await updateVideoDownloadSettings(mealieUrl, authToken, payload, t);
+
+  const response = await fetch(`${mealieUrl}/api/households/videos/browser-page`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(authToken),
+    },
+    body: JSON.stringify({
+      url: videoUrl,
+      page_title: String(payload?.pageTitle || "").trim() || null,
+      process_with_ai: true,
+      download_video: payload?.downloadVideo !== false,
+      create_recipe: payload?.videoCreateRecipe !== false,
+      create_shopping_list: payload?.videoCreateRecipe !== false && payload?.createShoppingList !== false,
+      organize_shopping_list: payload?.videoCreateRecipe !== false
+        && payload?.createShoppingList !== false
+        && payload?.organizeShoppingList !== false,
+      include_ai_tips: payload?.includeAiTips !== false,
+      include_mise_en_place: payload?.includeMiseEnPlace !== false,
+      target_language: translationLanguageForRequest(payload?.translateLanguage),
+    }),
+  });
+  const body = await safeJson(response);
+  if (!response.ok) {
+    throw new Error(apiErrorMessage(body, response.status, t));
+  }
+
+  return { ok: true, video: body };
+}
+
+async function updateVideoDownloadSettings(mealieUrl, authToken, payload, t) {
+  const response = await fetch(`${mealieUrl}/api/households/videos/settings`, {
+    method: "PUT",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(authToken),
+    },
+    body: JSON.stringify({
+      download_by_default: payload?.downloadVideo !== false,
+      quality: payload?.videoQuality || "best",
+      container: payload?.videoContainer || "mp4",
+      codec: payload?.videoCodec || "auto",
+      audio_only: payload?.videoAudioOnly === true,
+      audio_quality: payload?.videoAudioQuality || "best",
+      save_subtitles: false,
+      save_thumbnail: payload?.videoSaveThumbnail !== false,
+      save_metadata: payload?.videoSaveMetadata !== false,
+      fallback_to_lower_quality: payload?.videoFallbackQuality !== false,
+    }),
+  });
+  const body = await safeJson(response);
+  if (!response.ok) {
+    throw new Error(apiErrorMessage(body, response.status, t));
+  }
 }
 
 function withExtractionPreview(result, extraction) {
@@ -243,6 +460,7 @@ async function importRecipePage(mealieUrl, authToken, payload, extraction, t) {
       image_url: extraction.imageUrl,
       translate_language: translateLanguage,
       include_ai_tips: payload.includeAiTips !== false,
+      include_mise_en_place: payload.includeMiseEnPlace !== false,
       include_item_images: payload.includeItemImages !== false,
       create_shopping_list: payload.createShoppingList !== false,
       organize_shopping_list_with_ai: payload.organizeShoppingListWithAi !== false,
@@ -284,6 +502,7 @@ async function importArticlePage(mealieUrl, authToken, payload, extraction, t) {
       create_shopping_list: payload.createShoppingList !== false,
       organize_shopping_list_with_ai: payload.organizeShoppingListWithAi !== false,
       include_ai_tips: payload.includeAiTips !== false,
+      include_mise_en_place: payload.includeMiseEnPlace !== false,
       include_item_images: payload.includeItemImages !== false,
     }),
   });
@@ -422,6 +641,131 @@ async function extractPageInBackgroundTab(url, translator) {
       }
     }
   }
+}
+
+async function downloadImageInBackgroundTab(url, translator) {
+  const openTabs = await chrome.tabs.query({});
+  let tab = openTabs.find(candidate => candidate.id && candidate.url && samePage(candidate.url, url));
+  let createdForDownload = false;
+  if (!tab) {
+    tab = await chrome.tabs.create({ url, active: false });
+    createdForDownload = true;
+  }
+  if (!tab?.id) {
+    throw new Error(translator.t("errors.open-link-failed"));
+  }
+
+  try {
+    if (tab.status !== "complete") {
+      await waitForTabComplete(tab.id, translator.t);
+    }
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: readImageDocument,
+      args: [MAX_RECIPE_IMAGE_BYTES],
+    });
+    if (!result?.result?.dataUrl || !result.result.contentType) {
+      throw new Error(translator.t("errors.request-failed", { status: 422 }));
+    }
+    return result.result;
+  }
+  finally {
+    if (createdForDownload) {
+      try {
+        await chrome.tabs.remove(tab.id);
+      }
+      catch {
+        // The user may have closed the temporary image tab already.
+      }
+    }
+  }
+}
+
+async function readImageDocument(maxBytes) {
+  const candidates = [
+    document.images?.[0]?.currentSrc,
+    document.images?.[0]?.src,
+    window.location.href,
+  ].filter(Boolean);
+  let lastError = null;
+
+  for (const candidate of [...new Set(candidates)]) {
+    try {
+      const response = await fetch(candidate, {
+        cache: "no-store",
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const contentLength = Number(response.headers.get("content-length") || 0);
+      if (contentLength > maxBytes) {
+        throw new Error("Image is too large");
+      }
+      const blob = await response.blob();
+      if (!blob.type.toLowerCase().startsWith("image/") || !blob.size || blob.size > maxBytes) {
+        throw new Error("The downloaded file is not a supported image");
+      }
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(reader.error || new Error("Image read failed"));
+        reader.readAsDataURL(blob);
+      });
+      return {
+        dataUrl,
+        contentType: blob.type.toLowerCase(),
+        finalUrl: response.url || candidate,
+      };
+    }
+    catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error("Image download failed");
+}
+
+function dataUrlToBlob(dataUrl, fallbackType) {
+  const separator = dataUrl.indexOf(",");
+  if (separator < 0) {
+    throw new Error("Invalid image data");
+  }
+  const metadata = dataUrl.slice(0, separator);
+  const contentType = metadata.match(/^data:([^;,]+)/i)?.[1] || fallbackType || "image/jpeg";
+  const encoded = dataUrl.slice(separator + 1);
+  const binary = metadata.includes(";base64") ? atob(encoded) : decodeURIComponent(encoded);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return new Blob([bytes], { type: contentType });
+}
+
+function imageExtension(contentType, url) {
+  const byType = {
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/avif": "avif",
+    "image/heic": "heic",
+    "image/heif": "heic",
+  };
+  if (byType[contentType]) {
+    return byType[contentType];
+  }
+
+  try {
+    const extension = new URL(url).pathname.split(".").pop()?.toLowerCase();
+    if (["jpg", "jpeg", "png", "webp", "avif", "heic"].includes(extension)) {
+      return extension === "jpeg" ? "jpg" : extension;
+    }
+  }
+  catch {
+    // A valid content type is enough when the final URL is unavailable.
+  }
+  return null;
 }
 
 function samePage(firstUrl, secondUrl) {

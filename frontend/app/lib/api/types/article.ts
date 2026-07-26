@@ -35,6 +35,7 @@ export interface ArticleAIRequest {
   createShoppingList?: boolean;
   organizeShoppingListWithAi?: boolean;
   includeAiTips?: boolean;
+  includeMiseEnPlace?: boolean;
   includeItemImages?: boolean;
 }
 

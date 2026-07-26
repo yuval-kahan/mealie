@@ -224,6 +224,13 @@
               >
                 <v-icon>{{ $globals.icons.book }}</v-icon>
               </v-btn>
+              <LinkedResourcesButton
+                v-if="linkedResourcesCount"
+                class="recipe-card-linked-resources"
+                entity-type="recipe"
+                :entity-id="recipeId"
+                :count="linkedResourcesCount"
+              />
             </div>
 
             <!-- If we're not logged-in, no items display, so we hide this menu -->
@@ -247,6 +254,8 @@
                 shoppingList: true,
                 aiShoppingList: true,
                 aiImage: true,
+                imageUpload: true,
+                aiEdit: true,
                 print: false,
                 printPreferences: false,
                 share: true,
@@ -274,6 +283,7 @@ import RecipeCardRating from "./RecipeCardRating.vue";
 import RecipeShoppingListQuickDialog from "./RecipeShoppingListQuickDialog.vue";
 import RecipeAICookbooksDialog from "./RecipeAICookbooksDialog.vue";
 import RecipeQuickEditDialog from "./RecipeQuickEditDialog.vue";
+import LinkedResourcesButton from "~/components/Domain/LinkedResources/LinkedResourcesButton.vue";
 import { useUserApi } from "~/composables/api/api-client";
 import { useRecipeCopy } from "~/composables/recipes/use-recipe-copy";
 import { recipeItemImagesEnsured, useRecipeItemImages } from "~/composables/recipes/use-recipe-item-images";
@@ -333,6 +343,7 @@ const shoppingListQuickDialog = ref(false);
 const shoppingListOverlayLoading = ref(false);
 const aiCookbooksDialog = ref(false);
 const quickEditDialog = ref(false);
+const linkedResourcesCount = computed(() => Number(props.extras?.linkedResourcesCount || 0));
 const recipeContextMenu = ref<{
   openMealplannerDialog: () => Promise<void>;
   openShoppingListDialog: () => Promise<void>;
@@ -614,6 +625,15 @@ async function openShoppingListFromCard() {
     background-color 0.15s ease,
     box-shadow 0.15s ease,
     color 0.15s ease;
+  width: 22px !important;
+}
+.recipe-card-linked-resources {
+  flex: 0 0 22px;
+  width: 22px;
+}
+.recipe-card-linked-resources .linked-resources-button {
+  height: 28px !important;
+  min-width: 22px !important;
   width: 22px !important;
 }
 .recipe-card-actions > .v-btn,

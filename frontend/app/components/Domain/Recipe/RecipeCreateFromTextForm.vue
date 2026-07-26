@@ -129,6 +129,13 @@
           :disabled="state.loading"
         />
         <v-checkbox
+          v-model="includeMiseEnPlace"
+          color="primary"
+          hide-details
+          :label="$t('recipe.include-mise-en-place-description')"
+          :disabled="state.loading"
+        />
+        <v-checkbox
           v-model="includeItemImages"
           color="primary"
           hide-details
@@ -221,6 +228,7 @@ const domCreateForm = ref<VForm | null>(null);
 const shouldTranslate = ref(true);
 const shouldCreateShoppingList = ref(true);
 const includeAiTips = ref(true);
+const includeMiseEnPlace = ref(true);
 const recipeCreatePreferences = useRecipeCreatePreferences();
 const includeItemImages = computed({
   get: () => recipeCreatePreferences.value.includeItemImages,
@@ -409,6 +417,7 @@ async function createRecipeFromText() {
     text,
     translateLanguage: shouldTranslate.value ? i18n.locale.value : null,
     includeAiTips: includeAiTips.value,
+    includeMiseEnPlace: includeMiseEnPlace.value,
     autoImage: true,
     includeItemImages: includeItemImages.value,
   });
@@ -440,6 +449,7 @@ async function createRecipeFromImages() {
     includeAiTips.value,
     includeItemImages.value,
     imageNotes.value.trim() || null,
+    includeMiseEnPlace.value,
   );
 
   if (error || !data) {
@@ -582,6 +592,7 @@ async function createRecipeFromUrlViaExtension(url: string): Promise<ExtensionRe
           createShoppingList: shouldCreateShoppingList.value,
           organizeShoppingListWithAi: shouldCreateShoppingList.value,
           includeAiTips: includeAiTips.value,
+          includeMiseEnPlace: includeMiseEnPlace.value,
           includeItemImages: includeItemImages.value,
         },
       },

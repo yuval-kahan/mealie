@@ -153,6 +153,61 @@
       </v-card-text>
     </BaseDialog>
 
+    <BaseDialog
+      v-model="bookCoverDialog"
+      :title="$t('cookbook.change-book-cover')"
+      :icon="$globals.icons.fileImage"
+      :loading="bookCoverSaving"
+      @close="resetBookCoverDialog"
+    >
+      <v-card-text>
+        <p v-if="bookCoverTarget" class="font-weight-medium mb-4">
+          {{ bookCoverTarget.name }}
+        </p>
+        <v-btn-toggle v-model="bookCoverMode" mandatory divided density="comfortable" class="mb-4">
+          <v-btn value="upload" :prepend-icon="$globals.icons.upload">
+            {{ $t("cookbook.upload-cover") }}
+          </v-btn>
+          <v-btn value="url" :prepend-icon="$globals.icons.link">
+            {{ $t("cookbook.cover-address") }}
+          </v-btn>
+          <v-btn value="auto" :prepend-icon="$globals.icons.robot">
+            {{ $t("cookbook.find-cover") }}
+          </v-btn>
+        </v-btn-toggle>
+        <v-file-input
+          v-if="bookCoverMode === 'upload'"
+          v-model="bookCoverFile"
+          accept="image/*"
+          show-size
+          :label="$t('cookbook.choose-cover')"
+          :prepend-icon="$globals.icons.fileImage"
+        />
+        <v-text-field
+          v-else-if="bookCoverMode === 'url'"
+          v-model="bookCoverAddress"
+          type="url"
+          variant="outlined"
+          :label="$t('cookbook.cover-address')"
+          :prepend-inner-icon="$globals.icons.link"
+        />
+        <v-alert v-else type="info" variant="tonal" density="compact">
+          {{ $t("cookbook.find-cover-help") }}
+        </v-alert>
+      </v-card-text>
+      <template #custom-card-action>
+        <v-btn
+          color="primary"
+          :prepend-icon="$globals.icons.save"
+          :disabled="!canSaveBookCover"
+          :loading="bookCoverSaving"
+          @click="saveBookCover"
+        >
+          {{ $t("general.save") }}
+        </v-btn>
+      </template>
+    </BaseDialog>
+
     <UploadedBookRecipeDeleteDialog
       v-model="bookRecipeDeleteDialog"
       :book="bookRecipeDeleteTarget"
@@ -326,6 +381,67 @@
         <v-alert type="info" variant="tonal" density="compact" class="mt-4">
           {{ $t('cookbook.translation-professional-contents-hint') }}
         </v-alert>
+        <v-alert
+          v-if="bookTranslationTarget.translationStatus === 'partial_failed'"
+          type="warning"
+          variant="tonal"
+          density="compact"
+          class="mt-4"
+        >
+          {{ $t("cookbook.translation-partial-saved") }}
+          <div v-if="bookTranslationFailedChunks.length" class="mt-2">
+            <strong>{{ $t("cookbook.translation-missing-ranges") }}</strong>
+            <v-chip
+              v-for="chunk in bookTranslationFailedChunks"
+              :key="chunk.range"
+              size="small"
+              class="ma-1"
+              @click="selectManualTranslationPage(chunk.startPage)"
+            >
+              {{ chunk.startPage }}–{{ chunk.endPage }}
+            </v-chip>
+          </div>
+          <p class="mt-2 mb-0">
+            {{ $t("cookbook.translation-retry-hint") }}
+          </p>
+        </v-alert>
+        <v-expansion-panels
+          v-if="bookTranslationTarget.translationStatus === 'partial_failed'"
+          class="mt-4"
+          variant="accordion"
+        >
+          <v-expansion-panel>
+            <v-expansion-panel-title>
+              {{ $t("cookbook.add-manual-translation-page") }}
+            </v-expansion-panel-title>
+            <v-expansion-panel-text>
+              <v-number-input
+                v-model="bookTranslationManualPage"
+                :min="1"
+                variant="outlined"
+                control-variant="stacked"
+                :label="$t('cookbook.page-number')"
+              />
+              <v-textarea
+                v-model="bookTranslationManualText"
+                variant="outlined"
+                auto-grow
+                rows="6"
+                maxlength="200000"
+                :label="$t('cookbook.translated-page-text')"
+              />
+              <v-btn
+                color="primary"
+                :prepend-icon="$globals.icons.save"
+                :loading="bookTranslationManualSaving"
+                :disabled="!bookTranslationManualPage || !bookTranslationManualText.trim()"
+                @click="saveManualTranslationPage"
+              >
+                {{ $t("cookbook.save-translated-page") }}
+              </v-btn>
+            </v-expansion-panel-text>
+          </v-expansion-panel>
+        </v-expansion-panels>
       </v-card-text>
     </BaseDialog>
 
@@ -497,6 +613,7 @@
             :key="book.id"
             variant="outlined"
             class="cookbook-library__book"
+            :class="{ 'cookbook-library__book--complete': isBookCompleted(book) }"
           >
             <div
               class="cookbook-library__cover cookbook-library__cover--interactive"
@@ -510,7 +627,7 @@
             >
               <v-img
                 v-if="book.bookMetadata?.cover_file_name"
-                :src="api.uploadedBooks.coverUrl(book.id)"
+                :src="api.uploadedBooks.coverUrl(book.id, book.updatedAt)"
                 :alt="book.name"
                 cover
                 height="260"
@@ -527,6 +644,20 @@
               <div class="cookbook-library__cover-action" aria-hidden="true">
                 <v-icon :icon="$globals.icons.openInNew" size="36" />
               </div>
+              <div v-if="isBookCompleted(book)" class="cookbook-library__complete-mark" :title="$t('cookbook.book-completed')">
+                <v-icon :icon="$globals.icons.check" size="22" />
+              </div>
+              <v-btn
+                class="cookbook-library__cover-edit"
+                icon
+                size="small"
+                color="primary"
+                :title="$t('cookbook.change-book-cover')"
+                @click.stop="openBookCoverDialog(book)"
+                @keydown.enter.stop.prevent="openBookCoverDialog(book)"
+              >
+                <v-icon :icon="$globals.icons.fileImage" />
+              </v-btn>
             </div>
             <v-card-item>
               <template #prepend>
@@ -570,6 +701,28 @@
               >
                 {{ $t("cookbook.book-classification-failed") }}
               </v-alert>
+              <div v-if="bookReadingState(book)" class="cookbook-library__reading mt-3">
+                <div class="cookbook-library__reading-row">
+                  <span>{{ $t("cookbook.current-reading-position") }}</span>
+                  <strong>{{ Math.round(bookReadingState(book)?.readingPercent || 0) }}%</strong>
+                </div>
+                <v-progress-linear
+                  :model-value="bookReadingState(book)?.readingPercent || 0"
+                  color="primary"
+                  height="5"
+                  rounded
+                />
+                <div class="cookbook-library__reading-row mt-2">
+                  <span>{{ $t("cookbook.chapters-read") }}</span>
+                  <strong>{{ bookChapterPercent(book) }}%</strong>
+                </div>
+                <v-progress-linear
+                  :model-value="bookChapterPercent(book)"
+                  color="success"
+                  height="5"
+                  rounded
+                />
+              </div>
             </v-card-text>
             <v-card-actions>
               <v-btn variant="text" color="primary" :prepend-icon="$globals.icons.openInNew" @click="openUploadedBook(book)">
@@ -644,7 +797,7 @@ import { useHouseholdSelf } from "@/composables/use-households";
 import CookbookEditor from "~/components/Domain/Cookbook/CookbookEditor.vue";
 import type { CreateCookBook, ReadCookBook } from "~/lib/api/types/cookbook";
 import { useCookbookPreferences } from "~/composables/use-users/preferences";
-import type { AICookbookGenerateRequest, UploadedBook, UploadedBookClassification, UploadedBookDeletePreview } from "~/lib/api/types/uploaded-book";
+import type { AICookbookGenerateRequest, UploadedBook, UploadedBookClassification, UploadedBookDeletePreview, UploadedBookReadingState } from "~/lib/api/types/uploaded-book";
 import { useUserApi } from "~/composables/api/api-client";
 import { alert } from "~/composables/use-toast";
 
@@ -687,6 +840,7 @@ const { household } = useHouseholdSelf();
 const cookbookPreferences = useCookbookPreferences();
 
 const uploadedBooks = ref<UploadedBook[]>([]);
+const uploadedBookReadingStates = ref<Record<string, UploadedBookReadingState>>({});
 const uploadedBooksLoading = ref(false);
 const bookSearch = ref("");
 const bookTypeFilter = ref("all");
@@ -701,6 +855,12 @@ const aiBookMaxRecipes = ref(100);
 const aiBookMaxPages = ref(300);
 const refreshingBookIds = ref(new Set<string>());
 const uploadedBookDeleteDialog = ref(false);
+const bookCoverDialog = ref(false);
+const bookCoverSaving = ref(false);
+const bookCoverTarget = ref<UploadedBook | null>(null);
+const bookCoverMode = ref<"upload" | "url" | "auto">("upload");
+const bookCoverFile = ref<File | null>(null);
+const bookCoverAddress = ref("");
 const uploadedBookDeleteTarget = ref<UploadedBook | null>(null);
 const uploadedBookDeleting = ref(false);
 const uploadedBookDeletePreview = ref<UploadedBookDeletePreview>();
@@ -737,6 +897,9 @@ const bookTranslationOrganizeLists = ref(true);
 const bookTranslationRecipeImages = ref(true);
 const bookTranslationItemImages = ref(true);
 const bookTranslationTips = ref(true);
+const bookTranslationManualPage = ref<number | null>(null);
+const bookTranslationManualText = ref("");
+const bookTranslationManualSaving = ref(false);
 let classificationRefreshTimer: number | null = null;
 
 const aiBookPresetOptions = computed(() => [
@@ -756,6 +919,12 @@ const bookTypeOptions = computed(() => [
 const aiBookSubmitDisabled = computed(() =>
   aiBookMode.value === "preset" ? !aiBookPreset.value.trim() : !aiBookPrompt.value.trim(),
 );
+const canSaveBookCover = computed(() => Boolean(
+  bookCoverTarget.value
+  && (bookCoverMode.value === "auto"
+    || (bookCoverMode.value === "upload" && bookCoverFile.value)
+    || (bookCoverMode.value === "url" && bookCoverAddress.value.trim())),
+));
 const bookExtractionRangeInvalid = computed(() => !bookExtractionAllPages.value && (
   !bookExtractionPageStart.value
   || !bookExtractionPageEnd.value
@@ -769,13 +938,25 @@ const bookTranslationRangeInvalid = computed(() => !bookTranslationAllPages.valu
 const bookTranslationLanguageOptions = computed(() => [
   { title: i18n.t("cookbook.language-hebrew"), value: "Hebrew" },
   { title: i18n.t("cookbook.language-english"), value: "English" },
-  { title: i18n.t("cookbook.language-arabic"), value: "Arabic" },
-  { title: i18n.t("cookbook.language-french"), value: "French" },
-  { title: i18n.t("cookbook.language-italian"), value: "Italian" },
-  { title: i18n.t("cookbook.language-spanish"), value: "Spanish" },
-  { title: i18n.t("cookbook.language-german"), value: "German" },
-  { title: i18n.t("cookbook.language-russian"), value: "Russian" },
 ]);
+const bookTranslationFailedChunks = computed(() => {
+  const raw = bookTranslationTarget.value?.translationChunkStatus;
+  if (!raw) return [];
+  try {
+    const states = JSON.parse(raw) as Array<Record<string, unknown>>;
+    return states
+      .filter(state => state.status !== "completed")
+      .map(state => ({
+        range: String(state.range || `${state.startPage}-${state.endPage}`),
+        startPage: Math.max(1, Number(state.startPage) || 1),
+        endPage: Math.max(1, Number(state.endPage) || Number(state.startPage) || 1),
+      }))
+      .sort((a, b) => a.startPage - b.startPage);
+  }
+  catch {
+    return [];
+  }
+});
 
 function bookClassification(book: UploadedBook): UploadedBookClassification | undefined {
   return book.bookMetadata?.classification;
@@ -830,16 +1011,84 @@ const filteredUploadedBooks = computed(() => {
 async function loadUploadedBooks() {
   uploadedBooksLoading.value = true;
   try {
-    const { data } = await api.uploadedBooks.getAll();
-    uploadedBooks.value = data || [];
+    const [booksResponse, statesResponse] = await Promise.all([
+      api.uploadedBooks.getAll(),
+      api.uploadedBooks.getReadingStates(),
+    ]);
+    uploadedBooks.value = booksResponse.data || [];
+    uploadedBookReadingStates.value = Object.fromEntries(
+      (statesResponse.data || []).map(state => [state.bookId, state]),
+    );
   }
   finally {
     uploadedBooksLoading.value = false;
   }
 }
 
+async function loadUploadedBookReadingStates() {
+  const { data } = await api.uploadedBooks.getReadingStates();
+  if (data) {
+    uploadedBookReadingStates.value = Object.fromEntries(data.map(state => [state.bookId, state]));
+  }
+}
+
+function bookReadingState(book: UploadedBook) {
+  const direct = uploadedBookReadingStates.value[book.id];
+  if (direct) return direct;
+  if (book.translatedBookId) return uploadedBookReadingStates.value[book.translatedBookId];
+  return undefined;
+}
+
+function bookChapterPercent(book: UploadedBook) {
+  const state = bookReadingState(book);
+  if (!state?.totalChapters) return 0;
+  return Math.min(100, Math.round((new Set(state.completedChapters).size / state.totalChapters) * 100));
+}
+
+function isBookCompleted(book: UploadedBook) {
+  const state = bookReadingState(book);
+  return Boolean(state?.totalChapters && bookChapterPercent(book) >= 100);
+}
+
 function openUploadedBook(book: UploadedBook) {
   window.open(api.uploadedBooks.fileUrl(book.id), "_blank", "noopener");
+}
+
+function resetBookCoverDialog() {
+  bookCoverTarget.value = null;
+  bookCoverMode.value = "upload";
+  bookCoverFile.value = null;
+  bookCoverAddress.value = "";
+}
+
+function openBookCoverDialog(book: UploadedBook) {
+  resetBookCoverDialog();
+  bookCoverTarget.value = book;
+  bookCoverDialog.value = true;
+}
+
+async function saveBookCover() {
+  if (!bookCoverTarget.value || bookCoverSaving.value || !canSaveBookCover.value) return;
+  bookCoverSaving.value = true;
+  try {
+    const response = bookCoverMode.value === "upload"
+      ? await api.uploadedBooks.uploadCover(bookCoverTarget.value.id, bookCoverFile.value!)
+      : bookCoverMode.value === "url"
+        ? await api.uploadedBooks.saveCoverUrl(bookCoverTarget.value.id, bookCoverAddress.value.trim())
+        : await api.uploadedBooks.findCover(bookCoverTarget.value.id);
+    if (!response.data || response.error) {
+      alert.error(i18n.t("cookbook.cover-save-failed"));
+      return;
+    }
+    const index = uploadedBooks.value.findIndex(book => book.id === response.data!.id);
+    if (index >= 0) uploadedBooks.value[index] = response.data;
+    bookCoverDialog.value = false;
+    resetBookCoverDialog();
+    alert.success(i18n.t("cookbook.cover-saved"));
+  }
+  finally {
+    bookCoverSaving.value = false;
+  }
 }
 
 async function classifyUploadedBook(book: UploadedBook) {
@@ -853,8 +1102,14 @@ async function classifyUploadedBook(book: UploadedBook) {
   if (classificationRefreshTimer !== null) {
     window.clearTimeout(classificationRefreshTimer);
   }
+  if (!pageMounted) {
+    return;
+  }
   classificationRefreshTimer = window.setTimeout(() => {
     classificationRefreshTimer = null;
+    if (!pageMounted) {
+      return;
+    }
     void loadUploadedBooks();
   }, 5000);
 }
@@ -951,7 +1206,44 @@ function openBookTranslationDialog(book: UploadedBook) {
   bookTranslationRecipeImages.value = options?.auto_recipe_images !== false;
   bookTranslationItemImages.value = options?.include_item_images !== false;
   bookTranslationTips.value = options?.include_ai_tips !== false;
+  bookTranslationManualPage.value = null;
+  bookTranslationManualText.value = "";
   bookTranslationDialog.value = true;
+}
+
+function selectManualTranslationPage(page: number) {
+  bookTranslationManualPage.value = page;
+}
+
+async function saveManualTranslationPage() {
+  if (
+    !bookTranslationTarget.value
+    || !bookTranslationManualPage.value
+    || !bookTranslationManualText.value.trim()
+    || bookTranslationManualSaving.value
+  ) return;
+  bookTranslationManualSaving.value = true;
+  try {
+    const { data, error } = await api.uploadedBooks.saveManualTranslationPage(
+      bookTranslationTarget.value.id,
+      {
+        page: bookTranslationManualPage.value,
+        text: bookTranslationManualText.value.trim(),
+      },
+    );
+    if (error || !data) {
+      alert.error(i18n.t("cookbook.manual-translation-save-failed"));
+      return;
+    }
+    const index = uploadedBooks.value.findIndex(book => book.id === data.id);
+    if (index >= 0) uploadedBooks.value[index] = data;
+    bookTranslationTarget.value = data;
+    bookTranslationManualText.value = "";
+    alert.success(i18n.t("cookbook.manual-translation-saved"));
+  }
+  finally {
+    bookTranslationManualSaving.value = false;
+  }
 }
 
 async function startBookExtraction() {
@@ -1107,17 +1399,22 @@ function handleUnmount() {
   }
   deleteCreateTarget();
 }
+let pageMounted = false;
 onMounted(() => {
+  pageMounted = true;
   window.addEventListener("beforeunload", handleUnmount);
-  loadUploadedBooks();
+  window.addEventListener("focus", loadUploadedBookReadingStates);
+  void loadUploadedBooks();
 });
 onBeforeUnmount(() => {
+  pageMounted = false;
   if (classificationRefreshTimer !== null) {
     window.clearTimeout(classificationRefreshTimer);
     classificationRefreshTimer = null;
   }
   handleUnmount();
   window.removeEventListener("beforeunload", handleUnmount);
+  window.removeEventListener("focus", loadUploadedBookReadingStates);
 });
 </script>
 
@@ -1156,6 +1453,11 @@ onBeforeUnmount(() => {
   transform: translateY(-2px);
 }
 
+.cookbook-library__book--complete {
+  border-color: rgba(var(--v-theme-success), 0.72);
+  box-shadow: 0 0 0 1px rgba(var(--v-theme-success), 0.2);
+}
+
 .cookbook-library__cover {
   aspect-ratio: 4 / 3;
   background: rgb(var(--v-theme-surface-variant));
@@ -1184,6 +1486,36 @@ onBeforeUnmount(() => {
   pointer-events: none;
   position: absolute;
   transition: opacity 0.16s ease;
+}
+
+.cookbook-library__complete-mark {
+  align-items: center;
+  background: rgb(var(--v-theme-success));
+  border-radius: 50%;
+  color: rgb(var(--v-theme-on-success));
+  display: flex;
+  height: 34px;
+  inset-inline-end: 10px;
+  justify-content: center;
+  position: absolute;
+  top: 10px;
+  width: 34px;
+  z-index: 2;
+}
+
+.cookbook-library__cover-edit {
+  inset-inline-start: 10px;
+  position: absolute;
+  top: 10px;
+  z-index: 3;
+}
+
+.cookbook-library__reading-row {
+  align-items: center;
+  display: flex;
+  font-size: 0.78rem;
+  justify-content: space-between;
+  margin-bottom: 3px;
 }
 
 .cookbook-library__book:hover .cookbook-library__cover-action,

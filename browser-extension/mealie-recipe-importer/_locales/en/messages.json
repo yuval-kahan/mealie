@@ -3,7 +3,7 @@
     "message": "Mealie AI Recipe Importer"
   },
   "extensionDescription": {
-    "message": "Extract the current browser page and send it to Mealie AI as a recipe or article."
+    "message": "Send recipes, articles, food websites, restaurants, and videos from the browser to Mealie AI."
   },
   "actionTitle": {
     "message": "Send to Mealie AI"

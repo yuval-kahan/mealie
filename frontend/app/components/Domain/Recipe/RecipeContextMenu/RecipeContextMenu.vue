@@ -59,6 +59,8 @@ interface ContextMenuIncludes {
   shoppingList?: boolean;
   aiShoppingList?: boolean;
   aiImage?: boolean;
+  imageUpload?: boolean;
+  aiEdit?: boolean;
   print?: boolean;
   printPreferences?: boolean;
   share?: boolean;
@@ -104,6 +106,8 @@ const props = withDefaults(defineProps<Props>(), {
     shoppingList: true,
     aiShoppingList: true,
     aiImage: true,
+    imageUpload: true,
+    aiEdit: true,
     print: true,
     printPreferences: true,
     share: true,

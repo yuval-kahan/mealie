@@ -157,22 +157,66 @@
     </v-card-text>
 
     <template #custom-card-action>
-      <v-btn
-        v-if="shoppingList"
-        color="primary"
-        variant="tonal"
-        :prepend-icon="dialogMode === 'view' ? $globals.icons.edit : $globals.icons.eye"
-        @click="toggleDialogMode"
-      >
-        {{ $t(dialogMode === "view" ? "general.edit" : "general.view") }}
-      </v-btn>
+      <div v-if="shoppingList" class="d-flex align-center ga-2">
+        <v-btn
+          color="success"
+          variant="tonal"
+          :prepend-icon="$globals.icons.robot"
+          @click="aiAdjustDialog = true"
+        >
+          {{ $t("shopping-list.adjust-quantities-with-ai") }}
+        </v-btn>
+        <v-btn
+          color="primary"
+          variant="tonal"
+          :prepend-icon="$globals.icons.contentCopy"
+          @click="copyCurrentList"
+        >
+          {{ $t("general.copy") }}
+        </v-btn>
+        <v-btn
+          color="primary"
+          variant="tonal"
+          :prepend-icon="dialogMode === 'view' ? $globals.icons.edit : $globals.icons.eye"
+          @click="toggleDialogMode"
+        >
+          {{ $t(dialogMode === "view" ? "general.edit" : "general.view") }}
+        </v-btn>
+      </div>
     </template>
+  </BaseDialog>
+  <BaseDialog
+    v-model="aiAdjustDialog"
+    :title="$t('shopping-list.adjust-quantities-with-ai')"
+    :icon="$globals.icons.robot"
+    :submit-text="$t('general.apply')"
+    :loading="aiAdjusting"
+    :submit-disabled="aiAdjustmentRequest.trim().length < 2"
+    can-submit
+    @submit="adjustQuantitiesWithAI"
+    @close="aiAdjustmentRequest = ''"
+  >
+    <v-card-text>
+      <p class="text-body-2 text-medium-emphasis mb-3">
+        {{ $t("shopping-list.adjust-quantities-with-ai-description") }}
+      </p>
+      <v-textarea
+        v-model="aiAdjustmentRequest"
+        :label="$t('shopping-list.quantity-change')"
+        :placeholder="$t('shopping-list.adjust-quantities-with-ai-placeholder')"
+        rows="4"
+        maxlength="2000"
+        counter
+        autofocus
+      />
+    </v-card-text>
   </BaseDialog>
 </template>
 
 <script setup lang="ts">
 import type { ShoppingListItemOut, ShoppingListOut } from "~/lib/api/types/household";
 import { useUserApi } from "~/composables/api/api-client";
+import { useShoppingListCopy } from "~/composables/shopping-list-page/sub-composables/use-shopping-list-copy";
 import { alert } from "~/composables/use-toast";
 
 interface Props {
@@ -193,6 +237,7 @@ const dialog = computed({
 });
 const api = useUserApi();
 const i18n = useI18n();
+const { copyShoppingList } = useShoppingListCopy();
 const shoppingList = ref<ShoppingListOut | null>(null);
 const dialogMode = ref<"view" | "edit">("view");
 const listName = ref("");
@@ -202,6 +247,9 @@ const savingName = ref(false);
 const addingItem = ref(false);
 const newItem = ref("");
 const busyItemIds = ref<Set<string>>(new Set());
+const aiAdjustDialog = ref(false);
+const aiAdjusting = ref(false);
+const aiAdjustmentRequest = ref("");
 let loadVersion = 0;
 
 const canSaveName = computed(() => {
@@ -325,6 +373,35 @@ async function openList() {
 
 function toggleDialogMode() {
   dialogMode.value = dialogMode.value === "view" ? "edit" : "view";
+}
+
+function copyCurrentList() {
+  if (shoppingList.value) {
+    copyShoppingList(shoppingList.value);
+  }
+}
+
+async function adjustQuantitiesWithAI() {
+  if (!shoppingList.value || aiAdjusting.value || aiAdjustmentRequest.value.trim().length < 2) return;
+  aiAdjusting.value = true;
+  try {
+    const { data, error } = await api.shopping.lists.adjustQuantitiesWithAi(
+      shoppingList.value.id,
+      aiAdjustmentRequest.value.trim(),
+    );
+    if (error || !data) {
+      alert.error(i18n.t("shopping-list.ai-quantity-adjustment-failed"));
+      return;
+    }
+    shoppingList.value = data;
+    initializeDrafts(data);
+    aiAdjustmentRequest.value = "";
+    aiAdjustDialog.value = false;
+    alert.success(i18n.t("shopping-list.ai-quantities-adjusted"));
+  }
+  finally {
+    aiAdjusting.value = false;
+  }
 }
 
 async function reloadList() {

@@ -1,11 +1,13 @@
 import json
 import re
+import shutil
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 import sqlalchemy as sa
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
 from pydantic import UUID4
+from starlette.responses import FileResponse
 
 from mealie.db.models.household.shopping_list import ShoppingList
 from mealie.db.models.household.shopping_website import (
@@ -22,11 +24,13 @@ from mealie.schema.household.shopping_website import (
     ShoppingWebsiteCreate,
     ShoppingWebsiteDeletePreview,
     ShoppingWebsiteEntityLinksUpdate,
+    ShoppingWebsiteImageURLRequest,
     ShoppingWebsiteOut,
     ShoppingWebsiteUpdate,
 )
 from mealie.schema.openai.shopping_website import OpenAIShoppingWebsite
 from mealie.schema.response.responses import ErrorResponse
+from mealie.services.entity_image_service import EntityImageService
 from mealie.services.openai import OpenAIService
 from mealie.services.recipe.recipe_service import RecipeService
 
@@ -73,6 +77,13 @@ def clean_html_text(value: str) -> str:
 
 @controller(router)
 class ShoppingWebsitesController(BaseUserController):
+    @property
+    def image_service(self) -> EntityImageService:
+        return EntityImageService(self.folders.DATA_DIR)
+
+    def _image_path(self, website: ShoppingWebsite):
+        return self.image_service.image_path("shopping-websites", website.group_id, website.id)
+
     def _ai_enabled(self) -> bool:
         settings = (
             self.session.execute(
@@ -92,6 +103,11 @@ class ShoppingWebsitesController(BaseUserController):
         )
 
     def _to_out(self, website: ShoppingWebsite) -> ShoppingWebsiteOut:
+        image_path = self._image_path(website)
+        try:
+            image_stat = image_path.stat()
+        except FileNotFoundError:
+            image_stat = None
         return ShoppingWebsiteOut(
             id=website.id,
             group_id=website.group_id,
@@ -105,6 +121,8 @@ class ShoppingWebsitesController(BaseUserController):
             updated_at=website.updated_at,
             recipe_ids=[link.recipe_id for link in website.recipe_links],
             shopping_list_ids=[link.shopping_list_id for link in website.shopping_list_links],
+            has_image=bool(image_stat and image_stat.st_size > 0),
+            image_version=str(image_stat.st_mtime_ns) if image_stat else None,
         )
 
     def _get_or_404(self, website_id: UUID4) -> ShoppingWebsite:
@@ -346,6 +364,61 @@ class ShoppingWebsitesController(BaseUserController):
         self.session.refresh(website)
         return self._to_out(website)
 
+    @router.get("/{website_id}/image", response_class=FileResponse)
+    def get_image(self, website_id: UUID4) -> FileResponse:
+        website = self._get_or_404(website_id)
+        path = self._image_path(website)
+        if not path.exists():
+            raise HTTPException(status.HTTP_404_NOT_FOUND)
+        return FileResponse(
+            path,
+            media_type="image/webp",
+            content_disposition_type="inline",
+            headers={"Cache-Control": "public, max-age=86400", "X-Content-Type-Options": "nosniff"},
+        )
+
+    @router.post("/{website_id}/image", response_model=ShoppingWebsiteOut)
+    async def upload_image(self, website_id: UUID4, image: UploadFile = File(...)) -> ShoppingWebsiteOut:
+        website = self._get_or_404(website_id)
+        content = await image.read(12 * 1024 * 1024 + 1)
+        await image.close()
+        try:
+            await self.image_service.save_content(self._image_path(website), content)
+        except ValueError as error:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=ErrorResponse.respond(str(error)),
+            ) from error
+        return self._to_out(website)
+
+    @router.post("/{website_id}/image-url", response_model=ShoppingWebsiteOut)
+    async def save_image_url(
+        self,
+        website_id: UUID4,
+        data: ShoppingWebsiteImageURLRequest,
+    ) -> ShoppingWebsiteOut:
+        website = self._get_or_404(website_id)
+        try:
+            await self.image_service.save_url(self._image_path(website), data.url)
+        except (ValueError, httpx.HTTPError) as error:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=ErrorResponse.respond(str(error)),
+            ) from error
+        return self._to_out(website)
+
+    @router.post("/{website_id}/image-auto", response_model=ShoppingWebsiteOut)
+    async def find_image(self, website_id: UUID4) -> ShoppingWebsiteOut:
+        website = self._get_or_404(website_id)
+        try:
+            await self.image_service.discover_and_save_page_image(self._image_path(website), website.url)
+        except (ValueError, httpx.HTTPError) as error:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=ErrorResponse.respond(str(error)),
+            ) from error
+        return self._to_out(website)
+
     @router.delete("/{website_id}", status_code=status.HTTP_204_NO_CONTENT)
     def delete(
         self,
@@ -367,5 +440,7 @@ class ShoppingWebsitesController(BaseUserController):
             RecipeService(self.repos, self.user, self.household, translator=self.translator).delete_many(recipe_slugs)
         if delete_shopping_lists and linked.shopping_list_ids:
             self.repos.group_shopping_lists.delete_many(linked.shopping_list_ids)
+        image_dir = self._image_path(website).parent
         self.session.delete(website)
         self.session.commit()
+        shutil.rmtree(image_dir, ignore_errors=True)

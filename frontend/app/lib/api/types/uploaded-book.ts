@@ -84,6 +84,11 @@ export interface UploadedBookTranslateRequest {
   organizeShoppingListsWithAi?: boolean;
 }
 
+export interface UploadedBookManualTranslationPageRequest {
+  page: number;
+  text: string;
+}
+
 export interface UploadedBookRecipeSummary {
   id: string;
   slug: string;
@@ -135,4 +140,52 @@ export interface AICookbookGenerateRequest {
   title?: string | null;
   maxRecipesPerVolume?: number;
   maxEstimatedPagesPerVolume?: number;
+}
+
+export interface UploadedBookReaderPreferences {
+  fontSize: number;
+  fontFamily: "serif" | "sans-serif" | "dyslexic";
+  lineHeight: number;
+  wordSpacing: number;
+  pageWidth: number;
+}
+
+export interface UploadedBookReaderNote {
+  id: string;
+  title?: string;
+  text: string;
+  page: number;
+  pageIndex: number;
+  chapterId?: string | null;
+  createdAt?: string | null;
+}
+
+export interface UploadedBookReaderHighlight {
+  id: string;
+  text: string;
+  page: number;
+  pageIndex: number;
+  chapterId?: string | null;
+  start: number;
+  end: number;
+  createdAt?: string | null;
+}
+
+export interface UploadedBookReadingStateUpdate {
+  currentPage: number;
+  currentPageIndex: number;
+  currentChapterId?: string | null;
+  readingPercent: number;
+  completedChapters: string[];
+  totalChapters: number;
+  notes: UploadedBookReaderNote[];
+  highlights: UploadedBookReaderHighlight[];
+  preferences: UploadedBookReaderPreferences;
+}
+
+export interface UploadedBookReadingState extends UploadedBookReadingStateUpdate {
+  id: string;
+  bookId: string;
+  userId: string;
+  updatedAt?: string | null;
 }

@@ -1,0 +1,7 @@
+Translate the supplied restaurant metadata into natural Hebrew and return structured JSON only.
+
+Rules:
+- cuisine_types must contain Hebrew only. Translate or transliterate every English cuisine, dish style, and category.
+- description must be fully Hebrew. Transliterate proper names when needed instead of leaving English prose.
+- Preserve every factual detail and do not add, remove, infer, summarize, or embellish information.
+- Keep cuisine types concise and the description readable.

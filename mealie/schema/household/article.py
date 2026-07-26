@@ -42,6 +42,7 @@ class ArticleAIRequest(MealieModel):
     create_shopping_list: bool = True
     organize_shopping_list_with_ai: bool = True
     include_ai_tips: bool = True
+    include_mise_en_place: bool = True
     include_item_images: bool = True
 
 

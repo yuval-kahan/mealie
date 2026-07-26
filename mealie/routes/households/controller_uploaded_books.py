@@ -13,16 +13,20 @@ from starlette.responses import FileResponse, RedirectResponse
 from mealie.core.dependencies.dependencies import get_current_user
 from mealie.db.models._model_utils.datetime import get_utc_now
 from mealie.db.models.household.shopping_list import ShoppingList
-from mealie.db.models.household.uploaded_book import UploadedBook
+from mealie.db.models.household.uploaded_book import UploadedBook, UploadedBookReadingState
 from mealie.db.models.recipe import RecipeModel
 from mealie.db.models.recipe.api_extras import ApiExtras, ShoppingListExtras
 from mealie.routes._base import controller
 from mealie.routes._base.base_controllers import BasePublicController
 from mealie.schema.cookbook.uploaded_book import (
     AICookbookGenerateRequest,
+    UploadedBookCoverURLRequest,
     UploadedBookDeletePreview,
     UploadedBookExtractRequest,
+    UploadedBookManualTranslationPageRequest,
     UploadedBookOut,
+    UploadedBookReadingStateOut,
+    UploadedBookReadingStateUpdate,
     UploadedBookRecipeDeleteRequest,
     UploadedBookRecipeDeleteResponse,
     UploadedBookRecipeSummary,
@@ -189,6 +193,49 @@ class UploadedBooksController(BasePublicController):
 
         return book
 
+    def _reading_state_out(self, state: UploadedBookReadingState) -> UploadedBookReadingStateOut:
+        def json_value(raw: str, fallback):
+            try:
+                value = json.loads(raw or "")
+                return value if isinstance(value, type(fallback)) else fallback
+            except (TypeError, ValueError):
+                return fallback
+
+        return UploadedBookReadingStateOut(
+            id=state.id,
+            book_id=state.book_id,
+            user_id=state.user_id,
+            current_page=state.current_page,
+            current_page_index=state.current_page_index,
+            current_chapter_id=state.current_chapter_id,
+            reading_percent=state.reading_percent,
+            completed_chapters=json_value(state.completed_chapters_json, []),
+            total_chapters=state.total_chapters,
+            notes=json_value(state.notes_json, []),
+            highlights=json_value(state.highlights_json, []),
+            preferences=json_value(state.preferences_json, {}),
+            updated_at=state.updated_at,
+        )
+
+    def _get_or_create_reading_state(self, book: UploadedBook) -> UploadedBookReadingState:
+        state = self.session.execute(
+            select(UploadedBookReadingState).where(
+                UploadedBookReadingState.book_id == book.id,
+                UploadedBookReadingState.user_id == self.user.id,
+            )
+        ).scalar_one_or_none()
+        if state is None:
+            state = UploadedBookReadingState(
+                book_id=book.id,
+                group_id=self.group_id,
+                user_id=self.user.id,
+                session=self.session,
+            )
+            self.session.add(state)
+            self.session.commit()
+            self.session.refresh(state)
+        return state
+
     def _preferred_reading_book(self, book: UploadedBook, page: int | None = None) -> UploadedBook:
         if book.is_translated_book or not book.translated_book_id:
             return book
@@ -199,7 +246,7 @@ class UploadedBooksController(BasePublicController):
                     UploadedBook.id == book.translated_book_id,
                     UploadedBook.group_id == self.group_id,
                     UploadedBook.is_translated_book.is_(True),
-                    UploadedBook.translation_status == "completed",
+                    UploadedBook.translation_status.in_(("completed", "partial_failed")),
                 )
             )
             .scalars()
@@ -389,6 +436,53 @@ class UploadedBooksController(BasePublicController):
 
         return [UploadedBookOut.model_validate(book) for book in books]
 
+    @router.get("/reading-states", response_model=list[UploadedBookReadingStateOut])
+    def get_reading_states(self) -> list[UploadedBookReadingStateOut]:
+        states = (
+            self.session.execute(
+                select(UploadedBookReadingState)
+                .join(UploadedBook, UploadedBook.id == UploadedBookReadingState.book_id)
+                .where(
+                    UploadedBook.group_id == self.group_id,
+                    UploadedBookReadingState.user_id == self.user.id,
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return [self._reading_state_out(state) for state in states]
+
+    @router.get("/{book_id}/reading-state", response_model=UploadedBookReadingStateOut)
+    def get_reading_state(self, book_id: UUID4) -> UploadedBookReadingStateOut:
+        return self._reading_state_out(self._get_or_create_reading_state(self._get_book_or_404(book_id)))
+
+    @router.put("/{book_id}/reading-state", response_model=UploadedBookReadingStateOut)
+    def update_reading_state(
+        self,
+        book_id: UUID4,
+        data: UploadedBookReadingStateUpdate,
+    ) -> UploadedBookReadingStateOut:
+        state = self._get_or_create_reading_state(self._get_book_or_404(book_id))
+        state.current_page = data.current_page
+        state.current_page_index = data.current_page_index
+        state.current_chapter_id = data.current_chapter_id
+        state.reading_percent = data.reading_percent
+        state.completed_chapters_json = json.dumps(
+            list(dict.fromkeys(data.completed_chapters)), ensure_ascii=False
+        )
+        state.total_chapters = data.total_chapters
+        state.notes_json = json.dumps(
+            [note.model_dump(mode="json") for note in data.notes], ensure_ascii=False
+        )
+        state.highlights_json = json.dumps(
+            [highlight.model_dump(mode="json") for highlight in data.highlights], ensure_ascii=False
+        )
+        state.preferences_json = json.dumps(data.preferences.model_dump(mode="json"), ensure_ascii=False)
+        self.session.add(state)
+        self.session.commit()
+        self.session.refresh(state)
+        return self._reading_state_out(state)
+
     @router.post("/generate", response_model=list[UploadedBookOut], status_code=status.HTTP_201_CREATED)
     async def generate_ai_cookbook(self, data: AICookbookGenerateRequest) -> list[UploadedBookOut]:
         builder = AICookbookBuilder(self.repos, self.user, self.household, self.translator)
@@ -531,6 +625,31 @@ class UploadedBooksController(BasePublicController):
     def cancel_translate_book(self, book_id: UUID4) -> UploadedBookOut:
         book = self._get_book_or_404(book_id)
         return UploadedBookOut.model_validate(self._cancel_active_translation(book))
+
+    @router.post("/{book_id}/translate/manual-page", response_model=UploadedBookOut)
+    async def save_manual_translation_page(
+        self,
+        book_id: UUID4,
+        data: UploadedBookManualTranslationPageRequest,
+    ) -> UploadedBookOut:
+        book = self._get_book_or_404(book_id)
+        if book.is_translated_book:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Use the original book for translation changes")
+        try:
+            updated_book = await UploadedBookTranslator(
+                self.repos,
+                self.user,
+                self.household,
+                self.translator,
+            ).save_manual_translation_page(
+                book.id,
+                self.folders.DATA_DIR.joinpath("uploaded-books"),
+                data.page,
+                data.text,
+            )
+        except ValueError as error:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+        return UploadedBookOut.model_validate(updated_book)
 
     @router.post("/{book_id}/translate", response_model=UploadedBookOut, status_code=status.HTTP_202_ACCEPTED)
     def translate_book(
@@ -854,3 +973,45 @@ class UploadedBooksController(BasePublicController):
             content_disposition_type="inline",
             headers={"Cache-Control": "public, max-age=86400", "X-Content-Type-Options": "nosniff"},
         )
+
+    @router.post("/{book_id}/cover", response_model=UploadedBookOut)
+    async def upload_book_cover(self, book_id: UUID4, image: UploadFile = File(...)) -> UploadedBookOut:
+        book = self._get_book_or_404(book_id)
+        content = await image.read(12 * 1024 * 1024 + 1)
+        await image.close()
+        try:
+            await UploadedBookCoverService(self.repos).save_content(
+                book,
+                self.folders.DATA_DIR.joinpath("uploaded-books"),
+                content,
+            )
+        except ValueError as error:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+        return UploadedBookOut.model_validate(book)
+
+    @router.post("/{book_id}/cover-url", response_model=UploadedBookOut)
+    async def save_book_cover_url(
+        self,
+        book_id: UUID4,
+        data: UploadedBookCoverURLRequest,
+    ) -> UploadedBookOut:
+        book = self._get_book_or_404(book_id)
+        try:
+            await UploadedBookCoverService(self.repos).save_url(
+                book,
+                self.folders.DATA_DIR.joinpath("uploaded-books"),
+                data.url,
+            )
+        except ValueError as error:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+        return UploadedBookOut.model_validate(book)
+
+    @router.post("/{book_id}/cover-auto", response_model=UploadedBookOut)
+    async def refresh_book_cover(self, book_id: UUID4) -> UploadedBookOut:
+        book = self._get_book_or_404(book_id)
+        if not await UploadedBookCoverService(self.repos).refresh_cover(
+            book,
+            self.folders.DATA_DIR.joinpath("uploaded-books"),
+        ):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="No suitable cookbook cover was found")
+        return UploadedBookOut.model_validate(book)

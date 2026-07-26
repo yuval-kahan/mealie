@@ -70,7 +70,8 @@ class OpenAIRecipe(OpenAIBase):
         None,
         description=(
             "Where the recipe came from, if explicitly available. Examples: website name, blog name, TV show, "
-            "book title with page number, magazine, article, or other source record. Do not invent."
+            "book title with page number, magazine, article, or other source record. When the input contains a URL, "
+            "preserve the complete URL together with a concise human-readable source name. Do not invent."
         ),
     )
 
@@ -119,17 +120,112 @@ class OpenAIRecipe(OpenAIBase):
 
     categories: list[str] = Field(
         default_factory=list,
-        description="A short list of obvious recipe categories, such as Dinner, Dessert, Pasta, or Sauce.",
+        description=(
+            "A short list of obvious recipe categories written in Hebrew only, regardless of the recipe output "
+            "language. Examples: מנה עיקרית, קינוחים, פסטה, רטבים. Never return English category names."
+        ),
     )
 
     tags: list[str] = Field(
         default_factory=list,
-        description="A short list of useful recipe tags, such as vegetarian, Italian, quick, baking, or holiday.",
+        description=(
+            "A short list of useful recipe tags written in Hebrew whenever possible. Chef and restaurant proper "
+            "names may additionally appear in their original language, but general discovery tags must be Hebrew."
+        ),
+    )
+
+    core_dish_name: str | None = Field(
+        None,
+        description=(
+            "The concise food/dish name in Hebrew, without chef, restaurant, site, book, channel, or show "
+            "attribution. This is mandatory whenever a usable dish name can be identified, even when the rest of "
+            "the recipe is returned in another language, because this value is used as a Hebrew discovery tag."
+        ),
+    )
+
+    primary_category: str | None = Field(
+        None,
+        description=(
+            "One broad, useful recipe category written in Hebrew only, such as מנה עיקרית, תוספות, קינוחים, "
+            "פסטה, מרקים, רטבים, לחמים, ארוחות בוקר, or משקאות."
+        ),
+    )
+
+    is_michelin_dish: bool = Field(
+        False,
+        description=(
+            "True only when the supplied source explicitly or reliably identifies the dish, restaurant, or credited "
+            "chef with Michelin-star or Michelin Guide recognition. Fine dining or fame alone is not enough."
+        ),
+    )
+
+    is_gourmet_dish: bool = Field(
+        False,
+        description=(
+            "True when the dish genuinely uses refined restaurant-style technique, composition, ingredients, or "
+            "presentation. Do not mark ordinary home cooking as gourmet."
+        ),
+    )
+
+    is_complete_meal: bool = Field(
+        False,
+        description=(
+            "True when the recipe can reasonably serve as a substantial standalone meal, "
+            "not merely a component."
+        ),
+    )
+
+    meal_periods: list[str] = Field(
+        default_factory=list,
+        description=(
+            "One or more meal periods for which the recipe is suitable. Use only the canonical values breakfast, "
+            "lunch, and dinner. Include every genuinely suitable period; a recipe may fit more than one."
+        ),
+    )
+
+    media_source_type: str | None = Field(
+        None,
+        description=(
+            "Explicit source medium when supported: television, instagram, youtube, tiktok, website, cookbook, "
+            "magazine, or other concise type. Use null when unknown."
+        ),
+    )
+
+    media_source_name: str | None = Field(
+        None,
+        description=(
+            "Explicit TV show, Instagram account, YouTube channel, TikTok account, site, book, or magazine name. "
+            "Never invent it."
+        ),
     )
 
     tools: list[str] = Field(
         default_factory=list,
         description="A short list of required kitchen tools or equipment explicitly mentioned in the recipe.",
+    )
+
+    mise_en_place: str | None = Field(
+        None,
+        description=(
+            "Legacy combined Markdown preparation-ahead plan. Prefer mise_en_place_food and "
+            "mise_en_place_tools for new responses."
+        ),
+    )
+
+    mise_en_place_food: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Concise food preparation tasks to complete before cooking starts, one useful task per item, such as "
+            "washing, cutting, measuring, chilling, or preparing a sauce. Do not include equipment-only items."
+        ),
+    )
+
+    mise_en_place_tools: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Kitchen tools and equipment that should be ready before cooking starts, one concise item per entry. "
+            "Do not repeat ingredients or food preparation tasks."
+        ),
     )
 
     source_image_is_finished_dish: bool = Field(

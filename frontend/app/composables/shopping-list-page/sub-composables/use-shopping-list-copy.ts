@@ -10,8 +10,16 @@ export function useShoppingListCopy() {
   const copy = useCopyList();
   const i18n = useI18n();
 
-  function copyListItems(itemsByLabel: { [key: string]: ShoppingListItemOut[] }, copyType: CopyTypes) {
+  function copyListItems(
+    itemsByLabel: { [key: string]: ShoppingListItemOut[] },
+    copyType: CopyTypes,
+    title?: string | null,
+  ) {
     const text: string[] = [];
+    const normalizedTitle = title?.trim();
+    if (normalizedTitle) {
+      text.push(copyType === "markdown" ? `# ${normalizedTitle}` : normalizedTitle, "");
+    }
     Object.entries(itemsByLabel).forEach(([label, items], idx) => {
       if (idx) {
         text.push("");
@@ -25,7 +33,7 @@ export function useShoppingListCopy() {
   }
 
   function copyShoppingList(shoppingList: ShoppingListOut, copyType: CopyTypes = "plain") {
-    copyListItems(buildItemsByLabel(shoppingList), copyType);
+    copyListItems(buildItemsByLabel(shoppingList), copyType, shoppingList.name);
   }
 
   function buildItemsByLabel(shoppingList: ShoppingListOut) {

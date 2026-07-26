@@ -35,7 +35,15 @@ from mealie.repos.all_repositories import get_repositories
 from mealie.repos.repository_factory import AllRepositories
 from mealie.repos.repository_generic import RepositoryGeneric
 from mealie.schema.household.household import HouseholdInDB, HouseholdRecipeUpdate
+from mealie.schema.meal_plan.ai_meal import (
+    AIMealCourse,
+    AIMealSuggestionItem,
+    AIMealSuggestRequest,
+    AIMealSuggestResponse,
+)
+from mealie.schema.meal_plan.new_meal import PlanEntryType
 from mealie.schema.openai.general import OpenAIText
+from mealie.schema.openai.meal_plan import OpenAIMealPlanResponse
 from mealie.schema.openai.recipe import OpenAIRecipe, OpenAIRecipeTextParse
 from mealie.schema.openai.recipe_search import OpenAIRecipeSearchResponse
 from mealie.schema.recipe.recipe import CreateRecipe, Recipe, RecipeSummary, create_recipe_slug
@@ -66,6 +74,84 @@ SOURCE_IMAGE_META_KEYS = {
     "twitter:image",
     "twitter:image:src",
     "image",
+}
+
+HEBREW_CATEGORY_TRANSLATIONS = {
+    "appetizer": "מנות פתיחה",
+    "appetizers": "מנות פתיחה",
+    "starter": "מנות פתיחה",
+    "starters": "מנות פתיחה",
+    "main": "מנות עיקריות",
+    "main course": "מנות עיקריות",
+    "main courses": "מנות עיקריות",
+    "main dish": "מנות עיקריות",
+    "main dishes": "מנות עיקריות",
+    "side": "תוספות",
+    "side dish": "תוספות",
+    "side dishes": "תוספות",
+    "dessert": "קינוחים",
+    "desserts": "קינוחים",
+    "breakfast": "ארוחות בוקר",
+    "lunch": "ארוחות צהריים",
+    "dinner": "ארוחות ערב",
+    "pasta": "פסטה",
+    "soup": "מרקים",
+    "soups": "מרקים",
+    "salad": "סלטים",
+    "salads": "סלטים",
+    "sauce": "רטבים",
+    "sauces": "רטבים",
+    "bread": "לחמים",
+    "breads": "לחמים",
+    "baking": "אפייה",
+    "pastry": "מאפים",
+    "pastries": "מאפים",
+    "drink": "משקאות",
+    "drinks": "משקאות",
+    "beverage": "משקאות",
+    "beverages": "משקאות",
+    "rice": "אורז",
+    "stew": "תבשילים",
+    "stews": "תבשילים",
+    "seafood": "דגים ופירות ים",
+    "fish": "דגים ופירות ים",
+    "meat": "בשר",
+    "chicken": "עוף",
+    "vegetarian": "צמחוני",
+    "vegan": "טבעוני",
+    "recipe": "מתכונים",
+    "recipes": "מתכונים",
+}
+
+HEBREW_TAG_TRANSLATIONS = {
+    **HEBREW_CATEGORY_TRANSLATIONS,
+    "italian": "איטלקי",
+    "french": "צרפתי",
+    "mediterranean": "ים תיכוני",
+    "middle eastern": "מזרח תיכוני",
+    "quick": "מהיר",
+    "easy": "קל",
+    "holiday": "חגים",
+    "healthy": "בריא",
+    "gluten free": "ללא גלוטן",
+    "dairy free": "ללא מוצרי חלב",
+    "michelin": "מישלן",
+    "gourmet": "גורמה",
+    "meal": "ארוחה",
+    "television": "טלוויזיה",
+    "tv": "טלוויזיה",
+    "instagram": "אינסטגרם",
+    "youtube": "יוטיוב",
+    "tiktok": "טיקטוק",
+    "website": "אתר אינטרנט",
+    "cookbook": "ספר בישול",
+    "magazine": "מגזין",
+}
+
+MEAL_PERIOD_TAGS = {
+    "breakfast": "ארוחת בוקר",
+    "lunch": "ארוחת צהריים",
+    "dinner": "ארוחת ערב",
 }
 
 
@@ -105,6 +191,32 @@ class RecipeServiceBase(BaseService):
 
 
 class RecipeService(RecipeServiceBase):
+    def apply_source_metadata(
+        self,
+        recipe: Recipe,
+        *,
+        source_title: str | None = None,
+        source_url: str | None = None,
+    ) -> Recipe:
+        """Preserve a readable source label and its canonical URL independently."""
+        title = re.sub(r"\s+", " ", source_title or "").strip()[:500]
+        url = (external_url_from_text(source_url) or "").strip()[:4000]
+        if not title and not url:
+            return recipe
+
+        source = (recipe.source or "").strip()
+        if title and (not source or external_url_from_text(source) == source):
+            recipe.source = title
+        elif not source and url:
+            recipe.source = url
+
+        recipe.extras = {
+            **(recipe.extras or {}),
+            **({"sourceTitle": title} if title else {}),
+            **({"sourceUrl": url} if url else {}),
+        }
+        return self.update_one(recipe.slug, recipe)
+
     @staticmethod
     def _short_recipe_attribution(created_by: str | None, source: str | None) -> str:
         value = (created_by or "").strip()
@@ -154,14 +266,17 @@ class RecipeService(RecipeServiceBase):
                 return candidate, slug
 
         numbered_base = candidates[-1]
-        suffix = 2
-        while True:
+        for suffix in range(2, 10_002):
             suffix_text = f" {suffix}"
             candidate = f"{numbered_base[: max(1, 180 - len(suffix_text))].rstrip()}{suffix_text}"
             slug = create_recipe_slug(candidate)
             if not identity_exists(candidate, slug):
                 return candidate, slug
-            suffix += 1
+
+        fallback_suffix = uuid4().hex[:8]
+        suffix_text = f" {fallback_suffix}"
+        candidate = f"{numbered_base[: max(1, 180 - len(suffix_text))].rstrip()}{suffix_text}"
+        return candidate, create_recipe_slug(candidate)
 
     def apply_ai_recipe_attribution(self, recipe: Recipe) -> Recipe:
         """Add a short, reliable attribution to an AI-created recipe title.
@@ -476,6 +591,7 @@ class RecipeService(RecipeServiceBase):
         translate_language: str | None = None,
         include_ai_tips: bool = True,
         notes: str | None = None,
+        include_mise_en_place: bool = True,
     ) -> Recipe:
         openai_recipe_service = OpenAIRecipeService(self.repos, self.user, self.household, self.translator)
         with get_temporary_path() as temp_path:
@@ -492,6 +608,7 @@ class RecipeService(RecipeServiceBase):
                 translate_language=translate_language,
                 include_ai_tips=include_ai_tips,
                 notes=notes,
+                include_mise_en_place=include_mise_en_place,
             )
 
             recipe = self.create_one(self.apply_ai_recipe_attribution(recipe_data))
@@ -530,10 +647,16 @@ class RecipeService(RecipeServiceBase):
         text: str,
         translate_language: str | None = None,
         include_ai_tips: bool = True,
+        include_mise_en_place: bool = True,
         auto_image: bool = True,
     ) -> Recipe:
         openai_recipe_service = OpenAIRecipeService(self.repos, self.user, self.household, self.translator)
-        recipe_data = await openai_recipe_service.build_recipe_from_text(text, translate_language, include_ai_tips)
+        recipe_data = await openai_recipe_service.build_recipe_from_text(
+            text,
+            translate_language,
+            include_ai_tips,
+            include_mise_en_place,
+        )
         recipe = self.create_one(self.apply_ai_recipe_attribution(recipe_data))
         if auto_image:
             await self.attach_best_effort_image(recipe, search_query=recipe.name)
@@ -1521,36 +1644,73 @@ class OpenAIRecipeService(RecipeServiceBase):
 
         return score
 
-    def _build_ai_recipe_catalog(self, query: str, limit: int) -> tuple[int, list[dict[str, Any]], set[str]]:
+    @staticmethod
+    def _organizer_slugs(values: Sequence[Any]) -> set[str]:
+        slugs: set[str] = set()
+        for value in values:
+            organizer_slug = slugify(str(value))
+            if organizer_slug:
+                slugs.add(organizer_slug)
+        return slugs
+
+    @staticmethod
+    def _catalog_matches_organizer_filters(
+        catalog_item: dict[str, Any],
+        category_names: Sequence[str],
+        tag_names: Sequence[str],
+    ) -> bool:
+        requested_categories = OpenAIRecipeService._organizer_slugs(category_names)
+        requested_tags = OpenAIRecipeService._organizer_slugs(tag_names)
+        catalog_categories = OpenAIRecipeService._organizer_slugs(catalog_item.get("categories") or [])
+        catalog_tags = OpenAIRecipeService._organizer_slugs(catalog_item.get("tags") or [])
+
+        return (not requested_categories or bool(requested_categories & catalog_categories)) and (
+            not requested_tags or bool(requested_tags & catalog_tags)
+        )
+
+    def _build_ai_recipe_catalog(
+        self,
+        query: str,
+        limit: int,
+        category_names: Sequence[str] = (),
+        tag_names: Sequence[str] = (),
+    ) -> tuple[int, list[dict[str, Any]], set[str]]:
         index_rows = self._ensure_ai_recipe_search_index()
         if not index_rows:
             return 0, [], set()
 
-        candidate_limit = min(
-            len(index_rows),
-            max(self._MIN_AI_SEARCH_CANDIDATES, min(self._MAX_AI_SEARCH_CANDIDATES, limit * 8)),
-        )
-        query_vector = self._search_vector(query)
-        scored_rows = [
-            (self._score_ai_search_index(query, query_vector, index_row), index_row) for index_row in index_rows
-        ]
-        scored_rows.sort(key=lambda item: (-item[0], item[1].recipe_name or ""))
-
-        candidates = [index_row for _, index_row in scored_rows[:candidate_limit]]
-        catalog: list[dict[str, Any]] = []
-        candidate_slugs: set[str] = set()
-
-        for index_row in candidates:
+        filtered_rows: list[tuple[RecipeAISearchIndex, dict[str, Any]]] = []
+        for index_row in index_rows:
             try:
                 catalog_item = json.loads(index_row.catalog_json)
             except ValueError:
                 continue
+            if self._catalog_matches_organizer_filters(catalog_item, category_names, tag_names):
+                filtered_rows.append((index_row, catalog_item))
 
+        if not filtered_rows:
+            return 0, [], set()
+
+        candidate_limit = min(
+            len(filtered_rows),
+            max(self._MIN_AI_SEARCH_CANDIDATES, min(self._MAX_AI_SEARCH_CANDIDATES, limit * 8)),
+        )
+        query_vector = self._search_vector(query)
+        scored_rows = [
+            (self._score_ai_search_index(query, query_vector, index_row), index_row, catalog_item)
+            for index_row, catalog_item in filtered_rows
+        ]
+        scored_rows.sort(key=lambda item: (-item[0], item[1].recipe_name or ""))
+
+        catalog: list[dict[str, Any]] = []
+        candidate_slugs: set[str] = set()
+
+        for _, _, catalog_item in scored_rows[:candidate_limit]:
             if slug := catalog_item.get("slug"):
                 candidate_slugs.add(slug)
                 catalog.append(catalog_item)
 
-        return len(index_rows), catalog, candidate_slugs
+        return len(filtered_rows), catalog, candidate_slugs
 
     def _load_ai_search_result_recipes(self, slugs: set[str]) -> dict[str, Any]:
         if not slugs:
@@ -1636,6 +1796,174 @@ class OpenAIRecipeService(RecipeServiceBase):
                 break
 
         return RecipeAISearchResponse(query=query, items=items, recipe_count=recipe_count)
+
+    async def suggest_ai_meal(
+        self,
+        data: AIMealSuggestRequest,
+        output_language: str,
+    ) -> AIMealSuggestResponse:
+        openai_service = OpenAIService(self.repos)
+        if not (openai_service.provider_settings and openai_service.provider_settings.ai_enabled):
+            raise ValueError("OpenAI services are not available")
+
+        user_request = data.request.strip()
+        category_names = [self._compact_text(name, 80) for name in data.category_names if name.strip()]
+        tag_names = [self._compact_text(name, 80) for name in data.tag_names if name.strip()]
+        anchor_recipe = None
+        if data.anchor_recipe_id:
+            anchor_recipe = self.group_recipes.by_user(self.user.id).get_one(data.anchor_recipe_id)
+            if not anchor_recipe:
+                raise ValueError("The selected anchor recipe was not found")
+
+        requested_counts = {
+            course: data.course_counts.count_for(course)
+            for course in AIMealCourse
+        }
+        if anchor_recipe:
+            requested_counts[data.anchor_course] = max(1, requested_counts[data.anchor_course])
+        total_requested = sum(requested_counts.values())
+        if total_requested < 1:
+            raise ValueError("At least one meal course must be requested")
+
+        query_parts = [data.meal_period.value, user_request]
+        if anchor_recipe:
+            query_parts.extend([anchor_recipe.name or "", anchor_recipe.description or ""])
+        search_query = " ".join(part for part in query_parts if part)
+
+        recipe_count, catalog, candidate_slugs = self._build_ai_recipe_catalog(
+            search_query,
+            min(200, max(50, total_requested * 12)),
+            category_names=category_names,
+            tag_names=tag_names,
+        )
+        if anchor_recipe and anchor_recipe.slug not in candidate_slugs:
+            catalog.insert(0, self._recipe_catalog_entry(anchor_recipe, large_catalog=False))
+            candidate_slugs.add(anchor_recipe.slug)
+
+        if not catalog:
+            return AIMealSuggestResponse(recipe_count=recipe_count)
+
+        anchor_payload = None
+        if anchor_recipe:
+            anchor_payload = {
+                "slug": anchor_recipe.slug,
+                "name": anchor_recipe.name,
+                "course": data.anchor_course.value,
+            }
+
+        message = dedent(
+            f"""
+            Required meal period: {data.meal_period.value}
+            User request: {user_request}
+            Output language: {output_language}
+            Required category filters: {json.dumps(category_names, ensure_ascii=False)}
+            Required tag filters: {json.dumps(tag_names, ensure_ascii=False)}
+            Required anchor recipe: {json.dumps(anchor_payload, ensure_ascii=False) if anchor_payload else "none"}
+            Requested recipe count by course: {
+                json.dumps({course.value: count for course, count in requested_counts.items()}, ensure_ascii=False)
+            }
+
+            Choose only from this prefiltered catalog of existing recipes:
+            {json.dumps(catalog, ensure_ascii=False)}
+            """
+        ).strip()
+
+        response = await openai_service.get_response(
+            openai_service.get_prompt("meal-plan.suggest-meal"),
+            message,
+            response_schema=OpenAIMealPlanResponse,
+        )
+        selected_by_course: dict[AIMealCourse, list[tuple[str, str]]] = {
+            course: [] for course in AIMealCourse
+        }
+        seen_slugs: set[str] = set()
+        if response:
+            for course in response.courses:
+                meal_course = AIMealCourse(course.course)
+                if (
+                    requested_counts[meal_course] < 1
+                    or len(selected_by_course[meal_course]) >= requested_counts[meal_course]
+                    or course.slug in seen_slugs
+                    or course.slug not in candidate_slugs
+                ):
+                    continue
+                selected_by_course[meal_course].append((course.slug, course.reason))
+                seen_slugs.add(course.slug)
+
+        if anchor_recipe:
+            for course, selected in selected_by_course.items():
+                selected_by_course[course] = [
+                    (slug, reason) for slug, reason in selected if slug != anchor_recipe.slug
+                ]
+            selected_by_course[data.anchor_course].insert(0, (anchor_recipe.slug, ""))
+            selected_by_course[data.anchor_course] = selected_by_course[data.anchor_course][
+                : requested_counts[data.anchor_course]
+            ]
+            seen_slugs.add(anchor_recipe.slug)
+
+        selected_slugs = {slug for selected in selected_by_course.values() for slug, _ in selected}
+
+        # Providers can occasionally return fewer valid entries than requested. Fill only
+        # the missing slots from the already-filtered catalog so a valid anchor meal does
+        # not fail merely because one generated slug was invalid or duplicated.
+        course_terms = {
+            AIMealCourse.starter: ("starter", "appetizer", "פתיחה", "ראשונה", "סלט", "מרק"),
+            AIMealCourse.main: ("main", "עיקרית", "מנה עיקרית"),
+            AIMealCourse.side: ("side", "תוספת", "ירקות", "אורז", "תפוחי אדמה"),
+            AIMealCourse.dessert: ("dessert", "sweet", "קינוח", "עוגה", "מתוק"),
+        }
+
+        def fallback_score(item: dict[str, Any], course: AIMealCourse) -> int:
+            text = self._catalog_text(item).casefold()
+            return sum(1 for term in course_terms[course] if term in text)
+
+        for course in (AIMealCourse.dessert, AIMealCourse.side, AIMealCourse.starter, AIMealCourse.main):
+            missing = requested_counts[course] - len(selected_by_course[course])
+            if missing <= 0:
+                continue
+            available = [
+                item
+                for item in catalog
+                if str(item.get("slug") or "") in candidate_slugs
+                and str(item.get("slug") or "") not in selected_slugs
+            ]
+            available.sort(key=lambda item: -fallback_score(item, course))
+            for item in available[:missing]:
+                slug = str(item.get("slug") or "")
+                selected_by_course[course].append((slug, ""))
+                selected_slugs.add(slug)
+
+        recipes_by_slug = self._load_ai_search_result_recipes(selected_slugs)
+        entry_types = {
+            AIMealCourse.starter: PlanEntryType.side,
+            AIMealCourse.main: PlanEntryType(data.meal_period.value),
+            AIMealCourse.side: PlanEntryType.side,
+            AIMealCourse.dessert: PlanEntryType.dessert,
+        }
+        items: list[AIMealSuggestionItem] = []
+        for course in (AIMealCourse.starter, AIMealCourse.main, AIMealCourse.side, AIMealCourse.dessert):
+            for slug, reason in selected_by_course[course]:
+                recipe = recipes_by_slug.get(slug)
+                if not recipe:
+                    continue
+                items.append(
+                    AIMealSuggestionItem(
+                        course=course,
+                        entry_type=entry_types[course],
+                        recipe=RecipeSummary.model_validate(recipe),
+                        reason=reason,
+                    )
+                )
+
+        if not items:
+            raise ValueError("AI did not select any existing recipes")
+
+        return AIMealSuggestResponse(
+            title=response.title if response else "",
+            explanation=response.explanation if response else "",
+            recipe_count=recipe_count,
+            items=items,
+        )
 
     async def select_recipe_slugs_for_ai_collection(self, query: str) -> list[str]:
         """Select every matching recipe in bounded AI batches for generated collections."""
@@ -1763,7 +2091,161 @@ class OpenAIRecipeService(RecipeServiceBase):
 
         return tools
 
+    @staticmethod
+    def _contains_hebrew(value: str) -> bool:
+        return bool(re.search(r"[\u0590-\u05ff]", value))
+
+    @staticmethod
+    def _contains_latin(value: str) -> bool:
+        return bool(re.search(r"[A-Za-z]", value))
+
+    @classmethod
+    def _hebrew_only_label(cls, value: str) -> str:
+        if not cls._contains_hebrew(value):
+            return ""
+        if not cls._contains_latin(value):
+            return value
+
+        without_latin = re.sub(r"[A-Za-z][A-Za-z0-9'’._-]*", " ", value)
+        return without_latin.strip(" \t\r\n-–—|/()[]{}.,:;")
+
+    @staticmethod
+    def _fallback_core_dish_name(name: str) -> str:
+        core_name = " ".join((name or "").split()).strip()
+        for separator in (" | ", " - ", " – ", " — "):
+            if separator in core_name:
+                core_name = core_name.split(separator, 1)[0].strip()
+                break
+        return core_name[:80]
+
+    @classmethod
+    def _hebrew_categories(cls, names: list[str]) -> list[str]:
+        categories: list[str] = []
+        for name in names:
+            cleaned_name = " ".join(str(name).split()).strip()
+            if not cleaned_name:
+                continue
+            if hebrew_name := cls._hebrew_only_label(cleaned_name):
+                categories.append(hebrew_name)
+                continue
+            if translated := HEBREW_CATEGORY_TRANSLATIONS.get(cleaned_name.casefold()):
+                categories.append(translated)
+
+        return categories or ["מתכונים"]
+
+    @classmethod
+    def _hebrew_preferred_tags(cls, names: list[str], allowed_proper_names: list[str]) -> list[str]:
+        tags: list[str] = []
+        normalized_proper_names = [name.casefold() for name in allowed_proper_names if name]
+        for name in names:
+            cleaned_name = " ".join(str(name).split()).strip()
+            if not cleaned_name:
+                continue
+            if cls._contains_hebrew(cleaned_name):
+                tags.append(cleaned_name)
+                continue
+            if translated := HEBREW_TAG_TRANSLATIONS.get(cleaned_name.casefold()):
+                tags.append(translated)
+                continue
+
+            normalized_name = cleaned_name.casefold()
+            if any(
+                normalized_name in proper_name or proper_name in normalized_name
+                for proper_name in normalized_proper_names
+            ):
+                tags.append(cleaned_name)
+
+        return tags
+
+    @staticmethod
+    def _meal_periods(openai_recipe: OpenAIRecipe) -> list[str]:
+        aliases = {
+            "breakfast": "breakfast",
+            "בוקר": "breakfast",
+            "ארוחת בוקר": "breakfast",
+            "lunch": "lunch",
+            "צהריים": "lunch",
+            "ארוחת צהריים": "lunch",
+            "dinner": "dinner",
+            "ערב": "dinner",
+            "ארוחת ערב": "dinner",
+        }
+        periods: list[str] = []
+        for value in openai_recipe.meal_periods:
+            normalized = aliases.get(" ".join(str(value).split()).strip().casefold())
+            if normalized and normalized not in periods:
+                periods.append(normalized)
+
+        if periods:
+            return periods
+
+        organizer_text = " ".join(
+            [openai_recipe.primary_category or "", *openai_recipe.categories, *openai_recipe.tags]
+        ).casefold()
+        for keyword, period in aliases.items():
+            if keyword in organizer_text and period not in periods:
+                periods.append(period)
+
+        if periods:
+            return periods
+
+        broad_category = (openai_recipe.primary_category or "").casefold()
+        if any(term in broad_category for term in ("drink", "beverage", "bread", "pastry", "משקה", "לחם", "מאפה")):
+            return ["breakfast", "lunch", "dinner"]
+        return ["lunch", "dinner"]
+
+    def _enhanced_recipe_organizers(self, openai_recipe: OpenAIRecipe) -> tuple[list[str], list[str]]:
+        core_dish_name = " ".join((openai_recipe.core_dish_name or "").split()).strip()
+        if not core_dish_name:
+            core_dish_name = self._fallback_core_dish_name(openai_recipe.name)
+
+        categories = self._hebrew_categories([openai_recipe.primary_category or "", *openai_recipe.categories])
+        meal_periods = self._meal_periods(openai_recipe)
+        tags = [core_dish_name, *(MEAL_PERIOD_TAGS[period] for period in meal_periods), *openai_recipe.tags]
+        if openai_recipe.is_michelin_dish:
+            tags.append("מישלן")
+        if openai_recipe.is_gourmet_dish:
+            tags.append("גורמה")
+        if openai_recipe.is_complete_meal:
+            tags.append("ארוחה")
+
+        media_type = (openai_recipe.media_source_type or "").strip().casefold()
+        localized_media_types = {
+            "television": "טלוויזיה",
+            "tv": "טלוויזיה",
+            "instagram": "אינסטגרם",
+            "youtube": "יוטיוב",
+            "tiktok": "טיקטוק",
+            "website": "אתר אינטרנט",
+            "cookbook": "ספר בישול",
+            "magazine": "מגזין",
+        }
+        if media_type:
+            tags.append(localized_media_types.get(media_type, openai_recipe.media_source_type or ""))
+        if openai_recipe.media_source_name:
+            tags.append(openai_recipe.media_source_name)
+
+        allowed_proper_names = [openai_recipe.created_by or ""]
+        tags = self._hebrew_preferred_tags(tags, allowed_proper_names)
+
+        return self._clean_organizer_names(categories), self._clean_organizer_names(tags, max_items=14)
+
     def _convert_recipe(self, openai_recipe: OpenAIRecipe) -> Recipe:
+        food_prep = self._clean_organizer_names(openai_recipe.mise_en_place_food)
+        prep_tools = self._clean_organizer_names(openai_recipe.mise_en_place_tools)
+        extras: dict[str, str] = {}
+        if food_prep:
+            extras["miseEnPlaceFood"] = "\n".join(f"- {item}" for item in food_prep)
+        elif openai_recipe.mise_en_place:
+            extras["miseEnPlaceFood"] = openai_recipe.mise_en_place.strip()
+        if prep_tools:
+            extras["miseEnPlaceTools"] = "\n".join(f"- {item}" for item in prep_tools)
+        if openai_recipe.mise_en_place:
+            extras["miseEnPlace"] = openai_recipe.mise_en_place.strip()
+        meal_periods = self._meal_periods(openai_recipe)
+        if meal_periods:
+            extras["mealSuitability"] = ",".join(meal_periods)
+        category_names, tag_names = self._enhanced_recipe_organizers(openai_recipe)
         return Recipe(
             user_id=self.user.id,
             group_id=self.user.group_id,
@@ -1791,11 +2273,17 @@ class OpenAIRecipeService(RecipeServiceBase):
                 for instruction in openai_recipe.instructions
                 if instruction.text
             ],
-            recipe_category=self._get_or_create_categories(openai_recipe.categories),
-            tags=self._get_or_create_tags(openai_recipe.tags),
+            recipe_category=self._get_or_create_categories(category_names),
+            tags=self._get_or_create_tags(tag_names),
             tools=self._get_or_create_tools(openai_recipe.tools),
             notes=[RecipeNote(title=note.title or "", text=note.text) for note in openai_recipe.notes if note.text],
+            extras=extras,
         )
+
+    def convert_recipe(self, openai_recipe: OpenAIRecipe) -> Recipe:
+        """Convert an already structured AI recipe without making another model request."""
+
+        return self._convert_recipe(openai_recipe)
 
     @staticmethod
     def _has_minimum_recipe_data(openai_recipe: OpenAIRecipe) -> bool:
@@ -1810,6 +2298,7 @@ class OpenAIRecipeService(RecipeServiceBase):
         translate_language: str | None,
         include_ai_tips: bool = True,
         notes: str | None = None,
+        include_mise_en_place: bool = True,
     ) -> tuple[Recipe, bool]:
         openai_service = OpenAIService(self.repos)
         if not (
@@ -1830,6 +2319,13 @@ class OpenAIRecipeService(RecipeServiceBase):
         message += self._target_language_instruction(translate_language)
         if include_ai_tips:
             message += " Add concise AI cooking tips and practical recommended ingredient varieties when useful."
+        if include_mise_en_place:
+            message += (
+                " Add concise food-preparation tasks to mise_en_place_food and list the equipment to have ready "
+                "separately in mise_en_place_tools. Do not mix food tasks and tools."
+            )
+        else:
+            message += " Do not add mise en place tasks."
         if notes and notes.strip():
             message += (
                 " The user supplied the following corrections or context. Treat explicit corrections as authoritative "
@@ -1849,6 +2345,10 @@ class OpenAIRecipeService(RecipeServiceBase):
                 raise exceptions.NotARecipe(
                     "The image does not contain enough recipe data. Include a name, ingredients, and instructions."
                 )
+            if not include_mise_en_place:
+                response.mise_en_place = None
+                response.mise_en_place_food = []
+                response.mise_en_place_tools = []
 
         except Exception as e:
             if isinstance(e, exceptions.NotARecipe):
@@ -1867,6 +2367,7 @@ class OpenAIRecipeService(RecipeServiceBase):
         text: str,
         translate_language: str | None = None,
         include_ai_tips: bool = True,
+        include_mise_en_place: bool = True,
     ) -> Recipe:
         openai_service = OpenAIService(self.repos)
         if not (openai_service.provider_settings and openai_service.provider_settings.ai_enabled):
@@ -1881,6 +2382,13 @@ class OpenAIRecipeService(RecipeServiceBase):
                 " The user wants AI tips: add concise practical cooking notes and recommended ingredient varieties "
                 "when they materially help the recipe."
             )
+        if include_mise_en_place:
+            message += (
+                " Add concise food-preparation tasks to mise_en_place_food and list the equipment to have ready "
+                "separately in mise_en_place_tools. Do not mix food tasks and tools."
+            )
+        else:
+            message += " Do not add mise en place tasks."
 
         message += f"\n\nPasted recipe text:\n{text.strip()}"
 
@@ -1895,6 +2403,10 @@ class OpenAIRecipeService(RecipeServiceBase):
             if not response.is_recipe or not response.recipe:
                 raise exceptions.NotARecipe(response.reason or "The pasted text does not look like a recipe")
             openai_recipe = response.recipe
+            if not include_mise_en_place:
+                openai_recipe.mise_en_place = None
+                openai_recipe.mise_en_place_food = []
+                openai_recipe.mise_en_place_tools = []
             if not self._has_minimum_recipe_data(openai_recipe):
                 raise exceptions.NotARecipe(
                     "The pasted text does not contain enough recipe data. "

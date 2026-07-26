@@ -1,0 +1,21 @@
+Analyze the supplied video itself, including both its visual and audio streams, together with the supplied metadata and
+description. Listen carefully to all spoken narration: a complete recipe may be explained in the audio even when the
+page description contains no recipe. Do not require, request, or return a transcript. Do not invent details.
+
+Return a concise title and description, practical categories and tags, and whether this is a food video. Mark
+contains_complete_recipe true only when the video contains enough real information to build a complete recipe: a dish
+name, ingredients, and preparation instructions. When it is true, return the complete structured recipe in recipe. Use
+null for recipe otherwise. A food review, restaurant tour, product clip, compilation page, or partial cooking tip is not
+a complete recipe. Preserve names of credited chefs, restaurants, channels, or sources when they are explicitly present.
+When a chef, restaurant, channel, or source site is known, include one concise attribution in the recipe name without
+making the name unwieldy. Fill categories, tags, tools, practical ingredient varieties, and useful cooking notes. Fill
+mise_en_place_food with concise food-preparation tasks and mise_en_place_tools separately with equipment to have ready.
+Do not mix tools into food tasks, and leave the legacy mise_en_place field null for new responses. Keep all
+generated text in the requested target language when one is supplied, except recipe categories must always be Hebrew
+and general recipe tags should be Hebrew whenever possible. Only chef and restaurant proper names may additionally
+appear in their original language. Set recipe.source_image_is_finished_dish to true
+only when the supplied video thumbnail clearly shows the finished, ready-to-serve dish and is suitable as a recipe cover.
+For a complete recipe, always fill core_dish_name in Hebrew and primary_category in Hebrew. Carefully classify is_michelin_dish,
+is_gourmet_dish, and is_complete_meal. Fill meal_periods with every suitable value from breakfast, lunch, and dinner;
+a recipe may fit more than one. Fill media_source_type with the actual platform and media_source_name with the
+explicit show, account, or channel name. Never invent Michelin recognition or media attribution.

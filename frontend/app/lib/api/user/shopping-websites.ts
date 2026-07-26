@@ -34,6 +34,25 @@ export class ShoppingWebsitesAPI extends BaseAPI {
     return await this.requests.put<ShoppingWebsite, ShoppingWebsiteUpdate>(`${prefix}/${id}`, payload);
   }
 
+  async uploadImage(id: string, image: File) {
+    const formData = new FormData();
+    formData.append("image", image);
+    return await this.requests.post<ShoppingWebsite>(`${prefix}/${id}/image`, formData);
+  }
+
+  async saveImageUrl(id: string, url: string) {
+    return await this.requests.post<ShoppingWebsite, { url: string }>(`${prefix}/${id}/image-url`, { url });
+  }
+
+  async findImage(id: string) {
+    return await this.requests.post<ShoppingWebsite>(`${prefix}/${id}/image-auto`);
+  }
+
+  imageUrl(id: string, version?: string | null) {
+    const query = version ? `?v=${encodeURIComponent(version)}` : "";
+    return `${prefix}/${id}/image${query}`;
+  }
+
   async updateRecipeLinks(recipeId: string, websiteIds: string[]) {
     return await this.requests.put<ShoppingWebsite[], ShoppingWebsiteEntityLinksUpdate>(
       `${prefix}/links/recipe/${recipeId}`,

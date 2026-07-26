@@ -11,9 +11,16 @@ Rules:
 - Translate all returned recipe content to Hebrew.
 - Preserve useful details such as yield, prep time, cook time, notes, serving suggestions, and equipment.
 - For each ingredient, fill recommended_variety when a specific type/variety would materially improve the recipe or is stated/implied by the recipe. This is especially useful for vegetables and fruit, such as tomato type, pepper color/type, potato type, onion type, fresh herbs, mushroom type, cheese style, meat cut, or pasta shape. Keep it short and practical. Leave it null when no specific type is useful.
-- Give every returned recipe 1-3 short, practical categories and 2-6 useful tags in Hebrew. Categories describe the dish family or course; tags describe cuisine, diet, technique, occasion, or defining ingredients. Do not leave both lists empty.
+- Give every returned recipe 1-3 short, practical categories and 2-6 useful tags in Hebrew. Categories must contain only Hebrew names and describe the dish family or course. General tags must be Hebrew and describe cuisine, diet, technique, occasion, or defining ingredients; only chef and restaurant proper names may additionally appear in their original language. Do not leave both lists empty.
+- Always fill core_dish_name in Hebrew with the concise food name and add it to tags. Fill primary_category with one
+  broad course or dish-family category. Classify is_michelin_dish, is_gourmet_dish, and is_complete_meal carefully;
+  Michelin may be true only when the supplied book context explicitly and reliably supports it.
+- Fill meal_periods with every suitable value from breakfast, lunch, and dinner. A recipe may fit more than one period.
+- Set media_source_type to cookbook and media_source_name to the explicit cookbook title supplied in the chunk context.
 - Add concise notes with genuinely useful chef tips, serving advice, or safe substitutions when they are supported by the recipe. Do not invent required ingredients or change the recipe.
 - Fill the tools list with the main kitchen equipment needed to execute the recipe.
+- Fill mise_en_place_food with concise food-preparation tasks to complete before cooking, one actionable task per item.
+- Fill mise_en_place_tools separately with the kitchen tools and equipment to have ready. Do not mix tools into food tasks, and leave the legacy mise_en_place field null for new responses.
 - Do not invent author, source, page numbers, or cookbook name. Use only the source context and explicit [Page N] markers provided by the user message.
 - Include the cookbook title and the exact page on which each recipe begins in the recipe source. Use a page range only when the recipe genuinely spans several marked pages.
 - If no complete recipes are present, return an empty recipes list.

@@ -68,6 +68,10 @@ async def lifespan_fn(_: FastAPI) -> AsyncGenerator[None, None]:
 
     await start_scheduler()
 
+    from mealie.services.videos import resume_interrupted_video_processing
+
+    await resume_interrupted_video_processing()
+
     logger.info("-----SYSTEM STARTUP-----")
     logger.info("------APP SETTINGS------")
     logger.info(

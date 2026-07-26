@@ -37,6 +37,13 @@ from mealie.services.item_image_service import ItemImageService
 from mealie.services.openai import OpenAIService
 from mealie.services.recipe.recipe_service import OpenAIRecipeService, RecipeService
 from mealie.services.uploaded_books.book_cover_service import BOOK_COVER_FILE_NAME, UploadedBookCoverService
+from mealie.services.uploaded_books.book_reader_assets import (
+    BOOK_READER_ID_PLACEHOLDER,
+    book_reader_css,
+    book_reader_labels,
+    book_reader_panels,
+    book_reader_script,
+)
 
 EXTRACTION_NOT_STARTED = "not_started"
 EXTRACTION_PROCESSING = "processing"
@@ -1529,7 +1536,7 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                     "status": CHUNK_PENDING,
                     "previousAttempts": self._state_int(previous, "attempts"),
                     "attempts": 0,
-                    "translatedChunkFile": None,
+                    "translatedChunkFile": previous.get("translatedChunkFile"),
                     "nextRetrySeconds": None,
                     "nextRetryAt": None,
                 }
@@ -1901,6 +1908,8 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
         self,
         chunks: list[BookTextChunk],
         translated_pages: list[tuple[int, str]],
+        *,
+        allow_missing_pages: bool = False,
     ) -> dict:
         source_pages: dict[int, str] = {}
         expected_pages: set[int] = set()
@@ -1914,6 +1923,7 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
         suspicious_pages = [
             issue
             for page_number in sorted(expected_pages)
+            if page_number in translated_page_map or not allow_missing_pages
             if (
                 issue := self._translation_page_issue(
                     page_number,
@@ -1929,7 +1939,8 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
             "missing_pages": missing_pages,
             "unexpected_pages": unexpected_pages,
             "suspicious_pages": suspicious_pages,
-            "passed": not missing_pages and not unexpected_pages and not suspicious_pages,
+            "partial": bool(missing_pages),
+            "passed": (allow_missing_pages or not missing_pages) and not unexpected_pages and not suspicious_pages,
         }
         if not audit["passed"]:
             details = []
@@ -2338,22 +2349,57 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
             "close_contents": "מזער תוכן עניינים" if rtl else "Collapse table of contents",
             "open_progress": "פתח התקדמות" if rtl else "Open reading progress",
             "close_progress": "מזער התקדמות" if rtl else "Collapse reading progress",
+            "chapter_progress": "פרקים שנקראו" if rtl else "Chapters read",
+            "chapter_complete": "סמן פרק כנקרא" if rtl else "Mark chapter as read",
         }
         records = [self._translated_page_record(value, rtl) for value in translated_pages]
         records.sort(key=lambda record: record["page"])
         linked_recipe_sections = linked_recipe_sections or {}
         toc_entries = self._translated_book_toc(records, rtl)
+        chapter_order = 0
+        current_chapter_id = ""
+        for entry in toc_entries:
+            if int(entry.get("level", 1)) == 1:
+                chapter_order += 1
+                title_key = re.sub(r"[^\w-]+", "-", self._toc_title_key(entry["title"]), flags=re.UNICODE)
+                title_key = title_key.strip("-")[:48] or "chapter"
+                current_chapter_id = f"chapter-{chapter_order}-{title_key}"
+            entry["chapterId"] = current_chapter_id
+            entry["chapterOrder"] = chapter_order
+
+        chapter_by_page_index: dict[int, str] = {}
+        top_level_entries = [entry for entry in toc_entries if int(entry.get("level", 1)) == 1]
+        active_chapter_id = ""
+        top_level_cursor = 0
+        for record_index in range(1, len(records) + 1):
+            while (
+                top_level_cursor < len(top_level_entries)
+                and int(top_level_entries[top_level_cursor]["index"]) <= record_index
+            ):
+                active_chapter_id = str(top_level_entries[top_level_cursor].get("chapterId") or "")
+                top_level_cursor += 1
+            chapter_by_page_index[record_index] = active_chapter_id
+
         page_sections: list[str] = []
-        toc_items = [
-            (
-                f'<li class="toc-level-{entry["level"]} toc-kind-{html.escape(entry["kind"])}">'
+        toc_items: list[str] = []
+        for entry in toc_entries:
+            chapter_id = html.escape(str(entry.get("chapterId") or ""), quote=True)
+            chapter_order_value = int(entry.get("chapterOrder") or 0)
+            checkbox = ""
+            if int(entry.get("level", 1)) == 1 and chapter_id:
+                checkbox = (
+                    f'<input class="chapter-checkbox" type="checkbox" data-chapter-id="{chapter_id}" '
+                    f'data-chapter-order="{chapter_order_value}" title="{html.escape(labels["chapter_complete"])}" '
+                    f'aria-label="{html.escape(labels["chapter_complete"])}: {html.escape(entry["title"])}">'
+                )
+            toc_items.append(
+                f'<li class="toc-level-{entry["level"]} toc-kind-{html.escape(entry["kind"])}" '
+                f'data-chapter-id="{chapter_id}"><div class="toc-row">{checkbox}'
                 f'<a href="#page-{entry["page"]}" data-page-target="{entry["index"]}">'
                 f'<span>{html.escape(entry["title"])}</span>'
                 f'<strong>{html.escape(str(entry.get("displayPage", entry["page"])))}</strong>'
-                "</a></li>"
+                "</a></div></li>"
             )
-            for entry in toc_entries
-        ]
 
         for index, record in enumerate(records):
             page_number = record["page"]
@@ -2372,12 +2418,13 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                 else "<span></span>"
             )
             linked_markup = "".join(linked_recipe_sections.get(page_number, []))
+            page_chapter_id = html.escape(chapter_by_page_index.get(index + 1, ""), quote=True)
             page_sections.append(
                 "\n".join(
                     [
                         f'<article class="book-page reading-position" id="page-{page_number}" '
                         f'data-page-index="{index + 1}" data-page-number="{page_number}" '
-                        f'data-page-label="{page_title}">',
+                        f'data-page-label="{page_title}" data-chapter-id="{page_chapter_id}">',
                         '<header class="page-header">',
                         f"<span>{html.escape(page_heading)}</span>",
                         f"<strong>{page_title}</strong>",
@@ -2705,6 +2752,7 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
       }}
       .page-footer {{ display: none; }}
     }}
+    {book_reader_css(direction)}
   </style>
 </head>
 <body>
@@ -2733,8 +2781,17 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
     <div class="progress-details">
       <div id="progressPage">{labels['cover']}</div>
       <div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-chapters">
+        <div class="progress-chapters__row"><span>{labels['chapter_progress']}</span>
+          <span><span id="chapterProgressDetails">0 / {chapter_order}</span> ·
+            <strong id="chapterProgressPercent">0%</strong></span></div>
+        <div class="progress-track" aria-hidden="true">
+          <div class="progress-fill progress-chapters__fill" id="chapterProgressFill"></div>
+        </div>
+      </div>
     </div>
   </section>
+  {book_reader_panels(book_reader_labels(rtl))}
   <main class="book-shell">
     <section class="cover-page reading-position" id="cover" data-page-index="0"
       data-page-number="0" data-page-label="{labels['cover']}">
@@ -2751,6 +2808,7 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
     </section>
     {"".join(page_sections)}
   </main>
+  {book_reader_script(book_reader_labels(rtl))}
   <script>
     (() => {{
       const sidebar = document.getElementById("bookSidebar");
@@ -2838,6 +2896,12 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
             sidebarScroll.scrollTo({{ top: bottom - sidebarScroll.clientHeight, behavior: "smooth" }});
           }}
         }}
+        window.dispatchEvent(new CustomEvent("mealie:book-position", {{ detail: {{
+          pageIndex,
+          pageNumber: Number(pageNumber || 0),
+          chapterId: position.dataset.chapterId || null,
+          percent,
+        }} }}));
       }};
 
       const observer = new IntersectionObserver((entries) => {{
@@ -2908,7 +2972,10 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
         target_path = target_dir.joinpath(file_name).resolve()
         if not target_path.is_relative_to(target_dir):
             raise ValueError("Invalid translated book file path")
-        target_path.write_text(html_content, encoding="utf-8")
+        target_path.write_text(
+            html_content.replace(BOOK_READER_ID_PLACEHOLDER, str(translated_book_id)),
+            encoding="utf-8",
+        )
 
         source_cover = UploadedBookCoverService.cover_path(uploaded_books_root, book)
         if source_cover.exists():
@@ -3021,6 +3088,176 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
             uploaded_books_root,
             response_language=target_language,
         )
+
+    async def _assemble_translated_book(
+        self,
+        book: UploadedBook,
+        uploaded_books_root: Path,
+        target_language: str,
+        chunks: list[BookTextChunk],
+        chunk_states: dict[int, dict],
+        work_dir: Path,
+        include_linked_recipes: bool,
+        classify: bool = True,
+    ) -> UploadedBook | None:
+        translated_records: list[dict] = []
+        for state in sorted(chunk_states.values(), key=lambda item: self._state_int(item, "index")):
+            file_name = state.get("translatedChunkFile")
+            if isinstance(file_name, str):
+                translated_records.extend(self._read_translated_chunk_records(work_dir, file_name))
+        if not translated_records:
+            return None
+
+        translated_record_map = {record["page"]: record for record in translated_records}
+        translated_records = [translated_record_map[page] for page in sorted(translated_record_map)]
+        translated_pages = [(record["page"], record["text"]) for record in translated_records]
+        has_incomplete_chunks = any(
+            state.get("status") != CHUNK_COMPLETED
+            for state in chunk_states.values()
+        )
+        translation_audit = self._audit_translated_pages(
+            chunks,
+            translated_pages,
+            allow_missing_pages=has_incomplete_chunks,
+        )
+        available_pages = set(translated_record_map)
+        del translated_pages, translated_record_map
+
+        cover_service = UploadedBookCoverService(self.repos)
+        has_cover = await cover_service.ensure_cover(book, uploaded_books_root)
+        linked_recipe_sections = (
+            self._linked_recipe_sections(book, target_language, available_pages)
+            if include_linked_recipes
+            else {}
+        )
+        html_content = self._build_translated_book_html(
+            book,
+            target_language,
+            translated_records,
+            has_cover=has_cover,
+            linked_recipe_sections=linked_recipe_sections,
+        )
+        translated_book = self._create_translated_book(
+            book,
+            uploaded_books_root,
+            target_language,
+            html_content,
+            translation_audit,
+            include_linked_recipes,
+        )
+        del html_content, linked_recipe_sections, translated_records
+        if classify:
+            await self._classify_translated_book(
+                translated_book,
+                uploaded_books_root,
+                target_language,
+            )
+        book.translated_book_id = translated_book.id
+        return translated_book
+
+    async def save_manual_translation_page(
+        self,
+        book_id: UUID4,
+        uploaded_books_root: Path,
+        page_number: int,
+        translated_text: str,
+    ) -> UploadedBook:
+        book = self._get_book(book_id)
+        if book.translation_status in {TRANSLATION_PROCESSING, TRANSLATION_RETRYING}:
+            raise ValueError("The book is currently being translated")
+        target_language = (book.translation_language or "Hebrew").strip()
+        path = self._book_file_path(book, uploaded_books_root)
+        pages = self._extract_pages(path, book.extension)
+        pages = self._filter_pages_by_range(
+            pages,
+            book.translation_page_start,
+            book.translation_page_end,
+        )
+        chunks = self._build_chunks(pages, book.translation_pages_per_chunk or 10)
+        target_chunk = next((chunk for chunk in chunks if page_number in chunk.page_numbers), None)
+        if target_chunk is None:
+            raise ValueError("The selected page is outside the translated range or contains no text")
+
+        work_dir = self._translated_chunks_dir(uploaded_books_root, book, target_language)
+        existing_states = self._load_translation_chunk_states(book)
+        chunk_states = self._initial_translation_chunk_states(
+            book,
+            chunks,
+            preserve_incomplete_attempts=True,
+        )
+        state = chunk_states[target_chunk.index]
+        previous = existing_states.get(self._chunk_range_key(target_chunk), {})
+        records: list[dict] = []
+        previous_file = previous.get("translatedChunkFile")
+        if isinstance(previous_file, str):
+            records = self._read_translated_chunk_records(work_dir, previous_file)
+        records_by_page = {record["page"]: record for record in records}
+        records_by_page[page_number] = {
+            "page": page_number,
+            "text": translated_text.strip(),
+            "title": self._translated_page_heading(
+                translated_text,
+                page_number,
+                self._is_rtl_language(target_language),
+            ),
+            "entryType": "page",
+            "parentTitle": None,
+        }
+        page_text = {page: record["text"] for page, record in records_by_page.items()}
+        page_metadata = {
+            page: {
+                "title": record.get("title"),
+                "entryType": record.get("entryType", "page"),
+                "parentTitle": record.get("parentTitle"),
+            }
+            for page, record in records_by_page.items()
+        }
+        translated_chunk_file = self._write_translated_chunk(
+            work_dir,
+            target_chunk,
+            page_text,
+            page_metadata,
+        )
+        expected_pages = set(target_chunk.page_numbers)
+        missing_pages = sorted(expected_pages - set(records_by_page))
+        state.update(
+            {
+                "status": CHUNK_COMPLETED if not missing_pages else CHUNK_FAILED,
+                "translatedChunkFile": translated_chunk_file,
+                "pagesTranslated": len(expected_pages - set(missing_pages)),
+                "error": None if not missing_pages else f"Manual translation is still missing pages {missing_pages}",
+                "provider": "manual",
+                "nextRetrySeconds": None,
+                "nextRetryAt": None,
+                "completedAt": get_utc_now().isoformat() if not missing_pages else None,
+            }
+        )
+        failed_chunks = sum(1 for item in chunk_states.values() if item.get("status") != CHUNK_COMPLETED)
+        final_status = TRANSLATION_PARTIAL_FAILED if failed_chunks else TRANSLATION_COMPLETED
+        include_linked_recipes = True
+        try:
+            metadata = json.loads(book.book_metadata_json or "{}")
+            options = metadata.get("translation_options", {}) if isinstance(metadata, dict) else {}
+            include_linked_recipes = bool(options.get("include_linked_recipes", True))
+        except (TypeError, ValueError):
+            pass
+        translated_book = await self._assemble_translated_book(
+            book,
+            uploaded_books_root,
+            target_language,
+            chunks,
+            chunk_states,
+            work_dir,
+            include_linked_recipes,
+            classify=False,
+        )
+        if translated_book is not None:
+            translated_book.translation_status = final_status
+            translated_book.translation_completed_at = get_utc_now()
+            self.repos.session.add(translated_book)
+        book.translation_completed_at = get_utc_now()
+        self._save_translation_progress(book, chunk_states, final_status)
+        return book
 
     async def translate_book(  # noqa: C901
         self,
@@ -3255,57 +3492,30 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                 return
 
             failed_chunks = sum(1 for state in chunk_states.values() if state.get("status") == CHUNK_FAILED)
-            if failed_chunks:
-                book.translation_status = TRANSLATION_PARTIAL_FAILED
-                book.translation_completed_at = get_utc_now()
-                self._save_translation_progress(book, chunk_states, TRANSLATION_PARTIAL_FAILED)
-                return
-
-            translated_records: list[dict] = []
-            for state in sorted(chunk_states.values(), key=lambda item: self._state_int(item, "index")):
-                file_name = state.get("translatedChunkFile")
-                if isinstance(file_name, str):
-                    translated_records.extend(self._read_translated_chunk_records(work_dir, file_name))
-
-            translated_record_map = {record["page"]: record for record in translated_records}
-            translated_records = [translated_record_map[page] for page in sorted(translated_record_map)]
-            translated_pages = [(record["page"], record["text"]) for record in translated_records]
-            translation_audit = self._audit_translated_pages(chunks, translated_pages)
-            available_pages = set(translated_record_map)
-            del chunks, translated_pages, translated_record_map
-            cover_service = UploadedBookCoverService(self.repos)
-            has_cover = await cover_service.ensure_cover(book, uploaded_books_root)
-            linked_recipe_sections = (
-                self._linked_recipe_sections(book, target_language, available_pages)
-                if include_linked_recipes
-                else {}
-            )
-            html_content = self._build_translated_book_html(
-                book,
-                target_language,
-                translated_records,
-                has_cover=has_cover,
-                linked_recipe_sections=linked_recipe_sections,
-            )
-            translated_book = self._create_translated_book(
+            translated_book = await self._assemble_translated_book(
                 book,
                 uploaded_books_root,
                 target_language,
-                html_content,
-                translation_audit,
+                chunks,
+                chunk_states,
+                work_dir,
                 include_linked_recipes,
             )
-            del html_content, linked_recipe_sections
-            await self._classify_translated_book(
-                translated_book,
-                uploaded_books_root,
-                target_language,
-            )
+            final_status = TRANSLATION_PARTIAL_FAILED if failed_chunks else TRANSLATION_COMPLETED
+            if translated_book is None and failed_chunks:
+                book.translation_status = final_status
+                book.translation_completed_at = get_utc_now()
+                self._save_translation_progress(book, chunk_states, final_status)
+                return
+            if translated_book is None:
+                raise ValueError("No translated pages were produced")
 
-            book.translated_book_id = translated_book.id
-            book.translation_status = TRANSLATION_COMPLETED
+            translated_book.translation_status = final_status
+            translated_book.translation_completed_at = get_utc_now()
+            self.repos.session.add(translated_book)
+            book.translation_status = final_status
             book.translation_completed_at = get_utc_now()
-            self._save_translation_progress(book, chunk_states, TRANSLATION_COMPLETED)
+            self._save_translation_progress(book, chunk_states, final_status)
 
         except Exception as e:
             self.repos.session.rollback()

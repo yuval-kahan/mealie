@@ -11,7 +11,14 @@ from mealie.routes._base import controller
 from mealie.routes._base.base_controllers import BaseCrudController
 from mealie.routes._base.mixins import HttpRepo
 from mealie.schema import mapper
-from mealie.schema.meal_plan import CreatePlanEntry, ReadPlanEntry, SavePlanEntry, UpdatePlanEntry
+from mealie.schema.meal_plan import (
+    AIMealSuggestRequest,
+    AIMealSuggestResponse,
+    CreatePlanEntry,
+    ReadPlanEntry,
+    SavePlanEntry,
+    UpdatePlanEntry,
+)
 from mealie.schema.meal_plan.new_meal import CreateRandomEntry, PlanEntryPagination, PlanEntryType
 from mealie.schema.meal_plan.plan_rules import PlanRulesDay
 from mealie.schema.recipe.recipe import Recipe
@@ -22,6 +29,7 @@ from mealie.services.event_bus_service.event_types import (
     EventOperation,
     EventTypes,
 )
+from mealie.services.recipe.recipe_service import OpenAIRecipeService
 
 router = APIRouter(prefix="/households/mealplans", tags=["Households: Mealplans"])
 
@@ -169,6 +177,19 @@ class GroupMealplanController(BaseCrudController):
         )
 
         return result
+
+    @router.post("/ai-suggest", response_model=AIMealSuggestResponse)
+    async def suggest_meal_with_ai(self, data: AIMealSuggestRequest) -> AIMealSuggestResponse:
+        """Compose a compatible meal from recipes that already exist in the user's group."""
+
+        try:
+            service = OpenAIRecipeService(self.repos, self.user, self.household, self.translator)
+            return await service.suggest_ai_meal(data, output_language=self.locale_config.name)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=ErrorResponse.respond(str(e))) from e
+        except Exception as e:
+            self.logger.exception("AI meal suggestion failed")
+            raise HTTPException(status_code=400, detail=ErrorResponse.respond("AI meal suggestion failed")) from e
 
     @router.get("/{item_id}", response_model=ReadPlanEntry)
     def get_one(self, item_id: int):

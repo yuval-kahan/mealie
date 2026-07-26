@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Text, orm
+from sqlalchemy import Boolean, Float, ForeignKey, Integer, String, Text, UniqueConstraint, orm
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .._model_base import BaseMixins, FilterableColumn, NaiveDateTime, SqlAlchemyBase
@@ -19,7 +19,12 @@ class UploadedBook(SqlAlchemyBase, BaseMixins):
 
     id: FilterableColumn[guid.GUID] = mapped_column(guid.GUID, primary_key=True, default=guid.GUID.generate)
 
-    group_id: FilterableColumn[guid.GUID] = mapped_column(guid.GUID, ForeignKey("groups.id"), nullable=False, index=True)
+    group_id: FilterableColumn[guid.GUID] = mapped_column(
+        guid.GUID,
+        ForeignKey("groups.id"),
+        nullable=False,
+        index=True,
+    )
     group: Mapped[Optional["Group"]] = orm.relationship("Group")
     household_id: FilterableColumn[guid.GUID] = mapped_column(
         guid.GUID, ForeignKey("households.id"), nullable=False, index=True
@@ -73,6 +78,38 @@ class UploadedBook(SqlAlchemyBase, BaseMixins):
     extraction_chunk_status: FilterableColumn[str | None] = mapped_column(Text, nullable=True)
     extraction_started_at: FilterableColumn[datetime | None] = mapped_column(NaiveDateTime, nullable=True)
     extraction_completed_at: FilterableColumn[datetime | None] = mapped_column(NaiveDateTime, nullable=True)
+
+    @auto_init()
+    def __init__(self, **_) -> None:
+        pass
+
+
+class UploadedBookReadingState(SqlAlchemyBase, BaseMixins):
+    __tablename__ = "uploaded_book_reading_states"
+    __table_args__ = (
+        UniqueConstraint("book_id", "user_id", name="uploaded_book_reading_states_book_user_key"),
+    )
+
+    id: FilterableColumn[guid.GUID] = mapped_column(guid.GUID, primary_key=True, default=guid.GUID.generate)
+    book_id: FilterableColumn[guid.GUID] = mapped_column(
+        guid.GUID, ForeignKey("uploaded_books.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    book: Mapped[Optional["UploadedBook"]] = orm.relationship("UploadedBook")
+    group_id: FilterableColumn[guid.GUID] = mapped_column(
+        guid.GUID, ForeignKey("groups.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: FilterableColumn[guid.GUID] = mapped_column(
+        guid.GUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    current_page: FilterableColumn[int] = mapped_column(Integer, nullable=False, default=0)
+    current_page_index: FilterableColumn[int] = mapped_column(Integer, nullable=False, default=0)
+    current_chapter_id: FilterableColumn[str | None] = mapped_column(String(160), nullable=True)
+    reading_percent: FilterableColumn[float] = mapped_column(Float, nullable=False, default=0)
+    completed_chapters_json: FilterableColumn[str] = mapped_column(Text, nullable=False, default="[]")
+    total_chapters: FilterableColumn[int] = mapped_column(Integer, nullable=False, default=0)
+    notes_json: FilterableColumn[str] = mapped_column(Text, nullable=False, default="[]")
+    highlights_json: FilterableColumn[str] = mapped_column(Text, nullable=False, default="[]")
+    preferences_json: FilterableColumn[str] = mapped_column(Text, nullable=False, default="{}")
 
     @auto_init()
     def __init__(self, **_) -> None:

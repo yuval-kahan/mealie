@@ -218,10 +218,20 @@
             :key="list.id"
             v-model="bulkDeleteSelectedListIds"
             :value="list.id"
-            :label="list.name || ''"
             hide-details
             density="compact"
-          />
+          >
+            <template #label>
+              <span>{{ list.name || "" }}</span>
+              <LinkedResourcesButton
+                v-if="shoppingListLinkedResourcesCount(list)"
+                class="ml-1"
+                entity-type="shopping-list"
+                :entity-id="list.id"
+                :count="shoppingListLinkedResourcesCount(list)"
+              />
+            </template>
+          </v-checkbox>
           <p v-if="!filteredBulkDeleteLists.length" class="text-medium-emphasis pa-3 mb-0">
             {{ $t("search.no-results") }}
           </p>
@@ -433,6 +443,12 @@
                   {{ $globals.icons.web }}
                 </v-icon>
               </v-btn>
+              <LinkedResourcesButton
+                v-if="shoppingListLinkedResourcesCount(list)"
+                entity-type="shopping-list"
+                :entity-id="list.id"
+                :count="shoppingListLinkedResourcesCount(list)"
+              />
               <v-btn
                 icon
                 variant="plain"
@@ -697,6 +713,7 @@ import {
 } from "~/composables/shopping-list-page/use-shopping-list-availability";
 import type { UserOut } from "~/lib/api/types/user";
 import type { ShoppingListDeletePreview } from "~/lib/api/user/group-shopping-lists";
+import LinkedResourcesButton from "~/components/Domain/LinkedResources/LinkedResourcesButton.vue";
 
 const auth = useMealieAuth();
 const i18n = useI18n();
@@ -732,6 +749,10 @@ const { updateAvailabilityForListName } = useShoppingListAvailability();
 function openShoppingWebsiteLinks(id: string) {
   shoppingWebsiteLinkTargetId.value = id;
   shoppingWebsiteLinksDialog.value = true;
+}
+
+function shoppingListLinkedResourcesCount(list: ShoppingListOut) {
+  return Number(list.extras?.linkedResourcesCount || 0);
 }
 
 useSeoMeta({

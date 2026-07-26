@@ -3,6 +3,33 @@
     <section class="recipe-quick-edit-section">
       <div class="recipe-quick-edit-heading">
         <v-icon color="primary">
+          {{ $globals.icons.formatListCheck }}
+        </v-icon>
+        <span>{{ $t("recipe.mise-en-place") }}</span>
+      </div>
+      <div class="recipe-quick-edit-columns">
+        <v-textarea
+          v-model="miseEnPlaceFood"
+          :label="$t('recipe.mise-en-place-food')"
+          :hint="$t('recipe.mise-en-place-food-description')"
+          persistent-hint
+          rows="3"
+          auto-grow
+        />
+        <v-textarea
+          v-model="miseEnPlaceTools"
+          :label="$t('recipe.mise-en-place-tools')"
+          :hint="$t('recipe.mise-en-place-tools-description')"
+          persistent-hint
+          rows="3"
+          auto-grow
+        />
+      </div>
+    </section>
+
+    <section class="recipe-quick-edit-section">
+      <div class="recipe-quick-edit-heading">
+        <v-icon color="primary">
           {{ $globals.icons.edit }}
         </v-icon>
         <span>{{ $t("recipe.recipe-name") }}</span>
@@ -197,6 +224,25 @@ const { ingredientToParserString } = useIngredientTextParser();
 const ingredients = computed(() => recipe.value.recipeIngredient || []);
 const instructions = computed(() => recipe.value.recipeInstructions || []);
 const notes = computed(() => recipe.value.notes || []);
+const miseEnPlaceFood = computed({
+  get: () => String(recipe.value.extras?.miseEnPlaceFood || recipe.value.extras?.miseEnPlace || ""),
+  set: (value: string) => {
+    recipe.value.extras = {
+      ...(recipe.value.extras || {}),
+      miseEnPlaceFood: value,
+      miseEnPlace: "",
+    };
+  },
+});
+const miseEnPlaceTools = computed({
+  get: () => String(recipe.value.extras?.miseEnPlaceTools || ""),
+  set: (value: string) => {
+    recipe.value.extras = {
+      ...(recipe.value.extras || {}),
+      miseEnPlaceTools: value,
+    };
+  },
+});
 
 function ingredientText(ingredient: RecipeIngredient) {
   return ingredientToParserString(ingredient);

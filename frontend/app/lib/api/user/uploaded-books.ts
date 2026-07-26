@@ -7,6 +7,9 @@ import type {
   UploadedBookRecipeDeleteResponse,
   UploadedBookRecipeDeleteRequest,
   UploadedBookRecipeSummary,
+  UploadedBookReadingState,
+  UploadedBookReadingStateUpdate,
+  UploadedBookManualTranslationPageRequest,
   UploadedBookTranslateRequest,
 } from "~/lib/api/types/uploaded-book";
 
@@ -18,6 +21,7 @@ const routes = {
   extractRecipes: (id: string) => `${prefix}/households/uploaded-books/${id}/extract-recipes`,
   cancelExtraction: (id: string) => `${prefix}/households/uploaded-books/${id}/extract-recipes/cancel`,
   translate: (id: string) => `${prefix}/households/uploaded-books/${id}/translate`,
+  manualTranslationPage: (id: string) => `${prefix}/households/uploaded-books/${id}/translate/manual-page`,
   cancelTranslation: (id: string) => `${prefix}/households/uploaded-books/${id}/translate/cancel`,
   classify: (id: string) => `${prefix}/households/uploaded-books/${id}/classify`,
   generate: `${prefix}/households/uploaded-books/generate`,
@@ -25,10 +29,14 @@ const routes = {
   aiRecipeMembership: (id: string, slug: string) => `${prefix}/households/uploaded-books/${id}/ai-recipes/${encodeURIComponent(slug)}`,
   uploadedBookFile: (id: string) => `${prefix}/households/uploaded-books/${id}/file`,
   uploadedBookCover: (id: string) => `${prefix}/households/uploaded-books/${id}/cover`,
+  uploadedBookCoverUrl: (id: string) => `${prefix}/households/uploaded-books/${id}/cover-url`,
+  uploadedBookCoverAuto: (id: string) => `${prefix}/households/uploaded-books/${id}/cover-auto`,
   openUploadedBook: (id: string) => `${prefix}/households/uploaded-books/${id}/open`,
   openUploadedBookSource: `${prefix}/households/uploaded-books/source/open`,
   uploadedBookRecipes: (id: string) => `${prefix}/households/uploaded-books/${id}/recipes`,
   deleteUploadedBookRecipes: (id: string) => `${prefix}/households/uploaded-books/${id}/recipes/delete`,
+  readingStates: `${prefix}/households/uploaded-books/reading-states`,
+  readingState: (id: string) => `${prefix}/households/uploaded-books/${id}/reading-state`,
 };
 
 export class UploadedBooksAPI extends BaseAPI {
@@ -64,8 +72,29 @@ export class UploadedBooksAPI extends BaseAPI {
     return await this.requests.post<UploadedBook>(routes.cancelTranslation(id));
   }
 
+  async saveManualTranslationPage(id: string, payload: UploadedBookManualTranslationPageRequest) {
+    return await this.requests.post<UploadedBook, UploadedBookManualTranslationPageRequest>(
+      routes.manualTranslationPage(id),
+      payload,
+    );
+  }
+
   async classify(id: string) {
     return await this.requests.post<UploadedBook>(routes.classify(id));
+  }
+
+  async uploadCover(id: string, image: File) {
+    const formData = new FormData();
+    formData.append("image", image);
+    return await this.requests.post<UploadedBook>(routes.uploadedBookCover(id), formData);
+  }
+
+  async saveCoverUrl(id: string, url: string) {
+    return await this.requests.post<UploadedBook, { url: string }>(routes.uploadedBookCoverUrl(id), { url });
+  }
+
+  async findCover(id: string) {
+    return await this.requests.post<UploadedBook>(routes.uploadedBookCoverAuto(id));
   }
 
   async generate(payload: AICookbookGenerateRequest) {
@@ -100,6 +129,21 @@ export class UploadedBooksAPI extends BaseAPI {
     return await this.requests.get<UploadedBookRecipeSummary[]>(routes.uploadedBookRecipes(id));
   }
 
+  async getReadingStates() {
+    return await this.requests.get<UploadedBookReadingState[]>(routes.readingStates);
+  }
+
+  async getReadingState(id: string) {
+    return await this.requests.get<UploadedBookReadingState>(routes.readingState(id));
+  }
+
+  async updateReadingState(id: string, payload: UploadedBookReadingStateUpdate) {
+    return await this.requests.put<UploadedBookReadingState, UploadedBookReadingStateUpdate>(
+      routes.readingState(id),
+      payload,
+    );
+  }
+
   async deleteRecipes(id: string, payload: UploadedBookRecipeDeleteRequest) {
     return await this.requests.post<UploadedBookRecipeDeleteResponse, UploadedBookRecipeDeleteRequest>(
       routes.deleteUploadedBookRecipes(id),
@@ -111,8 +155,9 @@ export class UploadedBooksAPI extends BaseAPI {
     return routes.uploadedBookFile(id);
   }
 
-  coverUrl(id: string) {
-    return routes.uploadedBookCover(id);
+  coverUrl(id: string, version?: string | null) {
+    const query = version ? `?v=${encodeURIComponent(version)}` : "";
+    return `${routes.uploadedBookCover(id)}${query}`;
   }
 
   openUrl(id: string, page?: number | null) {

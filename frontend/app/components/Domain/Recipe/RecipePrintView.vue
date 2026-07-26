@@ -27,14 +27,18 @@
               {{ recipe.name }}
             </v-card-title>
             <div
-              v-if="recipe.createdBy || recipe.source"
+              v-if="recipe.createdBy || printSourceName || printSourceUrl"
               class="print-origin pb-3"
             >
               <div v-if="recipe.createdBy">
                 <strong>{{ $t("recipe.created-by") }}:</strong> {{ recipe.createdBy }}
               </div>
-              <div v-if="recipe.source">
-                <strong>{{ $t("recipe.source") }}:</strong> {{ recipe.source }}
+              <div v-if="printSourceName">
+                <strong>{{ $t("recipe.source") }}:</strong> {{ printSourceName }}
+              </div>
+              <div v-if="printSourceUrl">
+                <strong>{{ $t("recipe.source-link") }}:</strong>
+                <a :href="printSourceUrl">{{ printSourceUrl }}</a>
               </div>
             </div>
             <div
@@ -278,6 +282,27 @@ const recipeImageUrl = computed(() => {
   }
 
   return recipeImage(props.recipe.id, props.recipe.image, imageKey.value);
+});
+
+const printSourceUrl = computed(() => {
+  const storedUrl = props.recipe.extras?.sourceUrl;
+  const source = props.recipe.source || props.recipe.orgURL || "";
+  return (typeof storedUrl === "string" ? storedUrl.trim() : "")
+    || source.match(/https?:\/\/[^\s<>"']+/i)?.[0]
+    || "";
+});
+
+const printSourceName = computed(() => {
+  const storedTitle = props.recipe.extras?.sourceTitle;
+  if (typeof storedTitle === "string" && storedTitle.trim()) {
+    return storedTitle.trim();
+  }
+
+  return (props.recipe.source || props.recipe.orgURL || "")
+    .replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/gi, "$1")
+    .replace(/https?:\/\/[^\s<>"']+/gi, "")
+    .replace(/^[\s|,:;\-–—]+|[\s|,:;\-–—]+$/g, "")
+    .trim();
 });
 
 // Group ingredients by section so we can style them independently

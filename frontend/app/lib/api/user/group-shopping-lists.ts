@@ -37,6 +37,7 @@ const routes = {
   shoppingListsMerge: `${prefix}/households/shopping/lists/merge`,
   shoppingListsId: (id: string) => `${prefix}/households/shopping/lists/${id}`,
   shoppingListIdOrganizeAi: (id: string) => `${prefix}/households/shopping/lists/${id}/organize-ai`,
+  shoppingListIdAdjustQuantitiesAi: (id: string) => `${prefix}/households/shopping/lists/${id}/adjust-quantities-ai`,
   shoppingListIdItemImagesEnsure: (id: string) => `${prefix}/households/shopping/lists/${id}/item-images/ensure`,
   shoppingListIdAddRecipe: (id: string) => `${prefix}/households/shopping/lists/${id}/recipe`,
   shoppingListIdRemoveRecipe: (id: string, recipeId: string) => `${prefix}/households/shopping/lists/${id}/recipe/${recipeId}/delete`,
@@ -89,6 +90,12 @@ export class ShoppingListsApi extends BaseCRUDAPI<ShoppingListCreate, ShoppingLi
     return await this.requests.post<ShoppingListOut>(routes.shoppingListIdOrganizeAi(itemId), {
       includeAiTips,
       targetLanguage,
+    });
+  }
+
+  async adjustQuantitiesWithAi(itemId: string, request: string) {
+    return await this.requests.post<ShoppingListOut>(routes.shoppingListIdAdjustQuantitiesAi(itemId), {
+      request,
     });
   }
 

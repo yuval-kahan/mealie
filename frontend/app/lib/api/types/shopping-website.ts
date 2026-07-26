@@ -11,6 +11,8 @@ export interface ShoppingWebsite {
   updatedAt?: string | null;
   recipeIds: string[];
   shoppingListIds: string[];
+  hasImage: boolean;
+  imageVersion?: string | null;
 }
 
 export interface ShoppingWebsiteCreate {

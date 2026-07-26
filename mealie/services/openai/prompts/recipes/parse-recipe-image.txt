@@ -4,8 +4,23 @@ The user message that you receive will be one or more images. Assume all images 
 
 Set source_image_is_finished_dish to true only when at least one supplied image clearly depicts the finished, ready-to-serve dish and would make a suitable recipe cover. Set it to false for a recipe scan or screenshot, a page dominated by text, ingredient-only photos, packages, tools, or preparation steps. Never treat a text page as a food photo.
 
-If the user requests a target/output language, it is mandatory: translate every user-facing recipe field (name, description, yield, times, ingredients, instructions, notes, categories, tags, tools, source, and creator) to that language. Apply it even when the image is already written in the requested language. Preserve only URLs and proper names that should not be translated. Otherwise, preserve the text as-is.
+If the user requests a target/output language, it is mandatory: translate every user-facing recipe field (name, description, yield, times, ingredients, instructions, notes, tools, source, and creator) to that language. Apply it even when the image is already written in the requested language. Preserve only URLs and proper names that should not be translated. Otherwise, preserve the text as-is. Categories and tags always follow the Hebrew rules below regardless of the requested output language.
 
 For each ingredient, fill recommended_variety when a specific type/variety would materially improve the recipe or is stated/implied by the recipe. This is especially useful for vegetables and fruit, such as tomato type, pepper color/type, potato type, onion type, fresh herbs, mushroom type, cheese style, meat cut, or pasta shape. Keep it short and practical. Leave it null when no specific type is useful.
 
 If the image text includes an explicit source, such as a website, blog, TV show, magazine, book, or page number, put it in the source field. If it credits a chef, author, book, show, publisher, channel, or organization, put that in the created_by field. Do not invent source or creator details.
+When a source URL is visible or supplied with the image, preserve both a concise human-readable source name and the complete URL in the source field.
+
+Fill mise_en_place_food with concise food-preparation tasks to complete before cooking, one actionable task per item.
+Fill mise_en_place_tools separately with the kitchen tools and equipment to have ready. Do not mix tools into food tasks,
+do not repeat the full instructions, and leave the legacy mise_en_place field null for new responses.
+
+Always fill core_dish_name with the concise food name in Hebrew and use it as a Hebrew tag, even when the rest of the
+recipe is returned in another language.
+Categories and primary_category must be written only in Hebrew. Write general tags in Hebrew whenever possible; only
+chef and restaurant proper names may additionally appear in their original language. Fill meal_periods with every
+suitable value from breakfast, lunch, and dinner; a recipe may fit more than one. Carefully classify
+is_michelin_dish, is_gourmet_dish, and is_complete_meal.
+Michelin may be true only when the image or supplied notes explicitly and reliably support Michelin recognition. Fill
+media_source_type and media_source_name only when the image or supplied notes explicitly identify a TV show, Instagram
+account, YouTube channel, TikTok account, website, cookbook, or magazine.

@@ -59,15 +59,98 @@
         </label>
 
         <label class="checkbox-row">
+          <input id="includeMiseEnPlace" type="checkbox">
+          <span data-i18n="options.include-mise-en-place">Add mise en place tasks with ingredients and tools</span>
+        </label>
+
+        <label class="checkbox-row">
           <input id="includeItemImages" type="checkbox">
           <span data-i18n="options.include-item-images">Find and save images for ingredients, tools, and shopping-list items</span>
         </label>
       </section>
 
+      <details class="video-settings-panel">
+        <summary data-i18n="video.settings-title">Video download settings</summary>
+        <div class="video-settings-content">
+          <label class="checkbox-row">
+            <input id="downloadVideo" type="checkbox">
+            <span data-i18n="video.download">Download and keep the video</span>
+          </label>
+          <label class="checkbox-row">
+            <input id="videoCreateRecipe" type="checkbox">
+            <span data-i18n="video.create-recipe">Create a recipe when a complete recipe is present</span>
+          </label>
+          <div class="video-settings-grid">
+            <label>
+              <span data-i18n="video.quality">Quality</span>
+              <select id="videoQuality">
+                <option value="best" data-i18n="video.best">Best available</option>
+                <option value="2160">4K (2160p)</option>
+                <option value="1080">1080p</option>
+                <option value="720">720p</option>
+                <option value="480">480p</option>
+              </select>
+            </label>
+            <label>
+              <span data-i18n="video.format">Format</span>
+              <select id="videoContainer">
+                <option value="mp4">MP4</option>
+                <option value="mkv">MKV</option>
+                <option value="webm">WebM</option>
+              </select>
+            </label>
+            <label>
+              <span data-i18n="video.codec">Codec</span>
+              <select id="videoCodec">
+                <option value="auto" data-i18n="video.automatic">Automatic</option>
+                <option value="h264">H.264</option>
+                <option value="h265">H.265</option>
+                <option value="vp9">VP9</option>
+                <option value="av1">AV1</option>
+              </select>
+            </label>
+            <label>
+              <span data-i18n="video.audio-quality">Audio quality</span>
+              <select id="videoAudioQuality">
+                <option value="best" data-i18n="video.best">Best available</option>
+                <option value="320">320 kbps</option>
+                <option value="256">256 kbps</option>
+                <option value="192">192 kbps</option>
+                <option value="128">128 kbps</option>
+                <option value="96">96 kbps</option>
+              </select>
+            </label>
+          </div>
+          <label class="checkbox-row">
+            <input id="videoAudioOnly" type="checkbox">
+            <span data-i18n="video.audio-only">Audio only</span>
+          </label>
+          <label class="checkbox-row" hidden>
+            <input id="videoSaveSubtitles" type="checkbox">
+            <span data-i18n="video.subtitles">Save subtitles</span>
+          </label>
+          <label class="checkbox-row">
+            <input id="videoSaveThumbnail" type="checkbox">
+            <span data-i18n="video.thumbnail">Save thumbnail</span>
+          </label>
+          <label class="checkbox-row">
+            <input id="videoSaveMetadata" type="checkbox">
+            <span data-i18n="video.metadata">Save metadata</span>
+          </label>
+          <label class="checkbox-row">
+            <input id="videoFallbackQuality" type="checkbox">
+            <span data-i18n="video.fallback">Use lower quality if needed</span>
+          </label>
+          <button id="saveVideoSettings" class="secondary compact-action" type="button" data-i18n="video.save-settings">Save video settings</button>
+        </div>
+      </details>
+
       <section class="actions">
         <button id="extractOnly" class="secondary" type="button" data-i18n="actions.extract-only">Extract only</button>
         <button id="sendToMealie" class="primary" type="button">Detect and send to AI</button>
         <button id="saveWebsite" class="website-action" type="button" data-i18n="actions.save-website">Save website</button>
+        <button id="saveRestaurant" class="restaurant-action" type="button" data-i18n="actions.save-restaurant">Save restaurant</button>
+        <button id="saveVideo" class="video-action" type="button" data-i18n="actions.save-video">Save video</button>
       </section>
       <button id="connectMealie" class="connect-button" type="button" data-i18n="actions.connect-mealie" hidden>Open / connect Mealie</button>
 

@@ -114,6 +114,12 @@
         </template>
         <span>{{ $t("shopping-website.link-websites") }}</span>
       </v-tooltip>
+      <LinkedResourcesButton
+        v-if="loggedIn"
+        entity-type="recipe"
+        :entity-id="recipe.id!"
+        probe
+      />
       <div v-if="loggedIn">
         <v-tooltip v-if="canEdit && !quickEditing" location="bottom" color="info">
           <template #activator="{ props: tooltipProps }">
@@ -197,6 +203,9 @@
           duplicate: loggedIn,
           mealplanner: loggedIn,
           shoppingList: loggedIn,
+          aiShoppingList: loggedIn,
+          aiImage: loggedIn,
+          aiEdit: loggedIn,
           print: true,
           printPreferences: true,
           share: loggedIn,
@@ -236,6 +245,7 @@ import RecipeTimelineBadge from "./RecipeTimelineBadge.vue";
 import { useUserApi } from "~/composables/api/api-client";
 import type { Recipe } from "~/lib/api/types/recipe";
 import type { RecipeDeletePreview } from "~/lib/api/user/recipes/recipe";
+import LinkedResourcesButton from "~/components/Domain/LinkedResources/LinkedResourcesButton.vue";
 
 const SAVE_EVENT = "save";
 const DELETE_EVENT = "delete";

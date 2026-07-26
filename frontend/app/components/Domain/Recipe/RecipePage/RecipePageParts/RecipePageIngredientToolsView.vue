@@ -51,6 +51,7 @@
 
 <script setup lang="ts">
 import { useLoggedInState } from "~/composables/use-logged-in-state";
+import { useUserApi } from "~/composables/api/api-client";
 import { useStaticRoutes } from "~/composables/api";
 import { usePageState, usePageUser } from "~/composables/recipe-page/shared-state";
 import { useToolStore } from "~/composables/store";
@@ -60,6 +61,7 @@ import type { NoUndefinedField } from "~/lib/api/types/non-generated";
 import type { Recipe, RecipeIngredient, RecipeTool } from "~/lib/api/types/recipe";
 import ItemImageThumb from "~/components/Domain/ItemImages/ItemImageThumb.vue";
 import RecipeIngredients from "~/components/Domain/Recipe/RecipeIngredients.vue";
+import { alert } from "~/composables/use-toast";
 
 interface RecipeToolWithOnHand extends RecipeTool {
   onHand: boolean;
@@ -79,6 +81,8 @@ const emit = defineEmits<{
 }>();
 
 const { isOwnGroup } = useLoggedInState();
+const api = useUserApi();
+const i18n = useI18n();
 
 const toolStore = isOwnGroup.value ? useToolStore() : null;
 const { user } = usePageUser();
@@ -130,37 +134,66 @@ function cloneIngredients(ingredients: RecipeIngredient[]) {
   return JSON.parse(JSON.stringify(ingredients)) as RecipeIngredient[];
 }
 
-function applyAiIngredientAdjustment(payload: { ingredients: RecipeIngredient[]; adjustmentNote: string }) {
+async function persistRecipeIngredients(
+  ingredients: RecipeIngredient[],
+  extras: Record<string, unknown>,
+) {
+  const previousIngredients = cloneIngredients(props.recipe.recipeIngredient || []);
+  const previousExtras = { ...(props.recipe.extras || {}) };
+  // The recipe page deliberately shares one editable recipe model between its child sections.
+  // eslint-disable-next-line vue/no-mutating-props
+  props.recipe.recipeIngredient = ingredients;
+  // eslint-disable-next-line vue/no-mutating-props
+  props.recipe.extras = extras;
+
+  const { data, error } = await api.recipes.updateOne(props.recipe.slug, props.recipe);
+  if (error || !data) {
+    // eslint-disable-next-line vue/no-mutating-props
+    props.recipe.recipeIngredient = previousIngredients;
+    // eslint-disable-next-line vue/no-mutating-props
+    props.recipe.extras = previousExtras;
+    alert.error(i18n.t("events.something-went-wrong"));
+    return false;
+  }
+
+  // eslint-disable-next-line vue/no-mutating-props
+  props.recipe.recipeIngredient = data.recipeIngredient || ingredients;
+  // eslint-disable-next-line vue/no-mutating-props
+  props.recipe.extras = data.extras || extras;
+  return true;
+}
+
+async function applyAiIngredientAdjustment(payload: { ingredients: RecipeIngredient[]; adjustmentNote: string }) {
   if (!aiIngredientAdjustmentOriginal.value) {
     aiIngredientAdjustmentOriginal.value = cloneIngredients(props.recipe.recipeIngredient || []);
   }
 
-  // The recipe page deliberately shares one editable recipe model between its child sections.
-  // eslint-disable-next-line vue/no-mutating-props
-  props.recipe.recipeIngredient = payload.ingredients;
-  // eslint-disable-next-line vue/no-mutating-props
-  props.recipe.extras = {
+  const saved = await persistRecipeIngredients(payload.ingredients, {
     ...(props.recipe.extras || {}),
     aiIngredientAdjustment: {
       appliedAt: new Date().toISOString(),
       note: payload.adjustmentNote,
     },
-  };
+  });
+  if (!saved) {
+    aiIngredientAdjustmentOriginal.value = null;
+    return;
+  }
   emit("update:scale", 1);
 }
 
-function resetAiIngredientAdjustment() {
+async function resetAiIngredientAdjustment() {
   if (!aiIngredientAdjustmentOriginal.value) {
     return;
   }
 
-  // eslint-disable-next-line vue/no-mutating-props
-  props.recipe.recipeIngredient = aiIngredientAdjustmentOriginal.value;
-  aiIngredientAdjustmentOriginal.value = null;
   const extras = { ...(props.recipe.extras || {}) };
   delete extras.aiIngredientAdjustment;
-  // eslint-disable-next-line vue/no-mutating-props
-  props.recipe.extras = extras;
+  const original = cloneIngredients(aiIngredientAdjustmentOriginal.value);
+  if (!(await persistRecipeIngredients(original, extras))) {
+    return;
+  }
+  aiIngredientAdjustmentOriginal.value = null;
   emit("update:scale", 1);
 }
 </script>

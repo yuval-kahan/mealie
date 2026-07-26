@@ -18,6 +18,10 @@
       :secondary-links="sidebarCookbookLinks || []"
       :organizer-sections="organizerSidebarSections"
     >
+      <RestaurantCreateDialog
+        v-model="quickRestaurantDialog"
+        @saved="quickRestaurantDialog = false"
+      />
       <BaseDialog
         v-model="quickTextRecipeDialog"
         :title="$t('recipe.create-recipe-from-text')"
@@ -187,6 +191,14 @@
               density="compact"
               :disabled="!quickArticleExtractRecipeIfPresent"
               :label="$t('recipe.include-ai-tips-description')"
+            />
+            <v-checkbox
+              v-model="quickArticleIncludeMiseEnPlace"
+              hide-details
+              color="primary"
+              density="compact"
+              :disabled="!quickArticleExtractRecipeIfPresent"
+              :label="$t('recipe.include-mise-en-place-description')"
             />
             <v-checkbox
               v-model="quickArticleIncludeItemImages"
@@ -1030,6 +1042,7 @@ const showImageImport = computed(() => group.value?.aiProviderSettings?.imagePro
 
 const sidebar = ref<boolean>(false);
 const quickTextRecipeDialog = ref(false);
+const quickRestaurantDialog = ref(false);
 const quickArticleDialog = ref(false);
 const quickArticleSaving = ref(false);
 const quickArticleCreateMode = ref<"manual" | "ai-text" | "ai-link">("manual");
@@ -1039,6 +1052,7 @@ const quickArticleExtractRecipeIfPresent = ref(true);
 const quickArticleCreateShoppingList = ref(true);
 const quickArticleOrganizeShoppingList = ref(true);
 const quickArticleIncludeAiTips = ref(true);
+const quickArticleIncludeMiseEnPlace = ref(true);
 const quickArticleIncludeItemImages = ref(true);
 const quickArticleCategoryOptions = ref<string[]>([]);
 const quickArticleTagOptions = ref<string[]>([]);
@@ -1087,6 +1101,7 @@ const backgroundJobCancelling = ref<Set<string>>(new Set());
 const emptyCategoryIds = ref<Set<string>>(new Set());
 const emptyTagIds = ref<Set<string>>(new Set());
 let uploadedBookRefreshTimer: ReturnType<typeof setInterval> | null = null;
+let layoutMounted = false;
 const uploadedBookRefreshInFlight = ref(false);
 let organizerRefreshPromise: Promise<void> | null = null;
 let organizerRefreshQueued = false;
@@ -1211,12 +1226,14 @@ function uploadedBookStatusWithRange(text: string, rangeLabel: string) {
 }
 
 onMounted(() => {
+  layoutMounted = true;
   sidebar.value = display.lgAndUp.value;
   window.addEventListener(ORGANIZERS_UPDATED_EVENT, handleOrganizersUpdated);
   syncUploadedBookRefreshTimer();
 });
 
 onBeforeUnmount(() => {
+  layoutMounted = false;
   window.removeEventListener(ORGANIZERS_UPDATED_EVENT, handleOrganizersUpdated);
   clearUploadedBookRefreshTimer();
   organizerRefreshQueued = false;
@@ -1734,7 +1751,8 @@ function clearUploadedBookRefreshTimer() {
 }
 
 function syncUploadedBookRefreshTimer() {
-  if (!import.meta.client) {
+  if (!import.meta.client || !layoutMounted) {
+    clearUploadedBookRefreshTimer();
     return;
   }
 
@@ -2252,6 +2270,7 @@ function resetQuickArticleForm() {
   quickArticleCreateShoppingList.value = true;
   quickArticleOrganizeShoppingList.value = true;
   quickArticleIncludeAiTips.value = true;
+  quickArticleIncludeMiseEnPlace.value = true;
   quickArticleIncludeItemImages.value = true;
   quickArticleForm.title = "";
   quickArticleForm.summary = "";
@@ -2295,6 +2314,7 @@ async function submitQuickArticle() {
         && quickArticleCreateShoppingList.value
         && quickArticleOrganizeShoppingList.value,
       includeAiTips: quickArticleIncludeAiTips.value,
+      includeMiseEnPlace: quickArticleIncludeMiseEnPlace.value,
       includeItemImages: quickArticleIncludeItemImages.value,
     });
   })().finally(() => {
@@ -2398,9 +2418,41 @@ const topLinks = computed<SideBarLink[]>(() => [
     restricted: true,
   },
   {
+    icon: $globals.icons.foods,
+    title: i18n.t("pantry.food-i-have"),
+    to: "/pantry",
+    restricted: true,
+  },
+  {
     icon: $globals.icons.web,
     title: i18n.t("shopping-website.websites"),
     to: "/shopping-websites",
+    restricted: true,
+  },
+  {
+    icon: $globals.icons.chefHat,
+    title: i18n.t("restaurant.restaurants"),
+    to: "/restaurants",
+    restricted: true,
+  },
+  {
+    icon: $globals.icons.createAlt,
+    title: i18n.t("restaurant.quick-add"),
+    onClick: () => {
+      quickRestaurantDialog.value = true;
+    },
+    restricted: true,
+  },
+  {
+    icon: $globals.icons.video,
+    title: i18n.t("video-library.videos"),
+    to: "/videos",
+    restricted: true,
+  },
+  {
+    icon: $globals.icons.createAlt,
+    title: i18n.t("video-library.quick-save"),
+    to: "/videos?create=true",
     restricted: true,
   },
   {

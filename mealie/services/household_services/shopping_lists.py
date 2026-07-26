@@ -31,6 +31,7 @@ from mealie.schema.household.group_shopping_list import (
     ShoppingListSummary,
 )
 from mealie.schema.labels.multi_purpose_label import MultiPurposeLabelCreate
+from mealie.schema.openai.recipe import OpenAIRecipeIngredientAdjustment
 from mealie.schema.openai.shopping_list import OpenAIShoppingListOrganization
 from mealie.schema.recipe.recipe import Recipe
 from mealie.schema.recipe.recipe_ingredient import (
@@ -294,6 +295,111 @@ class ShoppingListService:
             updated_items=updated_items,
             deleted_items=[],
         )
+
+    async def adjust_quantities_with_ai(
+        self,
+        list_id: UUID4,
+        request: str,
+        provider: AIProviderOut | None = None,
+    ) -> tuple[ShoppingListOut, ShoppingListItemsCollectionOut, str]:
+        shopping_list = cast(ShoppingListOut | None, self.shopping_lists.get_one(list_id))
+        if shopping_list is None:
+            raise UnexpectedNone("Shopping list not found")
+
+        source_items = list(shopping_list.list_items or [])
+        if not source_items:
+            raise ValueError("Shopping list is empty")
+        normalized_request = " ".join(request.split()).strip()
+        if len(normalized_request) < 2:
+            raise ValueError("Describe the quantity change")
+
+        openai_service = OpenAIService(self.repos)
+        if not (openai_service.provider_settings and openai_service.provider_settings.ai_enabled):
+            raise ValueError("OpenAI services are not available")
+
+        ingredient_candidates = [
+            {
+                "ingredientIndex": index,
+                "title": item.label.name if item.label else None,
+                "quantity": item.quantity,
+                "unit": item.unit.name if item.unit else None,
+                "food": item.food.name if item.food else None,
+                "note": item.note or "",
+                "recommendedVariety": None,
+                "originalText": self._shopping_list_item_ai_text(item),
+            }
+            for index, item in enumerate(source_items)
+        ]
+        message = (
+            f"User adjustment request:\n{normalized_request}\n\n"
+            "The following ingredient_candidates are the complete shopping list. "
+            "Return every ingredientIndex exactly once.\n\n"
+            f"{json.dumps(ingredient_candidates, ensure_ascii=False)}"
+        )
+        response = await openai_service.get_response(
+            openai_service.get_prompt("recipes.adjust-ingredients"),
+            message,
+            response_schema=OpenAIRecipeIngredientAdjustment,
+            provider=provider,
+        )
+        if not response or not response.adjusted:
+            raise ValueError(response.reason if response else "AI returned an empty response")
+
+        adjusted_by_index = {item.ingredient_index: item for item in response.ingredients}
+        expected_indexes = set(range(len(source_items)))
+        if len(adjusted_by_index) != len(response.ingredients) or set(adjusted_by_index) != expected_indexes:
+            raise ValueError("AI returned an incomplete shopping list")
+
+        update_items: list[ShoppingListItemUpdateBulk] = []
+        for index, source in enumerate(source_items):
+            adjusted = adjusted_by_index[index]
+            current_food = (source.food.name if source.food else "").strip().casefold()
+            adjusted_food = (adjusted.food or "").strip().casefold()
+            current_unit = (source.unit.name if source.unit else "").strip().casefold()
+            adjusted_unit = (adjusted.unit or "").strip().casefold()
+            can_keep_structure = current_food == adjusted_food and current_unit == adjusted_unit
+
+            if can_keep_structure and adjusted.quantity is not None:
+                payload = source.cast(
+                    ShoppingListItemUpdateBulk,
+                    id=source.id,
+                    quantity=adjusted.quantity,
+                    note=adjusted.note,
+                )
+            else:
+                adjusted_text = " ".join(
+                    part
+                    for part in [
+                        str(adjusted.quantity) if adjusted.quantity is not None else "",
+                        adjusted.unit or "",
+                        adjusted.food or "",
+                        adjusted.note or "",
+                    ]
+                    if part
+                ).strip()
+                payload = source.cast(
+                    ShoppingListItemUpdateBulk,
+                    id=source.id,
+                    quantity=0,
+                    unit=None,
+                    unit_id=None,
+                    food=None,
+                    food_id=None,
+                    note=adjusted.original_text or adjusted_text,
+                )
+            update_items.append(payload)
+
+        changed = self.bulk_update_items(update_items)
+        updated_list = cast(ShoppingListOut, self.shopping_lists.get_one(list_id))
+        extras = dict(updated_list.extras or {})
+        extras["aiQuantityAdjustment"] = {
+            "appliedAt": datetime.now(UTC).isoformat(),
+            "request": normalized_request,
+            "reason": response.reason,
+        }
+        updated_list.extras = extras
+        updated_list = self.shopping_lists.update(updated_list.id, updated_list)
+        return cast(ShoppingListOut, updated_list), changed, response.reason
 
     def can_merge(self, item1: ShoppingListItemBase, item2: ShoppingListItemBase) -> bool:
         """Check to see if this item can be merged with another item"""

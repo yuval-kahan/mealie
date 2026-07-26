@@ -33,7 +33,7 @@
                   class="recipe-info-card__description my-3"
                 />
                 <div
-                  v-if="recipe.source || recipe.createdBy"
+                  v-if="recipeSourceName || recipeSourceUrl || recipe.createdBy"
                   class="recipe-origin-meta my-3"
                 >
                   <div
@@ -50,7 +50,7 @@
                     <span>{{ recipe.createdBy }}</span>
                   </div>
                   <div
-                    v-if="recipe.source"
+                    v-if="recipeSourceName"
                     class="recipe-origin-meta__item"
                   >
                     <v-icon
@@ -60,17 +60,71 @@
                       {{ $globals.icons.book }}
                     </v-icon>
                     <span class="font-weight-medium">{{ $t("recipe.source") }}:</span>
+                    <span>{{ recipeSourceName }}</span>
+                  </div>
+                  <div
+                    v-if="recipeSourceUrl"
+                    class="recipe-origin-meta__item"
+                  >
+                    <v-icon size="small" color="primary">
+                      {{ $globals.icons.link }}
+                    </v-icon>
+                    <span class="font-weight-medium">{{ $t("recipe.source-link") }}:</span>
                     <a
-                      v-if="recipeSourceUrl"
                       :href="recipeSourceUrl"
                       target="_blank"
                       rel="noopener noreferrer"
                       class="recipe-origin-meta__link"
                       :title="$t('recipe.open-source')"
                     >
-                      {{ recipe.source }}
+                      {{ recipeSourceUrl }}
                     </a>
-                    <span v-else>{{ recipe.source }}</span>
+                  </div>
+                </div>
+                <div
+                  v-if="mealSuitability.length"
+                  class="recipe-meal-suitability my-3"
+                >
+                  <div class="recipe-meal-suitability__title">
+                    <v-icon size="small" color="primary">
+                      {{ $globals.icons.calendar }}
+                    </v-icon>
+                    <span>{{ $t("recipe.suitable-meals") }}</span>
+                  </div>
+                  <div class="d-flex flex-wrap ga-2">
+                    <v-chip
+                      v-for="period in mealSuitability"
+                      :key="period"
+                      size="small"
+                      color="primary"
+                      variant="tonal"
+                      label
+                    >
+                      {{ $t(`meal-plan.${period}`) }}
+                    </v-chip>
+                  </div>
+                </div>
+                <div
+                  v-if="miseEnPlaceFood || miseEnPlaceTools"
+                  class="recipe-mise-en-place my-3"
+                >
+                  <div class="recipe-mise-en-place__title">
+                    <v-icon size="small" color="primary">
+                      {{ $globals.icons.formatListCheck }}
+                    </v-icon>
+                    <span>{{ $t("recipe.mise-en-place") }}</span>
+                  </div>
+                  <div v-if="miseEnPlaceFood" class="recipe-mise-en-place__group">
+                    <div class="recipe-mise-en-place__subtitle">
+                      {{ $t("recipe.mise-en-place-food") }}
+                    </div>
+                    <SafeMarkdown :source="miseEnPlaceFood" />
+                  </div>
+                  <div v-if="miseEnPlaceTools" class="recipe-mise-en-place__group">
+                    <div class="recipe-mise-en-place__subtitle">
+                      {{ $t("recipe.mise-en-place-tools") }}
+                    </div>
+                    <SafeMarkdown :source="miseEnPlaceTools" />
                   </div>
                 </div>
               </div>
@@ -159,16 +213,71 @@ const hasInfoDetails = computed(() => Boolean(
   props.recipe.description
   || props.recipe.source
   || props.recipe.createdBy
+  || mealSuitability.value.length
+  || miseEnPlaceFood.value
+  || miseEnPlaceTools.value
   || hasQuickStats.value
   || hasTimeStats.value,
 ));
+
+const miseEnPlaceFood = computed(() => {
+  const extras = props.recipe.extras || {};
+  const value = extras.miseEnPlaceFood || extras.miseEnPlace;
+  return typeof value === "string" ? value.trim() : "";
+});
+
+const miseEnPlaceTools = computed(() => {
+  const value = props.recipe.extras?.miseEnPlaceTools;
+  return typeof value === "string" ? value.trim() : "";
+});
+
+const mealSuitability = computed(() => {
+  const value = props.recipe.extras?.mealSuitability;
+  if (typeof value !== "string") {
+    return [];
+  }
+
+  const allowedPeriods = new Set(["breakfast", "lunch", "dinner"]);
+  return [...new Set(value.split(",").map(period => period.trim()).filter(period => allowedPeriods.has(period)))];
+});
 
 onMounted(() => {
   void ensureAvailability();
 });
 
+const recipeSourceName = computed(() => {
+  const storedTitle = props.recipe.extras?.sourceTitle;
+  if (typeof storedTitle === "string" && storedTitle.trim()) {
+    return storedTitle.trim();
+  }
+
+  const source = props.recipe.source?.trim() || "";
+  const sourceWithoutUrl = source
+    .replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/gi, "$1")
+    .replace(/https?:\/\/[^\s<>"']+/gi, "")
+    .replace(/^[\s|,:;\-–—]+|[\s|,:;\-–—]+$/g, "")
+    .trim();
+  if (sourceWithoutUrl && !externalUrlFromSource(sourceWithoutUrl)) {
+    return sourceWithoutUrl;
+  }
+
+  const externalUrl = externalUrlFromSource(source);
+  if (externalUrl) {
+    try {
+      return new URL(externalUrl).hostname.replace(/^www\./, "");
+    }
+    catch {
+      return source;
+    }
+  }
+
+  return source || null;
+});
+
 const recipeSourceUrl = computed(() => {
-  const externalUrl = externalUrlFromSource(props.recipe.source);
+  const storedUrl = props.recipe.extras?.sourceUrl;
+  const externalUrl = externalUrlFromSource(typeof storedUrl === "string" ? storedUrl : null)
+    || externalUrlFromSource(props.recipe.source);
   if (externalUrl) {
     return externalUrl;
   }
@@ -205,7 +314,9 @@ function externalUrlFromSource(source?: string | null) {
     return null;
   }
 
-  const normalizedValue = value.replace(/^<(.+)>$/, "$1");
+  const normalizedValue = value
+    .replace(/^<(.+)>$/, "$1")
+    .replace(/^https?:\/\/https?\/\//i, "https://");
   const explicitUrl = normalizedValue.match(/https?:\/\/[^\s<>"']+/i)?.[0];
   const candidate = explicitUrl || normalizedValue;
   const withProtocol = candidate.startsWith("www.")
@@ -246,6 +357,36 @@ function externalUrlFromSource(source?: string | null) {
   flex-direction: column;
   align-items: flex-start;
   min-width: min(100%, 240px);
+}
+
+.recipe-mise-en-place {
+  border-inline-start: 3px solid rgb(var(--v-theme-primary));
+  padding-inline-start: 12px;
+}
+
+.recipe-meal-suitability__title {
+  align-items: center;
+  display: flex;
+  font-weight: 700;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.recipe-mise-en-place__title {
+  align-items: center;
+  display: flex;
+  font-weight: 700;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.recipe-mise-en-place__group + .recipe-mise-en-place__group {
+  margin-top: 12px;
+}
+
+.recipe-mise-en-place__subtitle {
+  font-weight: 700;
+  margin-bottom: 4px;
 }
 
 .recipe-info-card__time-stats {

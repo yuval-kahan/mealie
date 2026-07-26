@@ -93,6 +93,122 @@
     </v-card-text>
   </BaseDialog>
   <BaseDialog
+    v-model="aiEditDialog"
+    :title="$t('recipe.ai-edit')"
+    :icon="$globals.icons.robot"
+    width="1050"
+    max-width="96vw"
+    :loading="aiEditLoading || aiEditSaving"
+    :submit-disabled="aiEditDraft ? !aiEditDraft.name?.trim() : !aiEditInstruction.trim()"
+    :submit-text="aiEditDraft ? $t('general.save') : $t('recipe.create-ai-draft')"
+    :submit-icon="aiEditDraft ? $globals.icons.save : $globals.icons.robot"
+    can-submit
+    @submit="aiEditDraft ? saveAIEdit() : generateAIEdit()"
+    @cancel="resetAIEdit()"
+  >
+    <v-card-text>
+      <v-textarea
+        v-if="!aiEditDraft"
+        v-model="aiEditInstruction"
+        :label="$t('recipe.ai-edit-instruction')"
+        :hint="$t('recipe.ai-edit-instruction-hint')"
+        persistent-hint
+        rows="5"
+        autofocus
+      />
+      <template v-else>
+        <v-alert type="info" variant="tonal" density="compact" class="mb-4">
+          {{ $t('recipe.ai-edit-review') }}
+        </v-alert>
+        <RecipeQuickEditForm v-model="aiEditDraft" />
+      </template>
+    </v-card-text>
+  </BaseDialog>
+  <BaseDialog
+    v-model="aiImageDialog"
+    :title="$t('recipe.change-image-with-ai')"
+    :icon="$globals.icons.fileImage"
+    :loading="aiImageLoading"
+    :submit-text="$t('recipe.find-new-image')"
+    :submit-icon="$globals.icons.fileImage"
+    can-submit
+    @submit="createAIImage()"
+  >
+    <v-card-text>
+      <v-textarea
+        v-model="aiImagePrompt"
+        :label="$t('recipe.ai-image-instruction')"
+        :hint="$t('recipe.ai-image-instruction-hint')"
+        persistent-hint
+        rows="4"
+        autofocus
+      />
+    </v-card-text>
+  </BaseDialog>
+  <BaseDialog
+    v-model="imageUploadDialog"
+    :title="$t('recipe.upload-recipe-image')"
+    :icon="$globals.icons.fileImage"
+    :loading="imageUploadLoading"
+    :submit-disabled="!canSubmitImageUpload"
+    :submit-text="$t('general.upload')"
+    :submit-icon="$globals.icons.upload"
+    can-submit
+    @submit="uploadRecipeImage()"
+    @cancel="resetImageUpload()"
+  >
+    <v-card-text>
+      <v-btn-toggle
+        v-model="imageUploadMode"
+        mandatory
+        divided
+        color="primary"
+        class="mb-4"
+      >
+        <v-btn value="file" :prepend-icon="$globals.icons.fileImage">
+          {{ $t("asset.file") }}
+        </v-btn>
+        <v-btn value="url" :prepend-icon="$globals.icons.link">
+          {{ $t("general.url") }}
+        </v-btn>
+      </v-btn-toggle>
+      <v-file-input
+        v-if="imageUploadMode === 'file'"
+        v-model="imageUploadFile"
+        accept="image/*"
+        :label="$t('recipe.upload-recipe-image')"
+        :prepend-icon="$globals.icons.fileImage"
+        show-size
+        clearable
+      />
+      <v-text-field
+        v-else
+        v-model="imageUploadUrl"
+        type="url"
+        :label="$t('recipe.image-url')"
+        :hint="$t('recipe.image-url-download-hint')"
+        persistent-hint
+        :prepend-inner-icon="$globals.icons.link"
+        autofocus
+      />
+      <v-checkbox
+        v-if="imageUploadMode === 'url'"
+        v-model="imageUploadViaExtension"
+        class="mt-2"
+        color="primary"
+        density="compact"
+        hide-details
+        :label="$t('recipe.image-url-use-browser-extension')"
+      />
+      <p
+        v-if="imageUploadMode === 'url' && imageUploadViaExtension"
+        class="text-caption text-medium-emphasis mt-1 mb-0"
+      >
+        {{ $t("recipe.image-url-use-browser-extension-hint") }}
+      </p>
+    </v-card-text>
+  </BaseDialog>
+  <BaseDialog
     v-model="mealplannerDialog"
     :title="$t('recipe.add-recipe-to-mealplan')"
     color="primary"
@@ -176,6 +292,7 @@ import RecipeDialogAddToShoppingList from "~/components/Domain/Recipe/RecipeDial
 import RecipeDialogPrintPreferences from "~/components/Domain/Recipe/RecipeDialogPrintPreferences.vue";
 import RecipeDialogShare from "~/components/Domain/Recipe/RecipeDialogShare.vue";
 import RecipeRating from "~/components/Domain/Recipe/RecipeRating.vue";
+import RecipeQuickEditForm from "~/components/Domain/Recipe/RecipeQuickEditForm.vue";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import { useUserApi } from "~/composables/api/api-client";
 import { useGroupRecipeActions } from "~/composables/use-group-recipe-actions";
@@ -201,6 +318,8 @@ export interface ContextMenuIncludes {
   shoppingList: boolean;
   aiShoppingList: boolean;
   aiImage: boolean;
+  imageUpload?: boolean;
+  aiEdit: boolean;
   print: boolean;
   printPreferences: boolean;
   share: boolean;
@@ -245,6 +364,8 @@ const props = withDefaults(defineProps<Props>(), {
     shoppingList: true,
     aiShoppingList: true,
     aiImage: true,
+    imageUpload: true,
+    aiEdit: true,
     print: true,
     printPreferences: true,
     share: true,
@@ -286,6 +407,21 @@ const shoppingListDialog = ref(false);
 const shoppingWebsiteLinksDialog = ref(false);
 const recipeDuplicateDialog = ref(false);
 const recipeRenameDialog = ref(false);
+const aiEditDialog = ref(false);
+const aiEditInstruction = ref("");
+const aiEditDraft = ref<Recipe | null>(null);
+const aiEditLoading = ref(false);
+const aiEditSaving = ref(false);
+const aiImageDialog = ref(false);
+const aiImagePrompt = ref("");
+const aiImageLoading = ref(false);
+const imageUploadDialog = ref(false);
+const imageUploadMode = ref<"file" | "url">("file");
+const imageUploadFile = ref<File | File[] | null>(null);
+const imageUploadUrl = ref("");
+const imageUploadViaExtension = ref(true);
+const imageUploadLoading = ref(false);
+const pendingImageExtensionRequests = new Set<() => void>();
 const recipeName = ref(props.name);
 const recipeRenameName = ref(props.name);
 const ratingModel = ref(props.rating ?? 0);
@@ -328,6 +464,13 @@ watch(
 
 const firstDayOfWeek = computed(() => {
   return household.value?.preferences?.firstDayOfWeek || 0;
+});
+
+onBeforeUnmount(() => {
+  for (const cancel of [...pendingImageExtensionRequests]) {
+    cancel();
+  }
+  pendingImageExtensionRequests.clear();
 });
 
 // ===========================================================================
@@ -398,10 +541,24 @@ const defaultItems: { [key: string]: ContextMenuItem } = {
     isPublic: false,
   },
   aiImage: {
-    title: i18n.t("recipe.add-ai-image"),
+    title: i18n.t("recipe.change-image-with-ai"),
     icon: $globals.icons.fileImage,
     color: undefined,
     event: "aiImage",
+    isPublic: false,
+  },
+  imageUpload: {
+    title: i18n.t("recipe.upload-recipe-image"),
+    icon: $globals.icons.upload,
+    color: undefined,
+    event: "imageUpload",
+    isPublic: false,
+  },
+  aiEdit: {
+    title: i18n.t("recipe.ai-edit"),
+    icon: $globals.icons.robot,
+    color: undefined,
+    event: "aiEdit",
     isPublic: false,
   },
   print: {
@@ -650,18 +807,228 @@ async function createAIShoppingList() {
 }
 
 async function createAIImage() {
-  const { data, error } = await api.recipes.createAIImage(props.slug);
-  if (error || !data?.image) {
-    alert.error(i18n.t("recipe.ai-image-create-failed"));
-    return;
-  }
+  if (aiImageLoading.value) return;
+  aiImageLoading.value = true;
+  try {
+    const { data, error } = await api.recipes.createAIImage(props.slug, aiImagePrompt.value.trim());
+    if (error || !data?.image) {
+      alert.error(i18n.t("recipe.ai-image-create-failed"));
+      return;
+    }
 
-  if (recipeRef.value) {
-    recipeRef.value.image = data.image;
-  }
+    if (recipeRef.value) {
+      recipeRef.value.image = data.image;
+    }
 
-  alert.success(i18n.t("recipe.recipe-image-updated"));
-  emit("imageUpdated", { slug: props.slug, image: data.image });
+    alert.success(i18n.t("recipe.recipe-image-updated"));
+    emit("imageUpdated", { slug: props.slug, image: data.image });
+    aiImageDialog.value = false;
+    aiImagePrompt.value = "";
+  }
+  finally {
+    aiImageLoading.value = false;
+  }
+}
+
+const selectedImageFile = computed(() => {
+  const value = imageUploadFile.value;
+  return Array.isArray(value) ? value[0] || null : value;
+});
+
+const validImageUrl = computed(() => {
+  const value = imageUploadUrl.value.trim();
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  }
+  catch {
+    return false;
+  }
+});
+
+const canSubmitImageUpload = computed(() => imageUploadMode.value === "file"
+  ? Boolean(selectedImageFile.value)
+  : validImageUrl.value);
+
+function resetImageUpload() {
+  imageUploadMode.value = "file";
+  imageUploadFile.value = null;
+  imageUploadUrl.value = "";
+  imageUploadViaExtension.value = true;
+  imageUploadLoading.value = false;
+}
+
+type ExtensionImageUpdateResponse = {
+  ok?: boolean;
+  image?: string;
+  error?: string;
+};
+
+function apiErrorMessage(error: unknown) {
+  const detail = (error as {
+    response?: { data?: { detail?: string | { message?: string } } };
+  } | null)?.response?.data?.detail;
+  return typeof detail === "string" ? detail : detail?.message || "";
+}
+
+async function updateRecipeImageViaExtension(url: string): Promise<ExtensionImageUpdateResponse | null> {
+  if (!import.meta.client) return null;
+
+  const requestId = `mealie-image-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return await new Promise((resolve) => {
+    let acknowledged = false;
+    let settled = false;
+    let ackTimer: ReturnType<typeof setTimeout> | null = null;
+    let finalTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function cleanup() {
+      window.removeEventListener("message", onMessage);
+      if (ackTimer) clearTimeout(ackTimer);
+      if (finalTimer) clearTimeout(finalTimer);
+      pendingImageExtensionRequests.delete(cancel);
+    }
+
+    function finish(response: ExtensionImageUpdateResponse | null) {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(response);
+    }
+
+    function cancel() {
+      finish(null);
+    }
+
+    function onMessage(event: MessageEvent) {
+      if (event.source !== window) return;
+      const data = event.data as {
+        type?: string;
+        requestId?: string;
+        response?: ExtensionImageUpdateResponse;
+      };
+      if (!data || data.requestId !== requestId) return;
+
+      if (data.type === "MEALIE_EXTENSION_IMPORT_RECIPE_IMAGE_URL_ACK") {
+        acknowledged = true;
+        if (ackTimer) clearTimeout(ackTimer);
+        return;
+      }
+      if (data.type === "MEALIE_EXTENSION_IMPORT_RECIPE_IMAGE_URL_RESULT") {
+        finish(data.response || { ok: false });
+      }
+    }
+
+    pendingImageExtensionRequests.add(cancel);
+    window.addEventListener("message", onMessage);
+    window.postMessage(
+      {
+        type: "MEALIE_EXTENSION_IMPORT_RECIPE_IMAGE_URL",
+        requestId,
+        payload: {
+          url,
+          recipeSlug: props.slug,
+          mealieUrl: window.location.origin,
+          interfaceLanguage: i18n.locale.value,
+        },
+      },
+      window.location.origin,
+    );
+
+    ackTimer = setTimeout(() => {
+      if (!acknowledged) finish(null);
+    }, 1500);
+    finalTimer = setTimeout(() => finish({
+      ok: false,
+      error: i18n.t("recipe.recipe-image-upload-failed"),
+    }), 90000);
+  });
+}
+
+async function uploadRecipeImage() {
+  if (!canSubmitImageUpload.value || imageUploadLoading.value) return;
+  imageUploadLoading.value = true;
+  try {
+    let image: string | undefined;
+    let errorMessage = "";
+    if (imageUploadMode.value === "file") {
+      const response = await api.recipes.updateImage(props.slug, selectedImageFile.value as File);
+      image = response.data?.image;
+      errorMessage = apiErrorMessage(response.error);
+    }
+    else if (imageUploadViaExtension.value) {
+      const response = await updateRecipeImageViaExtension(imageUploadUrl.value.trim());
+      image = response?.image;
+      errorMessage = response?.error || (response ? "" : i18n.t("recipe.image-url-extension-not-available"));
+    }
+    else {
+      const response = await api.recipes.updateImagebyURL(props.slug, imageUploadUrl.value.trim());
+      image = response.data?.image;
+      errorMessage = apiErrorMessage(response.error);
+    }
+
+    if (!image) {
+      alert.error(errorMessage || i18n.t("recipe.recipe-image-upload-failed"));
+      return;
+    }
+
+    if (recipeRef.value) {
+      recipeRef.value.image = image;
+    }
+    emit("imageUpdated", { slug: props.slug, image });
+    alert.success(i18n.t("recipe.recipe-image-updated"));
+    imageUploadDialog.value = false;
+    resetImageUpload();
+  }
+  finally {
+    imageUploadLoading.value = false;
+  }
+}
+
+function resetAIEdit() {
+  aiEditInstruction.value = "";
+  aiEditDraft.value = null;
+  aiEditLoading.value = false;
+  aiEditSaving.value = false;
+}
+
+async function generateAIEdit() {
+  const instruction = aiEditInstruction.value.trim();
+  if (!instruction || aiEditLoading.value) return;
+  aiEditLoading.value = true;
+  try {
+    const { data, error } = await api.recipes.createAIEdit(props.slug, instruction);
+    if (error || !data) {
+      alert.error(i18n.t("recipe.ai-edit-failed"));
+      return;
+    }
+    aiEditDraft.value = data;
+  }
+  finally {
+    aiEditLoading.value = false;
+  }
+}
+
+async function saveAIEdit() {
+  if (!aiEditDraft.value?.name?.trim() || aiEditSaving.value) return;
+  aiEditSaving.value = true;
+  try {
+    const { data, error } = await api.recipes.updateOne(props.slug, aiEditDraft.value);
+    if (error || !data) {
+      alert.error(i18n.t("events.something-went-wrong"));
+      return;
+    }
+    recipeRef.value = data;
+    recipeName.value = data.name || props.name;
+    recipeRenameName.value = data.name || props.name;
+    emit("renamed", { slug: props.slug, name: data.name || props.name, recipe: data });
+    alert.success(i18n.t("recipe.quick-edit-saved"));
+    aiEditDialog.value = false;
+    resetAIEdit();
+  }
+  finally {
+    aiEditSaving.value = false;
+  }
 }
 
 // Note: Print is handled as an event in the parent component
@@ -689,7 +1056,18 @@ const eventHandlers: { [key: string]: () => void | Promise<any> } = {
   },
   shoppingList: openShoppingListDialog,
   aiShoppingList: createAIShoppingList,
-  aiImage: createAIImage,
+  aiImage: () => {
+    aiImagePrompt.value = recipeName.value || props.name;
+    aiImageDialog.value = true;
+  },
+  imageUpload: () => {
+    resetImageUpload();
+    imageUploadDialog.value = true;
+  },
+  aiEdit: () => {
+    resetAIEdit();
+    aiEditDialog.value = true;
+  },
   shoppingWebsites: () => {
     shoppingWebsiteLinksDialog.value = true;
   },

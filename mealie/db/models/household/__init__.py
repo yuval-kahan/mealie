@@ -5,8 +5,10 @@ from .household import Household
 from .household_to_recipe import HouseholdToRecipe
 from .invite_tokens import GroupInviteToken
 from .mealplan import GroupMealPlan, GroupMealPlanRules
+from .pantry_item import PantryItem
 from .preferences import HouseholdPreferencesModel
 from .recipe_action import GroupRecipeAction
+from .restaurant import Restaurant
 from .shopping_list import (
     ShoppingList,
     ShoppingListExtras,
@@ -16,7 +18,8 @@ from .shopping_list import (
     ShoppingListRecipeReference,
 )
 from .shopping_website import RecipeShoppingWebsite, ShoppingListShoppingWebsite, ShoppingWebsite
-from .uploaded_book import UploadedBook
+from .uploaded_book import UploadedBook, UploadedBookReadingState
+from .video import RecipeVideo, ShoppingListVideo, Video, VideoDownloadSettings
 from .webhooks import GroupWebhooksModel
 
 __all__ = [
@@ -31,6 +34,8 @@ __all__ = [
     "HouseholdPreferencesModel",
     "HouseholdToRecipe",
     "GroupRecipeAction",
+    "PantryItem",
+    "Restaurant",
     "ShoppingList",
     "ShoppingListExtras",
     "ShoppingListItem",
@@ -41,5 +46,10 @@ __all__ = [
     "RecipeShoppingWebsite",
     "ShoppingListShoppingWebsite",
     "UploadedBook",
+    "UploadedBookReadingState",
+    "Video",
+    "VideoDownloadSettings",
+    "RecipeVideo",
+    "ShoppingListVideo",
     "GroupWebhooksModel",
 ]

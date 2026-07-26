@@ -13,9 +13,8 @@
         class="col-borders my-1 d-flex flex-column"
       >
         <v-card
-          class="mb-2 border-left-primary rounded-sm px-2"
-          :class="{ 'meal-plan-today-toggle': isToday(day.date) }"
-          @click="toggleTodayEdit(day.date)"
+          class="mb-2 border-left-primary rounded-sm px-2 meal-plan-day-toggle"
+          @click="toggleDayEdit"
         >
           <v-container class="px-0 d-flex align-center" height="56px">
             <v-row no-gutters style="width: 100%;">
@@ -146,11 +145,7 @@ const isToday = (date: Date) => {
   return isSameDay(date, new Date());
 };
 
-function toggleTodayEdit(date: Date) {
-  if (!isToday(date)) {
-    return;
-  }
-
+function toggleDayEdit() {
   void router.push({
     name: "household-mealplan-planner-edit",
     query: route.query,
@@ -159,15 +154,15 @@ function toggleTodayEdit(date: Date) {
 </script>
 
 <style scoped>
-.meal-plan-today-toggle {
+.meal-plan-day-toggle {
   cursor: pointer;
   transition:
     box-shadow 0.15s ease,
     transform 0.15s ease;
 }
 
-.meal-plan-today-toggle:hover,
-.meal-plan-today-toggle:focus-within {
+.meal-plan-day-toggle:hover,
+.meal-plan-day-toggle:focus-within {
   box-shadow: 0 2px 10px rgba(var(--v-theme-primary), 0.18);
   transform: translateY(-1px);
 }

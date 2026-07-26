@@ -45,14 +45,29 @@ export function useRecipeCopy() {
   function formatRecipeForCopy(recipe: Recipe, fallbackName = "", scale = 1) {
     const lines: string[] = [recipe.name || fallbackName];
     const description = cleanRecipeText(recipe.description);
-    const source = cleanRecipeText(recipe.source || recipe.orgURL);
+    const storedSourceTitle = recipe.extras?.sourceTitle;
+    const storedSourceUrl = recipe.extras?.sourceUrl;
+    const rawSource = cleanRecipeText(recipe.source || recipe.orgURL);
+    const sourceUrl = (typeof storedSourceUrl === "string" ? storedSourceUrl.trim() : "")
+      || rawSource.match(/https?:\/\/[^\s<>"']+/i)?.[0]
+      || "";
+    const sourceName = (typeof storedSourceTitle === "string" ? storedSourceTitle.trim() : "")
+      || rawSource
+        .replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/gi, "$1")
+        .replace(/https?:\/\/[^\s<>"']+/gi, "")
+        .replace(/^[\s|,:;\-–—]+|[\s|,:;\-–—]+$/g, "")
+        .trim();
 
     if (description) {
       lines.push("", description);
     }
 
-    if (source) {
-      lines.push("", `${i18n.t("recipe.source")}: ${source}`);
+    if (sourceName) {
+      lines.push("", `${i18n.t("recipe.source")}: ${sourceName}`);
+    }
+
+    if (sourceUrl) {
+      lines.push(`${i18n.t("recipe.source-link")}: ${sourceUrl}`);
     }
 
     if (recipe.createdBy) {

@@ -107,6 +107,63 @@
       </v-card-text>
     </BaseDialog>
 
+    <BaseDialog
+      v-model="imageDialogOpen"
+      :title="$t('shopping-website.website-image')"
+      :icon="$globals.icons.fileImage"
+      :loading="imageSaving"
+      @close="resetImageDialog"
+    >
+      <v-card-text>
+        <v-btn-toggle
+          v-model="imageMode"
+          mandatory
+          divided
+          density="comfortable"
+          class="mb-4"
+        >
+          <v-btn value="upload" :prepend-icon="$globals.icons.upload">
+            {{ $t("shopping-website.upload-image") }}
+          </v-btn>
+          <v-btn value="url" :prepend-icon="$globals.icons.link">
+            {{ $t("shopping-website.image-address") }}
+          </v-btn>
+          <v-btn value="auto" :prepend-icon="$globals.icons.robot">
+            {{ $t("shopping-website.find-image") }}
+          </v-btn>
+        </v-btn-toggle>
+        <v-file-input
+          v-if="imageMode === 'upload'"
+          v-model="imageFile"
+          accept="image/*"
+          :label="$t('shopping-website.choose-image')"
+          :prepend-icon="$globals.icons.fileImage"
+          show-size
+        />
+        <v-text-field
+          v-else-if="imageMode === 'url'"
+          v-model="imageAddress"
+          :label="$t('shopping-website.image-address')"
+          :prepend-inner-icon="$globals.icons.link"
+          type="url"
+        />
+        <v-alert v-else type="info" variant="tonal" density="compact">
+          {{ $t("shopping-website.find-image-help") }}
+        </v-alert>
+      </v-card-text>
+      <template #custom-card-action>
+        <v-btn
+          color="primary"
+          :prepend-icon="$globals.icons.save"
+          :disabled="!canSaveImage"
+          :loading="imageSaving"
+          @click="saveWebsiteImage"
+        >
+          {{ $t("general.save") }}
+        </v-btn>
+      </template>
+    </BaseDialog>
+
     <BasePageTitle divider>
       <template #title>
         {{ $t("shopping-website.websites") }}
@@ -133,6 +190,29 @@
     <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
     <div v-else-if="filteredWebsites.length" class="shopping-websites-grid">
       <v-card v-for="website in filteredWebsites" :key="website.id" class="shopping-website-card" variant="outlined">
+        <div class="shopping-website-image">
+          <v-img
+            v-if="website.hasImage"
+            :src="api.shoppingWebsites.imageUrl(website.id, website.imageVersion)"
+            height="180"
+            cover
+          />
+          <div v-else class="shopping-website-image-placeholder">
+            <v-icon size="72" color="primary">
+              {{ $globals.icons.web }}
+            </v-icon>
+          </div>
+          <v-btn
+            class="shopping-website-image-action"
+            icon
+            size="small"
+            color="primary"
+            :title="$t('shopping-website.change-image')"
+            @click="openImageDialog(website)"
+          >
+            <v-icon>{{ website.hasImage ? $globals.icons.edit : $globals.icons.fileImage }}</v-icon>
+          </v-btn>
+        </div>
         <v-card-title class="d-flex align-center ga-2">
           <v-icon color="primary">
             {{ $globals.icons.web }}
@@ -195,12 +275,24 @@ const deletePreview = ref<ShoppingWebsiteDeletePreview>();
 const deletePreviewLoading = ref(false);
 const deleteLinkedRecipes = ref(false);
 const deleteLinkedShoppingLists = ref(false);
+const imageDialogOpen = ref(false);
+const imageSaving = ref(false);
+const imageWebsite = ref<ShoppingWebsite | null>(null);
+const imageMode = ref<"upload" | "url" | "auto">("upload");
+const imageFile = ref<File | null>(null);
+const imageAddress = ref("");
 const formMode = ref<"manual" | "ai">("manual");
 const form = reactive<ShoppingWebsiteCreate>({ name: "", url: "", pageFood: "", offeredFoods: [] });
 
 useSeoMeta({ title: i18n.t("shopping-website.websites") });
 
 const canSubmit = computed(() => Boolean(form.url.trim() && (formMode.value === "ai" || form.name.trim())));
+const canSaveImage = computed(() => Boolean(
+  imageWebsite.value
+  && (imageMode.value === "auto"
+    || (imageMode.value === "upload" && imageFile.value)
+    || (imageMode.value === "url" && imageAddress.value.trim())),
+));
 const filteredWebsites = computed(() => {
   const query = search.value.trim().toLocaleLowerCase();
   if (!query) return websites.value;
@@ -262,6 +354,43 @@ async function submitWebsite() {
   await loadWebsites();
 }
 
+function resetImageDialog() {
+  imageWebsite.value = null;
+  imageMode.value = "upload";
+  imageFile.value = null;
+  imageAddress.value = "";
+}
+
+function openImageDialog(website: ShoppingWebsite) {
+  resetImageDialog();
+  imageWebsite.value = website;
+  imageDialogOpen.value = true;
+}
+
+async function saveWebsiteImage() {
+  if (!imageWebsite.value || imageSaving.value || !canSaveImage.value) return;
+  imageSaving.value = true;
+  try {
+    const response = imageMode.value === "upload"
+      ? await api.shoppingWebsites.uploadImage(imageWebsite.value.id, imageFile.value!)
+      : imageMode.value === "url"
+        ? await api.shoppingWebsites.saveImageUrl(imageWebsite.value.id, imageAddress.value.trim())
+        : await api.shoppingWebsites.findImage(imageWebsite.value.id);
+    if (!response.data || response.error) {
+      alert.error(i18n.t("shopping-website.image-save-failed"));
+      return;
+    }
+    const index = websites.value.findIndex(website => website.id === response.data!.id);
+    if (index >= 0) websites.value[index] = response.data;
+    imageDialogOpen.value = false;
+    resetImageDialog();
+    alert.success(i18n.t("shopping-website.image-saved"));
+  }
+  finally {
+    imageSaving.value = false;
+  }
+}
+
 async function openDeleteDialog(website: ShoppingWebsite) {
   deletingWebsite.value = website;
   deletePreview.value = undefined;
@@ -311,6 +440,27 @@ async function deleteWebsite() {
   display: flex;
   flex-direction: column;
   min-height: 260px;
+}
+
+.shopping-website-image {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: rgb(var(--v-theme-surface-variant));
+}
+
+.shopping-website-image-placeholder {
+  align-items: center;
+  display: flex;
+  height: 100%;
+  justify-content: center;
+}
+
+.shopping-website-image-action {
+  position: absolute;
+  inset-block-start: 8px;
+  inset-inline-end: 8px;
 }
 
 .shopping-website-card .v-card-text {

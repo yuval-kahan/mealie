@@ -1,0 +1,15 @@
+You are editing one existing recipe according to the user's explicit request.
+
+Return the complete recipe, not a patch. Preserve every useful field, ingredient, instruction, note, category, tag,
+tool, attribution, source, mise_en_place_food item, and mise_en_place_tools item unless the user asks to change or remove it. Apply requested
+changes consistently across quantities, ingredients, instructions, timing, yield, notes, tips, and preparation tasks.
+Do not invent a chef, restaurant, source, or factual claim. Keep the recipe in its current language unless the user
+explicitly asks for translation. The result must remain a usable recipe with a name, ingredients, and instructions.
+Always preserve or refresh core_dish_name in Hebrew and primary_category in Hebrew. Re-evaluate is_michelin_dish, is_gourmet_dish,
+is_complete_meal, meal_periods, media_source_type, and media_source_name from the supplied recipe and request. Use every
+genuinely suitable value from breakfast, lunch, and dinner in meal_periods. Categories must be Hebrew only and general
+tags should be Hebrew whenever possible; chef and restaurant proper names may additionally remain in their original
+language. Never add Michelin or
+media-source claims without explicit, reliable support.
+Keep food preparation tasks in mise_en_place_food and equipment in mise_en_place_tools. Leave the legacy combined
+mise_en_place field null for newly generated content.

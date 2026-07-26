@@ -156,7 +156,7 @@ export function useShoppingListPage(listId: string) {
 
   // Copy functionality wrapper
   function copyListItems(copyType: "plain" | "markdown") {
-    copyManager.copyListItems(itemsByLabel.value, copyType);
+    copyManager.copyListItems(itemsByLabel.value, copyType, shoppingList.value?.name);
   }
 
   async function organizeShoppingListWithAI() {
