@@ -129,8 +129,10 @@ RUN apt-get update \
     ffmpeg \
     gosu \
     iproute2 \
+    jbig2dec \
     libldap-common \
     libldap2 \
+    poppler-utils \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 

@@ -13,6 +13,7 @@ from mealie.db.models.household.article import Article
 from mealie.routes._base import controller
 from mealie.routes._base.base_controllers import BaseUserController
 from mealie.schema.household.article import (
+    ArticleAIQuestionRequest,
     ArticleAIRequest,
     ArticleAISearchItem,
     ArticleAISearchRequest,
@@ -291,6 +292,30 @@ class ArticlesController(BaseUserController):
             include_item_images=data.include_item_images,
         )
         return await self.create_article_from_browser_page(browser_data)
+
+    @router.post("/ai-question", response_model=ArticleOut, status_code=status.HTTP_201_CREATED)
+    async def create_article_from_question(self, data: ArticleAIQuestionRequest) -> ArticleOut:
+        if not self._ai_enabled():
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=ErrorResponse.respond("OpenAI services are not enabled"),
+            )
+        message = f"Question or topic: {data.question.strip()}"
+        target_language = (data.target_language or "").strip()
+        if target_language:
+            message = f"Target language: {target_language}\n\n{message}"
+        openai_service = OpenAIService(self.repos)
+        response = await openai_service.get_response(
+            openai_service.get_prompt("articles.explain-topic"),
+            message,
+            response_schema=OpenAIArticle,
+        )
+        if not response or not response.title.strip() or not response.content.strip():
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=ErrorResponse.respond("The AI provider did not return a usable article"),
+            )
+        return self.create_article(self._article_create_from_openai(response))
 
     @router.post("/browser-page", response_model=ArticleBrowserPageResponse, status_code=status.HTTP_201_CREATED)
     async def create_article_from_browser_page(self, data: ArticleBrowserPageRequest) -> ArticleBrowserPageResponse:

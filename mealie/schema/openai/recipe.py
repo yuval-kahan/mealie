@@ -237,6 +237,14 @@ class OpenAIRecipe(OpenAIBase):
         ),
     )
 
+    explicit_ten_minute_claim: bool = Field(
+        False,
+        description=(
+            "True only when the supplied source explicitly states that this recipe takes 10 minutes. "
+            "Never infer this from simplicity, short instructions, or estimated times."
+        ),
+    )
+
 
 class OpenAIRecipeTextParse(OpenAIBase):
     is_recipe: bool = Field(
@@ -351,6 +359,79 @@ class OpenAIBookRecipeChunkParse(OpenAIBase):
             "All complete, usable recipes found in this cookbook chunk. Return an empty list when no complete recipes "
             "are present."
         ),
+    )
+
+
+class OpenAIBookRecipeCatalogMatch(OpenAIBase):
+    entry_index: int = Field(
+        ...,
+        ge=0,
+        description="The exact entry_index supplied for this table-of-contents or heading entry.",
+    )
+    is_recipe: bool = Field(
+        ...,
+        description="True only when the entry is an individual recipe or a clearly named food preparation.",
+    )
+    matches_query: bool = Field(
+        ...,
+        description=(
+            "True when the recipe semantically matches the user's query. "
+            "For an empty query, use the same value as is_recipe."
+        ),
+    )
+    display_title: str | None = Field(
+        None,
+        description="A concise literal translation of the supplied title into the requested display language.",
+    )
+    chapter: str | None = Field(
+        None,
+        description="The nearest supplied chapter or section title, translated when useful. Never invent one.",
+    )
+    reason: str | None = Field(
+        None,
+        description="A concise reason for a semantic query match when useful.",
+    )
+
+
+class OpenAIBookRecipeCatalogParse(OpenAIBase):
+    matches: list[OpenAIBookRecipeCatalogMatch] = Field(
+        default_factory=list,
+        description="One classification result for every supplied entry_index.",
+    )
+
+
+class OpenAIBookRecipeSearchHint(OpenAIBase):
+    title: str = Field(
+        ...,
+        description="A likely recipe title or literal title variant that may appear in the named cookbook.",
+    )
+    page_start: int | None = Field(
+        None,
+        ge=1,
+        description="A possible printed page number only when confidently known; otherwise null.",
+    )
+    page_end: int | None = Field(
+        None,
+        ge=1,
+        description="Optional possible final printed page number; otherwise null.",
+    )
+
+
+class OpenAIBookRecipeSearchPlan(OpenAIBase):
+    search_terms: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Short literal terms, spelling variants, and useful Hebrew/English equivalents to search in the actual "
+            "book text."
+        ),
+    )
+    hints: list[OpenAIBookRecipeSearchHint] = Field(
+        default_factory=list,
+        description="Likely recipe titles and optional page hints. Empty when not confidently known.",
+    )
+    reason: str | None = Field(
+        None,
+        description="A concise note about the plan or uncertainty.",
     )
 
 

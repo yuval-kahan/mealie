@@ -117,6 +117,8 @@ class ShoppingWebsitesController(BaseUserController):
             url=website.url,
             page_food=website.page_food,
             offered_foods=json.loads(website.offered_foods_json or "[]"),
+            is_recipe_site=website.is_recipe_site,
+            is_shopping_site=website.is_shopping_site,
             created_at=website.created_at,
             updated_at=website.updated_at,
             recipe_ids=[link.recipe_id for link in website.recipe_links],
@@ -183,6 +185,8 @@ class ShoppingWebsitesController(BaseUserController):
         website.url = normalize_url(data.url)
         website.page_food = (data.page_food or "").strip() or None
         website.offered_foods_json = json.dumps(normalize_terms(data.offered_foods), ensure_ascii=False)
+        website.is_recipe_site = data.is_recipe_site
+        website.is_shopping_site = data.is_shopping_site
 
     async def _fetch_url_text(self, url: str) -> str:
         chunks: list[bytes] = []
@@ -198,7 +202,14 @@ class ShoppingWebsitesController(BaseUserController):
                     total += min(len(chunk), remaining)
         return clean_html_text(b"".join(chunks).decode("utf-8", errors="replace"))
 
-    async def _analyze(self, url: str, page_text: str, page_title: str | None = None) -> ShoppingWebsiteCreate:
+    async def _analyze(
+        self,
+        url: str,
+        page_text: str,
+        page_title: str | None = None,
+        is_recipe_site: bool | None = None,
+        is_shopping_site: bool | None = None,
+    ) -> ShoppingWebsiteCreate:
         if not self._ai_enabled():
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
@@ -218,13 +229,22 @@ class ShoppingWebsitesController(BaseUserController):
         if not response or not response.is_food_website or not response.name.strip():
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
-                detail=ErrorResponse.respond("The provided page does not look like a food shopping website"),
+                detail=ErrorResponse.respond("The provided page does not look like a food recipe or shopping website"),
             )
+        resolved_recipe_site = response.is_recipe_site if is_recipe_site is None else is_recipe_site
+        resolved_shopping_site = response.is_shopping_site if is_shopping_site is None else is_shopping_site
+        if not resolved_recipe_site and not resolved_shopping_site:
+            resolved_recipe_site = response.is_recipe_site
+            resolved_shopping_site = response.is_shopping_site
+        if not resolved_recipe_site and not resolved_shopping_site:
+            resolved_shopping_site = True
         return ShoppingWebsiteCreate(
             name=response.name.strip(),
             url=normalized_url,
             page_food=response.page_food.strip() or None,
             offered_foods=normalize_terms(response.offered_foods),
+            is_recipe_site=resolved_recipe_site,
+            is_shopping_site=resolved_shopping_site,
         )
 
     def _create_or_update(self, data: ShoppingWebsiteCreate) -> ShoppingWebsiteOut:
@@ -286,11 +306,26 @@ class ShoppingWebsitesController(BaseUserController):
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST, detail=ErrorResponse.respond("The website returned no text")
             )
-        return self._create_or_update(await self._analyze(normalized_url, page_text))
+        return self._create_or_update(
+            await self._analyze(
+                normalized_url,
+                page_text,
+                is_recipe_site=data.is_recipe_site,
+                is_shopping_site=data.is_shopping_site,
+            )
+        )
 
     @router.post("/browser-page", response_model=ShoppingWebsiteOut, status_code=status.HTTP_201_CREATED)
     async def create_from_browser_page(self, data: ShoppingWebsiteBrowserPageRequest) -> ShoppingWebsiteOut:
-        return self._create_or_update(await self._analyze(data.url, data.page_text, data.page_title))
+        return self._create_or_update(
+            await self._analyze(
+                data.url,
+                data.page_text,
+                data.page_title,
+                data.is_recipe_site,
+                data.is_shopping_site,
+            )
+        )
 
     @router.put("/links/recipe/{recipe_id}", response_model=list[ShoppingWebsiteOut])
     def update_recipe_links(

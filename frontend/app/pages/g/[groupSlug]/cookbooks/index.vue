@@ -296,6 +296,128 @@
     </BaseDialog>
 
     <BaseDialog
+      v-model="bookRecipeCatalogDialog"
+      :title="$t('cookbook.choose-recipes-from-book')"
+      :icon="$globals.icons.formatListCheck"
+      width="820"
+      max-width="96vw"
+      can-submit
+      keep-open
+      :loading="bookRecipeCatalogImporting"
+      :submit-text="$t('cookbook.import-selected-recipes')"
+      :submit-disabled="!bookRecipeCatalogTarget || !bookRecipeCatalogSelected.length"
+      @submit="importSelectedBookRecipes"
+    >
+      <v-card-text v-if="bookRecipeCatalogTarget" class="pt-4">
+        <p class="font-weight-medium mb-4">
+          {{ bookRecipeCatalogTarget.name }}
+        </p>
+        <div class="book-recipe-catalog__search">
+          <v-text-field
+            v-model="bookRecipeCatalogQuery"
+            variant="outlined"
+            density="comfortable"
+            hide-details
+            clearable
+            :prepend-inner-icon="$globals.icons.search"
+            :label="$t('cookbook.book-recipe-search')"
+            :placeholder="$t('cookbook.book-recipe-search-placeholder')"
+            @keydown.enter.prevent="discoverBookRecipes"
+          />
+          <v-select
+            v-model="bookRecipeCatalogLanguage"
+            :items="bookTranslationLanguageOptions"
+            variant="outlined"
+            density="comfortable"
+            hide-details
+            :label="$t('cookbook.recipe-language')"
+          />
+          <v-btn
+            color="primary"
+            :prepend-icon="$globals.icons.robot"
+            :loading="bookRecipeCatalogLoading"
+            @click="discoverBookRecipes"
+          >
+            {{ $t("cookbook.find-recipes") }}
+          </v-btn>
+        </div>
+        <v-alert
+          v-if="bookRecipeCatalog?.warning"
+          type="warning"
+          variant="tonal"
+          density="compact"
+          class="mt-4"
+        >
+          {{ bookRecipeCatalog.warning }}
+        </v-alert>
+        <template v-if="bookRecipeCatalog">
+          <div class="d-flex align-center mt-4">
+            <v-checkbox
+              :model-value="allCatalogRecipesSelected"
+              :indeterminate="someCatalogRecipesSelected"
+              :label="$t('cookbook.select-all-recipes')"
+              density="compact"
+              hide-details
+              @update:model-value="toggleAllCatalogRecipes"
+            />
+            <v-spacer />
+            <v-chip size="small" variant="tonal">
+              {{ $t(`cookbook.recipe-catalog-source-${bookRecipeCatalog.source}`) }}
+            </v-chip>
+          </div>
+          <div v-if="bookRecipeCatalog.candidates.length" class="book-recipe-catalog__list">
+            <label
+              v-for="candidate in bookRecipeCatalog.candidates"
+              :key="candidate.id"
+              class="book-recipe-catalog__row"
+            >
+              <v-checkbox-btn
+                v-model="bookRecipeCatalogSelected"
+                :value="candidate.id"
+                :disabled="Boolean(candidate.importedRecipeSlug)"
+              />
+              <span class="book-recipe-catalog__details">
+                <strong>{{ candidate.title }}</strong>
+                <small>
+                  <span v-if="candidate.chapter">{{ candidate.chapter }} · </span>
+                  {{ $t("cookbook.pages") }} {{ candidate.pageStart }}–{{ candidate.pageEnd }}
+                </small>
+                <small v-if="candidate.reason">{{ candidate.reason }}</small>
+              </span>
+              <v-chip v-if="candidate.importedRecipeSlug" color="success" size="x-small">
+                {{ $t("cookbook.already-imported") }}
+              </v-chip>
+            </label>
+          </div>
+          <v-alert v-else type="info" variant="tonal" density="compact" class="mt-4">
+            {{ $t("cookbook.no-matching-book-recipes") }}
+          </v-alert>
+          <v-expansion-panels class="mt-4" variant="accordion">
+            <v-expansion-panel>
+              <v-expansion-panel-title>{{ $t("cookbook.import-options") }}</v-expansion-panel-title>
+              <v-expansion-panel-text>
+                <v-checkbox v-model="bookRecipeCatalogCreateLists" :label="$t('cookbook.extraction-shopping-lists')" density="compact" hide-details />
+                <v-checkbox
+                  v-model="bookRecipeCatalogOrganizeLists"
+                  :disabled="!bookRecipeCatalogCreateLists"
+                  :label="$t('cookbook.extraction-organize-shopping-lists')"
+                  density="compact"
+                  hide-details
+                />
+                <v-checkbox v-model="bookRecipeCatalogRecipeImages" :label="$t('cookbook.extraction-recipe-images')" density="compact" hide-details />
+                <v-checkbox v-model="bookRecipeCatalogItemImages" :label="$t('cookbook.extraction-item-images')" density="compact" hide-details />
+                <v-checkbox v-model="bookRecipeCatalogTips" :label="$t('cookbook.extraction-ai-tips')" density="compact" hide-details />
+              </v-expansion-panel-text>
+            </v-expansion-panel>
+          </v-expansion-panels>
+        </template>
+        <v-alert v-else type="info" variant="tonal" density="compact" class="mt-4">
+          {{ $t("cookbook.book-recipe-search-help") }}
+        </v-alert>
+      </v-card-text>
+    </BaseDialog>
+
+    <BaseDialog
       v-model="bookTranslationDialog"
       :title="$t('cookbook.translate-book-with-ai')"
       :icon="$globals.icons.translate"
@@ -658,6 +780,18 @@
               >
                 <v-icon :icon="$globals.icons.fileImage" />
               </v-btn>
+              <v-btn
+                class="cookbook-library__cover-delete"
+                icon
+                size="small"
+                color="error"
+                :title="$t('cookbook.delete-book')"
+                @click.stop="confirmUploadedBookDelete(book)"
+                @keydown.enter.stop.prevent="confirmUploadedBookDelete(book)"
+                @keydown.space.stop.prevent="confirmUploadedBookDelete(book)"
+              >
+                <v-icon :icon="$globals.icons.delete" />
+              </v-btn>
             </div>
             <v-card-item>
               <template #prepend>
@@ -701,6 +835,41 @@
               >
                 {{ $t("cookbook.book-classification-failed") }}
               </v-alert>
+              <div
+                v-if="book.isTranslatedBook && bookTranslationAudit(book)"
+                class="cookbook-library__translation mt-3"
+              >
+                <div class="cookbook-library__reading-row">
+                  <span>{{ $t("cookbook.translation-completeness") }}</span>
+                  <strong>{{ bookTranslationPercent(book) }}%</strong>
+                </div>
+                <v-progress-linear
+                  :model-value="bookTranslationPercent(book)"
+                  :color="bookTranslationPercent(book) >= 100 ? 'success' : 'warning'"
+                  height="5"
+                  rounded
+                />
+                <div class="cookbook-library__translation-footer mt-1">
+                  <small>
+                    {{ $t("cookbook.translated-pages-count", {
+                      translated: bookTranslatedPageCount(book),
+                      total: bookTranslationAudit(book)?.source_pages || 0,
+                    }) }}
+                  </small>
+                  <v-btn
+                    v-if="bookTranslationPercent(book) < 100 && sourceBookForTranslation(book)"
+                    size="x-small"
+                    variant="text"
+                    color="warning"
+                    :prepend-icon="$globals.icons.translate"
+                    :disabled="sourceBookForTranslation(book)?.translationStatus === 'processing'
+                      || sourceBookForTranslation(book)?.translationStatus === 'retrying'"
+                    @click="finishBookTranslation(book)"
+                  >
+                    {{ $t("cookbook.finish-translation") }}
+                  </v-btn>
+                </div>
+              </div>
               <div v-if="bookReadingState(book)" class="cookbook-library__reading mt-3">
                 <div class="cookbook-library__reading-row">
                   <span>{{ $t("cookbook.current-reading-position") }}</span>
@@ -770,6 +939,16 @@
                 <v-icon :icon="$globals.icons.potSteam" />
               </v-btn>
               <v-btn
+                v-if="!isGeneratedBook(book)"
+                icon
+                variant="text"
+                :disabled="bookRecipeSource(book)?.extractionStatus === 'processing' || bookRecipeSource(book)?.extractionStatus === 'retrying'"
+                :title="$t('cookbook.choose-recipes-from-book')"
+                @click="openBookRecipeCatalogDialog(book)"
+              >
+                <v-icon :icon="$globals.icons.formatListCheck" />
+              </v-btn>
+              <v-btn
                 v-if="bookRecipeSource(book)?.extractionRecipesCreated"
                 icon
                 variant="text"
@@ -778,9 +957,6 @@
                 @click="openBookRecipeDeleteDialog(book)"
               >
                 <v-icon :icon="$globals.icons.broom" />
-              </v-btn>
-              <v-btn icon variant="text" color="error" :title="$t('general.delete')" @click="confirmUploadedBookDelete(book)">
-                <v-icon :icon="$globals.icons.delete" />
               </v-btn>
             </v-card-actions>
           </v-card>
@@ -797,7 +973,14 @@ import { useHouseholdSelf } from "@/composables/use-households";
 import CookbookEditor from "~/components/Domain/Cookbook/CookbookEditor.vue";
 import type { CreateCookBook, ReadCookBook } from "~/lib/api/types/cookbook";
 import { useCookbookPreferences } from "~/composables/use-users/preferences";
-import type { AICookbookGenerateRequest, UploadedBook, UploadedBookClassification, UploadedBookDeletePreview, UploadedBookReadingState } from "~/lib/api/types/uploaded-book";
+import type {
+  AICookbookGenerateRequest,
+  UploadedBook,
+  UploadedBookClassification,
+  UploadedBookDeletePreview,
+  UploadedBookReadingState,
+  UploadedBookRecipeCatalog,
+} from "~/lib/api/types/uploaded-book";
 import { useUserApi } from "~/composables/api/api-client";
 import { alert } from "~/composables/use-toast";
 
@@ -840,6 +1023,9 @@ const { household } = useHouseholdSelf();
 const cookbookPreferences = useCookbookPreferences();
 
 const uploadedBooks = ref<UploadedBook[]>([]);
+const uploadedBooksById = computed(() =>
+  new Map(uploadedBooks.value.map(book => [book.id, book])),
+);
 const uploadedBookReadingStates = ref<Record<string, UploadedBookReadingState>>({});
 const uploadedBooksLoading = ref(false);
 const bookSearch = ref("");
@@ -882,6 +1068,19 @@ const bookExtractionRecipeImages = ref(true);
 const bookExtractionItemImages = ref(true);
 const bookExtractionTips = ref(true);
 const bookExtractionAllowDuplicates = ref(false);
+const bookRecipeCatalogDialog = ref(false);
+const bookRecipeCatalogTarget = ref<UploadedBook | null>(null);
+const bookRecipeCatalog = ref<UploadedBookRecipeCatalog | null>(null);
+const bookRecipeCatalogQuery = ref("");
+const bookRecipeCatalogLanguage = ref("Hebrew");
+const bookRecipeCatalogSelected = ref<string[]>([]);
+const bookRecipeCatalogLoading = ref(false);
+const bookRecipeCatalogImporting = ref(false);
+const bookRecipeCatalogCreateLists = ref(true);
+const bookRecipeCatalogOrganizeLists = ref(true);
+const bookRecipeCatalogRecipeImages = ref(true);
+const bookRecipeCatalogItemImages = ref(true);
+const bookRecipeCatalogTips = ref(true);
 const bookTranslationDialog = ref(false);
 const bookTranslationTarget = ref<UploadedBook | null>(null);
 const bookTranslationStarting = ref(false);
@@ -939,6 +1138,19 @@ const bookTranslationLanguageOptions = computed(() => [
   { title: i18n.t("cookbook.language-hebrew"), value: "Hebrew" },
   { title: i18n.t("cookbook.language-english"), value: "English" },
 ]);
+const selectableCatalogRecipeIds = computed(() =>
+  (bookRecipeCatalog.value?.candidates || [])
+    .filter(candidate => !candidate.importedRecipeSlug)
+    .map(candidate => candidate.id),
+);
+const allCatalogRecipesSelected = computed(() =>
+  selectableCatalogRecipeIds.value.length > 0
+  && selectableCatalogRecipeIds.value.every(id => bookRecipeCatalogSelected.value.includes(id)),
+);
+const someCatalogRecipesSelected = computed(() =>
+  !allCatalogRecipesSelected.value
+  && selectableCatalogRecipeIds.value.some(id => bookRecipeCatalogSelected.value.includes(id)),
+);
 const bookTranslationFailedChunks = computed(() => {
   const raw = bookTranslationTarget.value?.translationChunkStatus;
   if (!raw) return [];
@@ -970,7 +1182,9 @@ function bookRecipeSource(book: UploadedBook) {
   if (!book.isTranslatedBook) {
     return book;
   }
-  return uploadedBooks.value.find(candidate => candidate.id === book.translatedFromBookId) || null;
+  return book.translatedFromBookId
+    ? uploadedBooksById.value.get(book.translatedFromBookId) || null
+    : null;
 }
 
 function bookLabels(book: UploadedBook) {
@@ -1037,6 +1251,42 @@ function bookReadingState(book: UploadedBook) {
   if (direct) return direct;
   if (book.translatedBookId) return uploadedBookReadingStates.value[book.translatedBookId];
   return undefined;
+}
+
+function translatedVersionOfBook(book: UploadedBook) {
+  if (book.isTranslatedBook) return book;
+  if (!book.translatedBookId) return undefined;
+  return uploadedBooksById.value.get(book.translatedBookId);
+}
+
+function bookTranslationAudit(book: UploadedBook) {
+  return translatedVersionOfBook(book)?.bookMetadata?.translation_audit;
+}
+
+function bookTranslationPercent(book: UploadedBook) {
+  const audit = bookTranslationAudit(book);
+  const total = Number(audit?.source_pages || 0);
+  if (!total) return 0;
+  const verified = bookTranslatedPageCount(book);
+  return Math.min(100, Math.max(0, Math.round((verified / total) * 100)));
+}
+
+function bookTranslatedPageCount(book: UploadedBook) {
+  const audit = bookTranslationAudit(book);
+  return audit?.verified_translated_pages
+    ?? Math.max(0, Number(audit?.translated_pages || 0) - (audit?.suspicious_pages?.length || 0));
+}
+
+function sourceBookForTranslation(book: UploadedBook) {
+  if (!book.isTranslatedBook) return book;
+  return book.translatedFromBookId
+    ? uploadedBooksById.value.get(book.translatedFromBookId)
+    : undefined;
+}
+
+function finishBookTranslation(book: UploadedBook) {
+  const sourceBook = sourceBookForTranslation(book);
+  if (sourceBook) openBookTranslationDialog(sourceBook);
 }
 
 function bookChapterPercent(book: UploadedBook) {
@@ -1188,6 +1438,86 @@ function openBookExtractionDialog(book: UploadedBook) {
   bookExtractionTips.value = true;
   bookExtractionAllowDuplicates.value = false;
   bookExtractionDialog.value = true;
+}
+
+function openBookRecipeCatalogDialog(book: UploadedBook) {
+  bookRecipeCatalogTarget.value = bookRecipeSource(book) || book;
+  bookRecipeCatalog.value = null;
+  bookRecipeCatalogQuery.value = "";
+  bookRecipeCatalogLanguage.value = String(i18n.locale.value || "").toLowerCase().startsWith("he")
+    ? "Hebrew"
+    : "English";
+  bookRecipeCatalogSelected.value = [];
+  bookRecipeCatalogCreateLists.value = true;
+  bookRecipeCatalogOrganizeLists.value = true;
+  bookRecipeCatalogRecipeImages.value = true;
+  bookRecipeCatalogItemImages.value = true;
+  bookRecipeCatalogTips.value = true;
+  bookRecipeCatalogDialog.value = true;
+}
+
+function toggleAllCatalogRecipes(value: boolean | null) {
+  bookRecipeCatalogSelected.value = value ? [...selectableCatalogRecipeIds.value] : [];
+}
+
+async function discoverBookRecipes() {
+  if (!bookRecipeCatalogTarget.value || bookRecipeCatalogLoading.value) return;
+  bookRecipeCatalogLoading.value = true;
+  try {
+    const { data, error } = await api.uploadedBooks.discoverRecipeCatalog(
+      bookRecipeCatalogTarget.value.id,
+      {
+        query: bookRecipeCatalogQuery.value.trim(),
+        targetLanguage: bookRecipeCatalogLanguage.value,
+      },
+    );
+    if (error || !data) {
+      alert.error(i18n.t("cookbook.book-recipe-search-failed"));
+      return;
+    }
+    bookRecipeCatalog.value = data;
+    bookRecipeCatalogSelected.value = data.candidates
+      .filter(candidate => !candidate.importedRecipeSlug)
+      .map(candidate => candidate.id);
+  }
+  finally {
+    bookRecipeCatalogLoading.value = false;
+  }
+}
+
+async function importSelectedBookRecipes() {
+  if (
+    !bookRecipeCatalogTarget.value
+    || !bookRecipeCatalogSelected.value.length
+    || bookRecipeCatalogImporting.value
+  ) return;
+  bookRecipeCatalogImporting.value = true;
+  try {
+    const { data, error } = await api.uploadedBooks.importRecipeCatalog(
+      bookRecipeCatalogTarget.value.id,
+      {
+        candidateIds: bookRecipeCatalogSelected.value,
+        targetLanguage: bookRecipeCatalogLanguage.value,
+        autoRecipeImages: bookRecipeCatalogRecipeImages.value,
+        includeItemImages: bookRecipeCatalogItemImages.value,
+        includeAiTips: bookRecipeCatalogTips.value,
+        createShoppingLists: bookRecipeCatalogCreateLists.value,
+        organizeShoppingListsWithAi:
+          bookRecipeCatalogCreateLists.value && bookRecipeCatalogOrganizeLists.value,
+      },
+    );
+    if (error || !data) {
+      alert.error(i18n.t("cookbook.book-recipe-import-failed"));
+      return;
+    }
+    const index = uploadedBooks.value.findIndex(book => book.id === data.id);
+    if (index >= 0) uploadedBooks.value[index] = data;
+    bookRecipeCatalogDialog.value = false;
+    alert.success(i18n.t("cookbook.book-recipe-import-started"));
+  }
+  finally {
+    bookRecipeCatalogImporting.value = false;
+  }
 }
 
 function openBookTranslationDialog(book: UploadedBook) {
@@ -1429,6 +1759,54 @@ onBeforeUnmount(() => {
   gap: 12px;
 }
 
+.book-recipe-catalog__search {
+  align-items: stretch;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(240px, 1fr) minmax(150px, 190px) auto;
+}
+
+.book-recipe-catalog__list {
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  max-height: min(48vh, 520px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.book-recipe-catalog__row {
+  align-items: center;
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  cursor: pointer;
+  display: flex;
+  gap: 8px;
+  min-height: 58px;
+  padding: 7px 10px;
+}
+
+.book-recipe-catalog__row:last-child {
+  border-bottom: 0;
+}
+
+.book-recipe-catalog__row:hover {
+  background: rgba(var(--v-theme-primary), 0.06);
+}
+
+.book-recipe-catalog__details {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.book-recipe-catalog__details strong,
+.book-recipe-catalog__details small {
+  overflow-wrap: anywhere;
+}
+
+.book-recipe-catalog__details small {
+  color: rgba(var(--v-theme-on-surface), 0.67);
+}
+
 .cookbook-library__grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -1498,7 +1876,7 @@ onBeforeUnmount(() => {
   inset-inline-end: 10px;
   justify-content: center;
   position: absolute;
-  top: 10px;
+  top: 54px;
   width: 34px;
   z-index: 2;
 }
@@ -1510,12 +1888,32 @@ onBeforeUnmount(() => {
   z-index: 3;
 }
 
+.cookbook-library__cover-delete {
+  inset-inline-end: 10px;
+  position: absolute;
+  top: 10px;
+  z-index: 3;
+}
+
 .cookbook-library__reading-row {
   align-items: center;
   display: flex;
   font-size: 0.78rem;
   justify-content: space-between;
   margin-bottom: 3px;
+}
+
+.cookbook-library__translation-footer {
+  align-items: center;
+  color: rgba(var(--v-theme-on-surface), 0.67);
+  display: flex;
+  gap: 4px;
+  justify-content: space-between;
+  min-height: 28px;
+}
+
+.cookbook-library__translation-footer small {
+  line-height: 1.25;
 }
 
 .cookbook-library__book:hover .cookbook-library__cover-action,
@@ -1544,6 +1942,10 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 900px) {
+  .book-recipe-catalog__search {
+    grid-template-columns: 1fr;
+  }
+
   .cookbook-library__filters {
     grid-template-columns: 1fr;
   }

@@ -1,20 +1,26 @@
 import asyncio
+import hashlib
 import html
 import json
+import posixpath
 import re
 import shutil
+import subprocess
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from io import BytesIO
 from pathlib import Path
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import ClassVar
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 from uuid import uuid4
 from zipfile import ZipFile
 
 import sqlalchemy as sa
 import sqlalchemy.exc
 from bs4 import BeautifulSoup
+from PIL import Image, ImageOps, UnidentifiedImageError
 from pydantic import UUID4
 
 from mealie.core import exceptions
@@ -28,7 +34,13 @@ from mealie.repos.repository_factory import AllRepositories
 from mealie.schema.group.ai_providers import AIProviderOut
 from mealie.schema.household.group_shopping_list import ShoppingListAddRecipeParamsBulk, ShoppingListCreate
 from mealie.schema.household.household import HouseholdInDB
-from mealie.schema.openai.recipe import OpenAIBookRecipeChunkParse, OpenAIBookTranslationChunkParse, OpenAIRecipe
+from mealie.schema.openai.recipe import (
+    OpenAIBookRecipeCatalogParse,
+    OpenAIBookRecipeChunkParse,
+    OpenAIBookRecipeSearchPlan,
+    OpenAIBookTranslationChunkParse,
+    OpenAIRecipe,
+)
 from mealie.schema.recipe.recipe import Recipe, create_recipe_slug
 from mealie.schema.user import PrivateUser
 from mealie.services._base_service import BaseService
@@ -165,6 +177,9 @@ class UploadedBookRecipeExtractor(BaseService):
     MAX_CHUNK_ATTEMPTS = 6
     DEFAULT_RETRY_WAIT_SECONDS = 60
     MAX_RETRY_WAIT_SECONDS = 30 * 60
+    RECIPE_CATALOG_MAX_ENTRIES = 2000
+    RECIPE_CATALOG_AI_BATCH_SIZE = 100
+    RECIPE_CATALOG_FULL_TEXT_LIMIT = 300
     _running_jobs: ClassVar[set[tuple[str, str]]] = set()
     _running_jobs_lock: ClassVar[asyncio.Lock] = asyncio.Lock()
 
@@ -398,6 +413,546 @@ class UploadedBookRecipeExtractor(BaseService):
         return self._text_to_pseudo_pages(path.read_text(encoding="utf-8", errors="ignore"))
 
     @staticmethod
+    def _catalog_text_key(value: str | None) -> str:
+        return re.sub(r"[^\w\u0590-\u05ff]+", " ", value or "", flags=re.UNICODE).casefold().strip()
+
+    @staticmethod
+    def _roman_page_number(value: str) -> int | None:
+        text = value.strip().upper()
+        if not text or not re.fullmatch(r"[IVXLCDM]+", text):
+            return None
+        values = {"I": 1, "V": 5, "X": 10, "L": 50, "C": 100, "D": 500, "M": 1000}
+        result = 0
+        previous = 0
+        for character in reversed(text):
+            current = values[character]
+            result += -current if current < previous else current
+            previous = max(previous, current)
+        return result or None
+
+    @classmethod
+    def _contents_catalog_entries(cls, pages: list[BookTextPage]) -> list[dict]:
+        marker_pattern = re.compile(
+            r"\b(?:table\s+of\s+contents|contents|index\s+of\s+recipes)\b|תוכן\s+עניינים",
+            flags=re.IGNORECASE,
+        )
+        line_pattern = re.compile(
+            r"^\s*(?P<title>.+?)\s*(?:[.·•…_\-]{2,}\s*)"
+            r"(?P<page>\d{1,4}|[ivxlcdm]{1,10})\s*$",
+            flags=re.IGNORECASE,
+        )
+        loose_pattern = re.compile(
+            r"^\s*(?P<title>[^\d][^|]{2,110}?)\s{2,}(?P<page>\d{1,4}|[ivxlcdm]{1,10})\s*$",
+            flags=re.IGNORECASE,
+        )
+        compact_pattern = re.compile(
+            r"^\s*(?P<title>[^\d][^|]{2,110}?)\s+(?P<page>\d{1,4}|[ivxlcdm]{1,10})\s*$",
+            flags=re.IGNORECASE,
+        )
+        entries: list[dict] = []
+        in_contents = False
+        quiet_pages = 0
+        for page in pages[:100]:
+            page_has_marker = bool(marker_pattern.search(page.text))
+            if page_has_marker:
+                in_contents = True
+            if not in_contents:
+                continue
+
+            page_matches = 0
+            for raw_line in page.text.splitlines():
+                line = " ".join(raw_line.split()).strip(" .·•…_-")
+                if not line or marker_pattern.fullmatch(line):
+                    continue
+                match = (
+                    line_pattern.match(raw_line.strip())
+                    or loose_pattern.match(raw_line.rstrip())
+                    or compact_pattern.match(raw_line.rstrip())
+                )
+                if not match:
+                    continue
+                title = " ".join(match.group("title").split()).strip(" .·•…_-")
+                if len(title) < 2 or len(title) > 140:
+                    continue
+                page_value = match.group("page")
+                printed_page = int(page_value) if page_value.isdigit() else cls._roman_page_number(page_value)
+                if printed_page is None or printed_page < 1:
+                    continue
+                entries.append(
+                    {
+                        "entry_index": len(entries),
+                        "title": title,
+                        "chapter": None,
+                        "page_start": printed_page,
+                        "source_page": page.number,
+                    }
+                )
+                page_matches += 1
+
+            quiet_pages = quiet_pages + 1 if page_matches == 0 else 0
+            if entries and quiet_pages >= 2:
+                break
+
+        deduplicated: list[dict] = []
+        seen: set[tuple[str, int]] = set()
+        for entry in entries:
+            key = (cls._catalog_text_key(entry["title"]), entry["page_start"])
+            if not key[0] or key in seen:
+                continue
+            seen.add(key)
+            entry["entry_index"] = len(deduplicated)
+            deduplicated.append(entry)
+        return deduplicated[: cls.RECIPE_CATALOG_MAX_ENTRIES]
+
+    @classmethod
+    def _heading_catalog_entries(cls, pages: list[BookTextPage]) -> list[dict]:
+        generic_lines = {
+            "ingredients",
+            "ingredient",
+            "instructions",
+            "directions",
+            "method",
+            "notes",
+            "מרכיבים",
+            "אופן ההכנה",
+            "הוראות",
+            "הערות",
+        }
+        entries: list[dict] = []
+        last_title_key = ""
+        for page in pages:
+            title = ""
+            for raw_line in page.text.splitlines()[:30]:
+                candidate = " ".join(raw_line.split()).strip(" .·•…_-")
+                words = candidate.split()
+                if not 2 <= len(candidate) <= 140 or len(words) > 18:
+                    continue
+                normalized = cls._catalog_text_key(candidate)
+                if normalized in generic_lines or re.match(r"^(?:page|עמוד)\s+\d+$", normalized):
+                    continue
+                if candidate.endswith((".", "!", "?", ":")) and len(words) > 8:
+                    continue
+                if re.match(r"^[\d\s/.,%°+-]+$", candidate):
+                    continue
+                title = candidate
+                break
+            title_key = cls._catalog_text_key(title)
+            if not title_key or title_key == last_title_key:
+                continue
+            last_title_key = title_key
+            entries.append(
+                {
+                    "entry_index": len(entries),
+                    "title": title,
+                    "chapter": None,
+                    "page_start": page.number,
+                    "source_page": page.number,
+                }
+            )
+            if len(entries) >= cls.RECIPE_CATALOG_MAX_ENTRIES:
+                break
+        return entries
+
+    @classmethod
+    def _full_text_catalog_entries(
+        cls,
+        pages: list[BookTextPage],
+        query: str,
+        plan: OpenAIBookRecipeSearchPlan | None,
+    ) -> list[dict]:
+        values = [query]
+        if plan:
+            values.extend(plan.search_terms)
+            values.extend(hint.title for hint in plan.hints)
+
+        terms: list[str] = []
+        seen_terms: set[str] = set()
+        for value in values:
+            normalized = cls._catalog_text_key(value)
+            if len(normalized) < 2 or normalized in seen_terms:
+                continue
+            seen_terms.add(normalized)
+            terms.append(normalized)
+        terms = terms[:60]
+        if not terms:
+            return []
+
+        recipe_marker = re.compile(
+            r"\b(?:ingredients?|directions?|instructions?|method|serves?|yield|recipe)\b"
+            r"|(?:מרכיבים|אופן\s+הכנה|הוראות|מנות|מתכון)",
+            flags=re.IGNORECASE,
+        )
+        hint_titles = [
+            (hint.title.strip(), cls._catalog_text_key(hint.title))
+            for hint in (plan.hints if plan else [])
+            if hint.title.strip()
+        ]
+        scored_pages: list[tuple[int, BookTextPage, list[str], str | None]] = []
+        for page in pages:
+            page_key = cls._catalog_text_key(page.text)
+            if not page_key:
+                continue
+            matched_terms = [term for term in terms if term in page_key]
+            if not matched_terms:
+                continue
+            matched_hint = next((title for title, key in hint_titles if key and key in page_key), None)
+            exact_query = cls._catalog_text_key(query) in page_key if query.strip() else False
+            has_recipe_marker = bool(recipe_marker.search(page.text))
+            score = (18 if matched_hint else 0) + (10 if exact_query else 0)
+            score += min(sum(page_key.count(term) for term in matched_terms), 12)
+            score += 5 if has_recipe_marker else 0
+            if not (matched_hint or exact_query or has_recipe_marker or len(matched_terms) >= 2):
+                continue
+            scored_pages.append((score, page, matched_terms, matched_hint))
+
+        selected = sorted(
+            scored_pages,
+            key=lambda item: (-item[0], item[1].number),
+        )[: cls.RECIPE_CATALOG_FULL_TEXT_LIMIT]
+        selected.sort(key=lambda item: item[1].number)
+
+        entries: list[dict] = []
+        seen_pages: set[int] = set()
+        for _score, page, matched_terms, matched_hint in selected:
+            if page.number in seen_pages:
+                continue
+            seen_pages.add(page.number)
+            lines = [" ".join(line.split()).strip() for line in page.text.splitlines()]
+            lines = [line for line in lines if line]
+            title = matched_hint or ""
+            if not title:
+                for line in lines[:50]:
+                    line_key = cls._catalog_text_key(line)
+                    if (
+                        2 <= len(line) <= 140
+                        and len(line.split()) <= 18
+                        and any(term in line_key for term in matched_terms)
+                    ):
+                        title = line.strip(" .·•…_-")
+                        break
+            if not title:
+                heading_entries = cls._heading_catalog_entries([page])
+                title = heading_entries[0]["title"] if heading_entries else query.strip()
+            if not title:
+                continue
+
+            relevant_index = next(
+                (
+                    index
+                    for index, line in enumerate(lines)
+                    if any(term in cls._catalog_text_key(line) for term in matched_terms)
+                ),
+                0,
+            )
+            excerpt_start = max(0, relevant_index - 5)
+            excerpt = "\n".join(lines[excerpt_start : relevant_index + 16])[:2200]
+            entries.append(
+                {
+                    "entry_index": 0,
+                    "title": title,
+                    "chapter": None,
+                    "page_start": page.number,
+                    "page_end": min(page.number + 3, pages[-1].number),
+                    "source_page": page.number,
+                    "entry_source": "full_text",
+                    "excerpt": excerpt,
+                }
+            )
+        return entries
+
+    async def _recipe_search_plan(
+        self,
+        book: UploadedBook,
+        query: str,
+        target_language: str,
+    ) -> tuple[OpenAIBookRecipeSearchPlan | None, str | None]:
+        if not query.strip():
+            return None, None
+        openai_service = OpenAIService(self.repos)
+        try:
+            slots = self._provider_slots(openai_service)
+        except Exception as error:
+            return None, self._short_error(error)
+
+        prompt = openai_service.get_prompt("recipes.locate-book-recipes")
+        errors: list[str] = []
+        message = (
+            f"Cookbook title and edition: {book.name}\n"
+            f"Target display language: {target_language}\n"
+            f"Recipe search request: {query.strip()}"
+        )
+        for slot in slots:
+            try:
+                response = await openai_service.get_response(
+                    prompt,
+                    message,
+                    response_schema=OpenAIBookRecipeSearchPlan,
+                    provider=slot.provider,
+                )
+                if response:
+                    return response, None
+            except Exception as error:
+                errors.append(self._short_error(error))
+        return None, "; ".join(dict.fromkeys(errors))[:1000] or None
+
+    @staticmethod
+    def _catalog_candidate_id(book_id: UUID4 | str, entry: dict) -> str:
+        payload = (
+            f"{book_id}|{entry.get('entry_index')}|{entry.get('title')}|"
+            f"{entry.get('page_start')}|{entry.get('source_page')}"
+        )
+        return hashlib.sha256(payload.encode("utf-8", errors="ignore")).hexdigest()[:24]
+
+    def _catalog_source_book(self, book: UploadedBook) -> UploadedBook:
+        if not book.is_translated_book or not book.translated_from_book_id:
+            return book
+        return self._get_book(book.translated_from_book_id)
+
+    def _catalog_entries_for_book(
+        self,
+        book: UploadedBook,
+        uploaded_books_root: Path,
+        refresh: bool,
+        pages: list[BookTextPage] | None = None,
+    ) -> tuple[list[dict], str]:
+        metadata = self._book_metadata(book)
+        cached_entries = metadata.get("recipe_catalog_entries")
+        cached_source = metadata.get("recipe_catalog_source")
+        if (
+            not refresh
+            and isinstance(cached_entries, list)
+            and cached_entries
+            and cached_source in {"contents", "headings"}
+        ):
+            return [entry for entry in cached_entries if isinstance(entry, dict)], str(cached_source)
+
+        path = self._book_file_path(book, uploaded_books_root)
+        first_pages = pages[:100] if pages is not None else self._extract_pages(path, book.extension, max_pages=100)
+        entries = self._contents_catalog_entries(first_pages)
+        source = "contents"
+        if not entries:
+            heading_pages = (
+                pages[: self.RECIPE_CATALOG_MAX_ENTRIES]
+                if pages is not None
+                else self._extract_pages(path, book.extension, max_pages=self.RECIPE_CATALOG_MAX_ENTRIES)
+            )
+            entries = self._heading_catalog_entries(heading_pages)
+            source = "headings"
+        if not entries:
+            raise ValueError("No usable table of contents or local headings were found in this book")
+
+        for index, entry in enumerate(entries):
+            entry["entry_index"] = index
+            next_start = entries[index + 1]["page_start"] if index + 1 < len(entries) else entry["page_start"] + 12
+            entry["page_end"] = max(entry["page_start"], min(next_start - 1, entry["page_start"] + 12))
+
+        metadata["recipe_catalog_entries"] = entries
+        metadata["recipe_catalog_source"] = source
+        metadata["recipe_catalog_indexed_at"] = datetime.now(UTC).isoformat()
+        book.book_metadata_json = json.dumps(metadata, ensure_ascii=False)
+        self._save_book(book)
+        return entries, source
+
+    async def _classify_catalog_entries(
+        self,
+        book: UploadedBook,
+        entries: list[dict],
+        query: str,
+        target_language: str,
+    ) -> tuple[dict[int, dict], bool, str | None]:
+        openai_service = OpenAIService(self.repos)
+        slots = self._provider_slots(openai_service)
+        prompt = openai_service.get_prompt("recipes.discover-book-recipes")
+        batch_size = 30 if any(entry.get("excerpt") for entry in entries) else self.RECIPE_CATALOG_AI_BATCH_SIZE
+        batches = [
+            entries[index : index + batch_size]
+            for index in range(0, len(entries), batch_size)
+        ]
+        matches: dict[int, dict] = {}
+        errors: list[str] = []
+        result_lock = asyncio.Lock()
+        slot_lock = asyncio.Lock()
+        disabled_slots: set[int] = set()
+        concurrency = asyncio.Semaphore(max(1, min(len(slots), len(batches))))
+
+        async def classify_batch(batch_index: int, batch: list[dict]) -> None:
+            for offset in range(len(slots)):
+                slot_index = (batch_index + offset) % len(slots)
+                async with slot_lock:
+                    if slot_index in disabled_slots:
+                        continue
+                slot = slots[slot_index]
+                try:
+                    message = (
+                        f"Cookbook title: {book.name}\n"
+                        f"Target display language: {target_language}\n"
+                        f"Search request: {query.strip() or '[all recipes]'}\n\n"
+                        "Compact entries JSON:\n"
+                        f"{json.dumps(batch, ensure_ascii=False)}"
+                    )
+                    async with concurrency:
+                        response = await openai_service.get_response(
+                            prompt,
+                            message,
+                            response_schema=OpenAIBookRecipeCatalogParse,
+                            provider=slot.provider,
+                        )
+                    if response is None:
+                        raise ValueError(f"{slot.label} returned no recipe catalog response")
+                    async with result_lock:
+                        for match in response.matches:
+                            matches[match.entry_index] = match.model_dump(mode="json")
+                    return
+                except Exception as error:
+                    async with result_lock:
+                        errors.append(f"{slot.label}: {self._short_error(error)}")
+                    if self._is_provider_disabled_error(error):
+                        async with slot_lock:
+                            disabled_slots.add(slot_index)
+
+        await asyncio.gather(
+            *(classify_batch(batch_index, batch) for batch_index, batch in enumerate(batches))
+        )
+        warning = "; ".join(dict.fromkeys(errors))[:1000] or None
+        return matches, bool(matches), warning
+
+    async def discover_recipe_catalog(
+        self,
+        book_id: UUID4,
+        uploaded_books_root: Path,
+        query: str = "",
+        target_language: str = "Hebrew",
+        refresh: bool = False,
+    ) -> dict:
+        requested_book = self._get_book(book_id)
+        book = self._catalog_source_book(requested_book)
+        normalized_query = self._catalog_text_key(query)
+        plan: OpenAIBookRecipeSearchPlan | None = None
+        plan_warning: str | None = None
+        pages: list[BookTextPage] | None = None
+        if normalized_query:
+            plan, plan_warning = await self._recipe_search_plan(book, query, target_language)
+            path = self._book_file_path(book, uploaded_books_root)
+            pages = self._extract_pages(path, book.extension)
+            if not pages:
+                raise ValueError("No extractable text was found in this book")
+
+        try:
+            base_entries, base_source = self._catalog_entries_for_book(
+                book,
+                uploaded_books_root,
+                refresh,
+                pages,
+            )
+        except ValueError:
+            if not normalized_query:
+                raise
+            base_entries, base_source = [], "headings"
+
+        full_text_entries = (
+            self._full_text_catalog_entries(pages or [], query, plan)
+            if normalized_query
+            else []
+        )
+        source = base_source
+        if full_text_entries:
+            source = "hybrid" if base_entries else "full_text"
+
+        entries: list[dict] = []
+        seen_entries: set[tuple[str, int]] = set()
+        query_key = self._catalog_text_key(query)
+        for entry in [*full_text_entries, *base_entries]:
+            title_key = self._catalog_text_key(entry.get("title"))
+            page_start = int(entry.get("page_start") or 1)
+            dedupe_page = page_start if entry.get("entry_source") == "full_text" and title_key == query_key else 0
+            key = (title_key, dedupe_page)
+            if not title_key or key in seen_entries:
+                continue
+            seen_entries.add(key)
+            copied = dict(entry)
+            copied["entry_index"] = len(entries)
+            entries.append(copied)
+        if not entries:
+            raise ValueError("No matching text, table of contents, or local headings were found in this book")
+
+        matches, used_ai, warning = await self._classify_catalog_entries(
+            book,
+            entries,
+            query,
+            target_language,
+        )
+        warning_parts = [value for value in (plan_warning, warning) if value]
+        warning = "; ".join(dict.fromkeys(warning_parts))[:1000] or None
+        metadata = self._book_metadata(book)
+        prior_candidates = {
+            candidate.get("id"): candidate
+            for candidate in metadata.get("recipe_catalog_candidates", [])
+            if isinstance(candidate, dict) and candidate.get("id")
+        }
+        raw_imported_recipes = metadata.get("recipe_catalog_imported", {})
+        if not isinstance(raw_imported_recipes, dict):
+            raw_imported_recipes = {}
+        imported_recipes = {
+            str(candidate_id): str(recipe_slug)
+            for candidate_id, recipe_slug in raw_imported_recipes.items()
+            if candidate_id and recipe_slug
+        }
+        candidates: list[dict] = []
+        seen_candidates: set[tuple[str, int]] = set()
+        for entry in entries:
+            match = matches.get(int(entry["entry_index"]))
+            if match:
+                include = bool(match.get("is_recipe")) and bool(match.get("matches_query"))
+            else:
+                title_key = self._catalog_text_key(entry.get("title"))
+                include = (
+                    not normalized_query
+                    or normalized_query in title_key
+                    or entry.get("entry_source") == "full_text"
+                )
+            if not include:
+                continue
+            candidate_id = self._catalog_candidate_id(book.id, entry)
+            previous = prior_candidates.get(candidate_id, {})
+            display_title = (match or {}).get("display_title") or entry["title"]
+            candidate_key = (
+                self._catalog_text_key(display_title),
+                int(entry["page_start"]),
+            )
+            if candidate_key in seen_candidates:
+                continue
+            seen_candidates.add(candidate_key)
+            candidates.append(
+                {
+                    "id": candidate_id,
+                    "title": display_title,
+                    "source_title": entry["title"],
+                    "chapter": (match or {}).get("chapter") or entry.get("chapter"),
+                    "page_start": int(entry["page_start"]),
+                    "page_end": int(entry.get("page_end") or entry["page_start"]),
+                    "reason": (match or {}).get("reason")
+                    or ("Verified local full-text match" if entry.get("entry_source") == "full_text" else None),
+                    "imported_recipe_slug": imported_recipes.get(candidate_id)
+                    or previous.get("imported_recipe_slug"),
+                }
+            )
+
+        metadata["recipe_catalog_candidates"] = candidates
+        metadata["recipe_catalog_last_query"] = query
+        metadata["recipe_catalog_generated_at"] = datetime.now(UTC).isoformat()
+        book.book_metadata_json = json.dumps(metadata, ensure_ascii=False)
+        self._save_book(book)
+        return {
+            "book_id": requested_book.id,
+            "query": query,
+            "source": source,
+            "candidates": candidates,
+            "generated_at": metadata["recipe_catalog_generated_at"],
+            "used_ai": used_ai,
+            "warning": warning,
+        }
+
+    @staticmethod
     def _filter_pages_by_range(
         pages: list[BookTextPage],
         page_start: int | None = None,
@@ -484,12 +1039,27 @@ class UploadedBookRecipeExtractor(BaseService):
             for index, key in enumerate(keys, start=1)
         ]
 
-    def _chunk_message(self, book: UploadedBook, chunk: BookTextChunk, translate_language: str) -> str:
+    def _chunk_message(
+        self,
+        book: UploadedBook,
+        chunk: BookTextChunk,
+        translate_language: str,
+        target_recipe_title: str | None = None,
+    ) -> str:
+        target_instruction = (
+            "\n"
+            f"Requested recipe title: {target_recipe_title}\n"
+            "Return only this requested recipe. Ignore complete neighboring recipes unless they are explicitly "
+            "part of the requested preparation.\n"
+            if target_recipe_title
+            else ""
+        )
         return (
             f"Cookbook title: {book.name}\n"
             f"Original file name: {book.original_file_name}\n"
             f"Primary page range: {chunk.start_page}-{chunk.end_page}\n"
-            f"Translate recipes to: {translate_language}\n\n"
+            f"Translate recipes to: {translate_language}\n"
+            f"{target_instruction}\n"
             "The text may include up to two following pages as overlap context. "
             "Return a recipe only when its title or ingredient list begins inside the primary page range. "
             "Use overlap pages only to complete a recipe that began in the primary range.\n\n"
@@ -814,11 +1384,12 @@ class UploadedBookRecipeExtractor(BaseService):
         book: UploadedBook,
         chunk: BookTextChunk,
         translate_language: str,
+        target_recipe_title: str | None = None,
     ) -> ChunkWorkResult:
         try:
             response = await openai_service.get_response(
                 prompt,
-                self._chunk_message(book, chunk, translate_language),
+                self._chunk_message(book, chunk, translate_language, target_recipe_title),
                 response_schema=OpenAIBookRecipeChunkParse,
                 provider=slot.provider,
             )
@@ -1114,6 +1685,7 @@ class UploadedBookRecipeExtractor(BaseService):
         self,
         book: UploadedBook,
         *,
+        recipes: list[Recipe] | None = None,
         auto_recipe_images: bool = True,
         include_item_images: bool = True,
         include_ai_tips: bool = True,
@@ -1121,7 +1693,7 @@ class UploadedBookRecipeExtractor(BaseService):
         organize_shopping_lists_with_ai: bool = True,
         allow_duplicate_recipes: bool = False,
     ) -> dict:
-        recipes = self._recipes_extracted_from_book(book)
+        recipes = recipes if recipes is not None else self._recipes_extracted_from_book(book)
         stats = {
             "recipes": len(recipes),
             "recipe_images_created": 0,
@@ -1202,6 +1774,204 @@ class UploadedBookRecipeExtractor(BaseService):
             },
         )
         return stats
+
+    def _candidate_chunk(
+        self,
+        pages: list[BookTextPage],
+        candidate: dict,
+        index: int,
+    ) -> BookTextChunk:
+        requested_start = int(candidate.get("page_start") or 1)
+        requested_end = int(candidate.get("page_end") or requested_start)
+        title_key = self._catalog_text_key(candidate.get("source_title") or candidate.get("title"))
+        title_tokens = [token for token in title_key.split() if len(token) > 2]
+        located_start: int | None = None
+        if title_tokens:
+            for page in pages:
+                page_key = self._catalog_text_key(page.text[:5000])
+                if title_key and title_key in page_key:
+                    located_start = page.number
+                    break
+                matched_tokens = sum(token in page_key for token in title_tokens)
+                if len(title_tokens) >= 2 and matched_tokens >= min(3, len(title_tokens)):
+                    located_start = page.number
+                    break
+
+        start_page = located_start or requested_start
+        requested_span = max(0, min(requested_end - requested_start, 12))
+        end_page = start_page + requested_span
+        selected_pages = [page for page in pages if start_page <= page.number <= end_page]
+        if not selected_pages:
+            selected_pages = sorted(pages, key=lambda page: abs(page.number - start_page))[:1]
+        if not selected_pages:
+            raise ValueError(f"No source page was found for '{candidate.get('title')}'")
+
+        selected_pages.sort(key=lambda page: page.number)
+        text = "\n\n".join(f"[Page {page.number}]\n{page.text}" for page in selected_pages)
+        return BookTextChunk(
+            index=index,
+            start_page=selected_pages[0].number,
+            end_page=selected_pages[-1].number,
+            page_numbers=[page.number for page in selected_pages],
+            text=text[: self.MAX_AI_CHARS],
+        )
+
+    async def extract_selected_recipes(
+        self,
+        book_id: UUID4,
+        uploaded_books_root: Path,
+        candidate_ids: list[str],
+        target_language: str = "Hebrew",
+        auto_recipe_images: bool = True,
+        include_item_images: bool = True,
+        include_ai_tips: bool = True,
+        create_shopping_lists: bool = True,
+        organize_shopping_lists_with_ai: bool = True,
+        allow_duplicate_recipes: bool = False,
+    ) -> None:
+        if not await self._claim_job("selective_extraction", book_id):
+            self.logger.info("Selective extraction job %s is already running", book_id)
+            return
+
+        requested_book: UploadedBook | None = None
+        try:
+            requested_book = self._get_book(book_id)
+            book = self._catalog_source_book(requested_book)
+            metadata = self._book_metadata(book)
+            catalog = [
+                candidate
+                for candidate in metadata.get("recipe_catalog_candidates", [])
+                if isinstance(candidate, dict)
+            ]
+            selected_ids = set(candidate_ids)
+            selected = [candidate for candidate in catalog if candidate.get("id") in selected_ids]
+            if len(selected) != len(selected_ids):
+                raise ValueError("One or more selected cookbook recipes are no longer in the current candidate list")
+
+            path = self._book_file_path(book, uploaded_books_root)
+            pages = self._extract_pages(path, book.extension)
+            if not pages:
+                raise ValueError("No extractable text was found in this book")
+
+            openai_service = OpenAIService(self.repos)
+            if not (openai_service.provider_settings and openai_service.provider_settings.ai_enabled):
+                raise ValueError("AI provider is not configured")
+            slots = self._provider_slots(openai_service)
+            prompt = openai_service.get_prompt("recipes.extract-book-recipes")
+            queue: asyncio.Queue[tuple[int, dict]] = asyncio.Queue()
+            for index, candidate in enumerate(selected):
+                queue.put_nowait((index, candidate))
+
+            results: list[tuple[dict, ChunkWorkResult]] = []
+            result_lock = asyncio.Lock()
+
+            async def worker(slot: ProviderSlot) -> None:
+                while True:
+                    try:
+                        chunk_index, candidate = queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        return
+                    try:
+                        chunk = self._candidate_chunk(pages, candidate, chunk_index)
+                        result = await self._extract_chunk_once(
+                            openai_service,
+                            prompt,
+                            slot,
+                            book,
+                            chunk,
+                            target_language,
+                            str(candidate.get("source_title") or candidate.get("title") or ""),
+                        )
+                        async with result_lock:
+                            results.append((candidate, result))
+                    finally:
+                        queue.task_done()
+
+            book.extraction_status = EXTRACTION_PROCESSING
+            book.extraction_translate_language = target_language
+            book.extraction_total_chunks = len(selected)
+            book.extraction_completed_chunks = 0
+            book.extraction_failed_chunks = 0
+            book.extraction_recipes_found = 0
+            book.extraction_recipes_created = 0
+            book.extraction_error = None
+            book.extraction_started_at = get_utc_now()
+            book.extraction_completed_at = None
+            self._save_book(book)
+
+            worker_count = min(len(slots), len(selected))
+            await asyncio.gather(*(worker(slot) for slot in slots[:worker_count]))
+            pages.clear()
+            created_recipes: list[Recipe] = []
+            candidate_updates: dict[str, str] = {}
+            errors: list[str] = []
+            for candidate, result in results:
+                if result.error:
+                    errors.append(f"{candidate.get('title')}: {result.error}")
+                    continue
+                book.extraction_recipes_found += len(result.recipes)
+                if not result.recipes:
+                    errors.append(f"{candidate.get('title')}: no complete recipe was returned")
+                    continue
+
+                saved = self._save_openai_recipe(
+                    result.recipes[0],
+                    book,
+                    result.chunk,
+                    allow_duplicate_recipes=allow_duplicate_recipes,
+                )
+                if saved:
+                    created_recipes.append(saved)
+                    candidate_updates[str(candidate["id"])] = saved.slug
+                    book.extraction_recipes_created += 1
+
+            book.extraction_completed_chunks = len(results) - len(errors)
+            book.extraction_failed_chunks = len(errors)
+            book.extraction_status = EXTRACTION_COMPLETED if not errors else EXTRACTION_PARTIAL_FAILED
+            book.extraction_error = "; ".join(errors)[:1000] or None
+            book.extraction_completed_at = get_utc_now()
+
+            refreshed_metadata = self._book_metadata(book)
+            raw_imported_recipes = refreshed_metadata.get("recipe_catalog_imported", {})
+            if not isinstance(raw_imported_recipes, dict):
+                raw_imported_recipes = {}
+            imported_recipes = {
+                str(candidate_id): str(recipe_slug)
+                for candidate_id, recipe_slug in raw_imported_recipes.items()
+                if candidate_id and recipe_slug
+            }
+            imported_recipes.update(candidate_updates)
+            for candidate in refreshed_metadata.get("recipe_catalog_candidates", []):
+                if not isinstance(candidate, dict):
+                    continue
+                imported_slug = candidate_updates.get(str(candidate.get("id")))
+                if imported_slug:
+                    candidate["imported_recipe_slug"] = imported_slug
+            refreshed_metadata["recipe_catalog_imported"] = imported_recipes
+            refreshed_metadata["recipe_catalog_last_import_at"] = datetime.now(UTC).isoformat()
+            refreshed_metadata["recipe_catalog_last_imported_ids"] = list(candidate_updates)
+            book.book_metadata_json = json.dumps(refreshed_metadata, ensure_ascii=False)
+            self._save_book(book)
+
+            if created_recipes:
+                await self.enrich_book_recipes(
+                    book,
+                    recipes=created_recipes,
+                    auto_recipe_images=auto_recipe_images,
+                    include_item_images=include_item_images,
+                    include_ai_tips=include_ai_tips,
+                    create_shopping_lists=create_shopping_lists,
+                    organize_shopping_lists_with_ai=organize_shopping_lists_with_ai,
+                    allow_duplicate_recipes=allow_duplicate_recipes,
+                )
+        except Exception as error:
+            self.repos.session.rollback()
+            if requested_book is not None:
+                source_book = self._catalog_source_book(requested_book)
+                self._set_failed(source_book, str(error))
+            self.logger.exception("Selective cookbook recipe extraction failed for %s", book_id)
+        finally:
+            await self._release_job("selective_extraction", book_id)
 
     async def extract_recipes(  # noqa: C901
         self,
@@ -1477,6 +2247,425 @@ class UploadedBookRecipeExtractor(BaseService):
 
 class UploadedBookTranslator(UploadedBookRecipeExtractor):
     TRANSLATED_CHUNKS_DIR = "translated-chunks"
+    VISUAL_ASSET_CACHE_VERSION = 1
+    VISUAL_ASSET_CACHE_DIR = "visual-assets-v1"
+    VISUAL_ASSET_MANIFEST = "manifest.json"
+    MAX_VISUAL_ASSETS_PER_PAGE = 24
+    MAX_VISUAL_SOURCE_BYTES = 32 * 1024 * 1024
+    MAX_VISUAL_SOURCE_PIXELS = 80_000_000
+    MAX_VISUAL_DIMENSION = 2400
+    MIN_VISUAL_DIMENSION = 64
+
+    @classmethod
+    def _store_visual_image(
+        cls,
+        image: Image.Image,
+        target_dir: Path,
+        page_number: int,
+        order: int,
+        kind: str,
+        alt: str,
+        deduplicated_files: dict[str, str],
+    ) -> dict | None:
+        width, height = image.size
+        if width <= 0 or height <= 0 or width * height > cls.MAX_VISUAL_SOURCE_PIXELS:
+            return None
+        if kind != "page" and min(width, height) < cls.MIN_VISUAL_DIMENSION:
+            return None
+
+        transposed = ImageOps.exif_transpose(image)
+        try:
+            working = transposed.copy()
+        finally:
+            if transposed is not image:
+                transposed.close()
+
+        try:
+            working.thumbnail(
+                (cls.MAX_VISUAL_DIMENSION, cls.MAX_VISUAL_DIMENSION),
+                Image.Resampling.LANCZOS,
+            )
+            has_alpha = "A" in working.getbands() or "transparency" in working.info
+            converted = working.convert("RGBA" if has_alpha else "RGB")
+            working.close()
+            working = converted
+            output_width, output_height = working.size
+            with BytesIO() as output:
+                working.save(output, format="WEBP", quality=88, method=4)
+                content = output.getvalue()
+        finally:
+            working.close()
+
+        content_hash = hashlib.sha256(content).hexdigest()
+        file_name = deduplicated_files.get(content_hash)
+        if file_name is None:
+            file_name = f"page-{page_number:05d}-{order:02d}-{content_hash[:12]}.webp"
+            target_path = target_dir.joinpath(file_name).resolve()
+            if not target_path.is_relative_to(target_dir.resolve()):
+                raise ValueError("Invalid translated book visual asset path")
+            with NamedTemporaryFile(delete=False, dir=target_dir, suffix=".tmp") as temporary_file:
+                temporary_path = Path(temporary_file.name)
+                temporary_file.write(content)
+            try:
+                temporary_path.replace(target_path)
+            finally:
+                temporary_path.unlink(missing_ok=True)
+            deduplicated_files[content_hash] = file_name
+
+        return {
+            "file": file_name,
+            "width": output_width,
+            "height": output_height,
+            "kind": "page" if kind == "page" else "image",
+            "alt": re.sub(r"\s+", " ", alt or "").strip()[:240],
+        }
+
+    @classmethod
+    def _store_visual_bytes(
+        cls,
+        content: bytes,
+        target_dir: Path,
+        page_number: int,
+        order: int,
+        kind: str,
+        alt: str,
+        deduplicated_files: dict[str, str],
+    ) -> dict | None:
+        if not content or len(content) > cls.MAX_VISUAL_SOURCE_BYTES:
+            return None
+        try:
+            with Image.open(BytesIO(content)) as image:
+                return cls._store_visual_image(
+                    image,
+                    target_dir,
+                    page_number,
+                    order,
+                    kind,
+                    alt,
+                    deduplicated_files,
+                )
+        except (Image.DecompressionBombError, OSError, UnidentifiedImageError, ValueError):
+            return None
+
+    def _render_pdf_page_visual(
+        self,
+        source_path: Path,
+        target_dir: Path,
+        page_number: int,
+        deduplicated_files: dict[str, str],
+    ) -> dict | None:
+        renderer = shutil.which("pdftoppm")
+        if renderer is None:
+            return None
+
+        with TemporaryDirectory(dir=target_dir) as temporary_dir:
+            output_prefix = Path(temporary_dir).joinpath("source-page")
+            result = subprocess.run(
+                [
+                    renderer,
+                    "-f",
+                    str(page_number),
+                    "-l",
+                    str(page_number),
+                    "-singlefile",
+                    "-jpeg",
+                    "-jpegopt",
+                    "quality=88",
+                    "-scale-to",
+                    str(self.MAX_VISUAL_DIMENSION),
+                    str(source_path),
+                    str(output_prefix),
+                ],
+                check=False,
+                capture_output=True,
+                timeout=120,
+            )
+            rendered_path = output_prefix.with_suffix(".jpg")
+            if result.returncode != 0 or not rendered_path.exists():
+                return None
+            try:
+                with Image.open(rendered_path) as image:
+                    return self._store_visual_image(
+                        image,
+                        target_dir,
+                        page_number,
+                        1,
+                        "page",
+                        f"Original page {page_number}",
+                        deduplicated_files,
+                    )
+            except (Image.DecompressionBombError, OSError, UnidentifiedImageError, ValueError):
+                return None
+
+    def _extract_pdf_visual_assets(
+        self,
+        source_path: Path,
+        page_numbers: list[int],
+        source_text_by_page: dict[int, str],
+        target_dir: Path,
+    ) -> dict[int, list[dict]]:
+        try:
+            from pypdf import PdfReader
+        except ImportError:
+            return {}
+
+        reader = PdfReader(str(source_path))
+        assets_by_page: dict[int, list[dict]] = {}
+        deduplicated_files: dict[str, str] = {}
+        fallback_logged = False
+        for page_number in page_numbers:
+            if page_number < 1 or page_number > len(reader.pages):
+                continue
+            page_assets: list[dict] = []
+            extraction_failed = False
+            full_page_visual = False
+            try:
+                page = reader.pages[page_number - 1]
+                page_width = float(page.mediabox.width)
+                page_height = float(page.mediabox.height)
+                page_aspect_ratio = page_width / page_height if page_height else 0
+                for order, image_file in enumerate(page.images, start=1):
+                    if order > self.MAX_VISUAL_ASSETS_PER_PAGE:
+                        break
+                    extracted_image = image_file.image
+                    try:
+                        image_width, image_height = extracted_image.size
+                        image_aspect_ratio = image_width / image_height if image_height else 0
+                        if (
+                            max(image_width, image_height) >= 1000
+                            and page_aspect_ratio
+                            and abs(image_aspect_ratio - page_aspect_ratio) <= 0.03
+                        ):
+                            # Full-page scans often expose their color image and masks as
+                            # separate PDF images. Render the composed page once instead.
+                            full_page_visual = True
+                            break
+                        asset = self._store_visual_image(
+                            extracted_image,
+                            target_dir,
+                            page_number,
+                            order,
+                            "image",
+                            f"Original visual from page {page_number}",
+                            deduplicated_files,
+                        )
+                    finally:
+                        extracted_image.close()
+                    if asset:
+                        page_assets.append(asset)
+            except Exception:
+                extraction_failed = True
+                if not fallback_logged:
+                    self.logger.debug(
+                        f"Falling back to rendered source pages for PDF {source_path.name}",
+                        exc_info=True,
+                    )
+                    fallback_logged = True
+
+            source_text = source_text_by_page.get(page_number, "").strip()
+            if full_page_visual or extraction_failed or (not page_assets and len(source_text) < 80):
+                rendered_asset = self._render_pdf_page_visual(
+                    source_path,
+                    target_dir,
+                    page_number,
+                    deduplicated_files,
+                )
+                if rendered_asset:
+                    page_assets = [rendered_asset]
+            elif len(page_assets) == 1 and len(source_text) < 500:
+                page_assets[0]["kind"] = "page"
+
+            if page_assets:
+                assets_by_page[page_number] = page_assets
+
+        return assets_by_page
+
+    def _extract_epub_visual_assets(
+        self,
+        source_path: Path,
+        page_numbers: list[int],
+        target_dir: Path,
+    ) -> dict[int, list[dict]]:
+        requested_pages = set(page_numbers)
+        assets_by_page: dict[int, list[dict]] = {}
+        deduplicated_files: dict[str, str] = {}
+        with ZipFile(source_path) as archive:
+            archive_names = set(archive.namelist())
+            html_files = sorted(
+                name
+                for name in archive_names
+                if name.lower().endswith((".html", ".htm", ".xhtml")) and not name.endswith("/")
+            )
+            page_number = 0
+            for html_name in html_files:
+                document = archive.read(html_name).decode("utf-8", errors="ignore")
+                soup = BeautifulSoup(document, "lxml")
+                if not self._normalize_text(soup.get_text("\n")):
+                    continue
+                page_number += 1
+                if page_number not in requested_pages:
+                    continue
+
+                page_assets: list[dict] = []
+                for order, image_tag in enumerate(soup.find_all("img"), start=1):
+                    if order > self.MAX_VISUAL_ASSETS_PER_PAGE:
+                        break
+                    source = str(image_tag.get("src") or "").strip()
+                    if not source or source.startswith(("data:", "http://", "https://")):
+                        continue
+                    source = unquote(source.split("#", 1)[0].split("?", 1)[0])
+                    archive_path = posixpath.normpath(
+                        posixpath.join(posixpath.dirname(html_name), source)
+                    )
+                    if (
+                        archive_path.startswith("../")
+                        or archive_path.startswith("/")
+                        or archive_path not in archive_names
+                    ):
+                        continue
+                    archive_info = archive.getinfo(archive_path)
+                    if archive_info.file_size > self.MAX_VISUAL_SOURCE_BYTES:
+                        continue
+                    asset = self._store_visual_bytes(
+                        archive.read(archive_path),
+                        target_dir,
+                        page_number,
+                        order,
+                        "image",
+                        str(image_tag.get("alt") or f"Original visual from page {page_number}"),
+                        deduplicated_files,
+                    )
+                    if asset:
+                        page_assets.append(asset)
+                if page_assets:
+                    assets_by_page[page_number] = page_assets
+
+        return assets_by_page
+
+    @staticmethod
+    def _visual_asset_file_names(assets_by_page: dict[int, list[dict]]) -> set[str]:
+        return {
+            str(asset.get("file"))
+            for assets in assets_by_page.values()
+            for asset in assets
+            if isinstance(asset, dict) and isinstance(asset.get("file"), str)
+        }
+
+    def _load_visual_asset_cache(
+        self,
+        cache_dir: Path,
+        fingerprint: dict,
+    ) -> dict[int, list[dict]] | None:
+        manifest_path = cache_dir.joinpath(self.VISUAL_ASSET_MANIFEST)
+        if not manifest_path.exists():
+            return None
+        try:
+            payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, TypeError, ValueError):
+            return None
+        if not isinstance(payload, dict) or payload.get("fingerprint") != fingerprint:
+            return None
+        raw_assets = payload.get("assets")
+        if not isinstance(raw_assets, dict):
+            return None
+
+        assets_by_page: dict[int, list[dict]] = {}
+        for raw_page, raw_page_assets in raw_assets.items():
+            if not str(raw_page).isdigit() or not isinstance(raw_page_assets, list):
+                return None
+            page_assets: list[dict] = []
+            for asset in raw_page_assets:
+                if not isinstance(asset, dict):
+                    return None
+                file_name = asset.get("file")
+                if (
+                    not isinstance(file_name, str)
+                    or Path(file_name).name != file_name
+                    or not file_name.endswith(".webp")
+                    or not cache_dir.joinpath(file_name).is_file()
+                ):
+                    return None
+                page_assets.append(asset)
+            if page_assets:
+                assets_by_page[int(raw_page)] = page_assets
+        return assets_by_page
+
+    def _visual_assets_for_translation(
+        self,
+        source_path: Path,
+        extension: str,
+        page_numbers: set[int],
+        source_text_by_page: dict[int, str],
+        work_dir: Path,
+    ) -> tuple[dict[int, list[dict]], Path | None]:
+        if extension not in {".pdf", ".epub"}:
+            return {}, None
+
+        ordered_pages = sorted(page_numbers)
+        source_stat = source_path.stat()
+        fingerprint = {
+            "version": self.VISUAL_ASSET_CACHE_VERSION,
+            "sourceSize": source_stat.st_size,
+            "sourceMtimeNs": source_stat.st_mtime_ns,
+            "extension": extension,
+            "pages": ordered_pages,
+        }
+        cache_dir = work_dir.joinpath(self.VISUAL_ASSET_CACHE_DIR).resolve()
+        if not cache_dir.is_relative_to(work_dir.resolve()):
+            raise ValueError("Invalid translated book visual cache path")
+        cached_assets = self._load_visual_asset_cache(cache_dir, fingerprint)
+        if cached_assets is not None:
+            return cached_assets, cache_dir
+
+        staging_dir = work_dir.joinpath(f".{self.VISUAL_ASSET_CACHE_DIR}-{uuid4().hex}.tmp").resolve()
+        if not staging_dir.is_relative_to(work_dir.resolve()):
+            raise ValueError("Invalid translated book visual staging path")
+        staging_dir.mkdir(parents=True, exist_ok=False)
+        try:
+            if extension == ".pdf":
+                assets_by_page = self._extract_pdf_visual_assets(
+                    source_path,
+                    ordered_pages,
+                    source_text_by_page,
+                    staging_dir,
+                )
+            else:
+                assets_by_page = self._extract_epub_visual_assets(
+                    source_path,
+                    ordered_pages,
+                    staging_dir,
+                )
+
+            used_files = self._visual_asset_file_names(assets_by_page)
+            for asset_path in staging_dir.glob("*.webp"):
+                if asset_path.name not in used_files:
+                    asset_path.unlink(missing_ok=True)
+            staging_dir.joinpath(self.VISUAL_ASSET_MANIFEST).write_text(
+                json.dumps(
+                    {
+                        "fingerprint": fingerprint,
+                        "assets": {str(page): assets for page, assets in assets_by_page.items()},
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            backup_dir = work_dir.joinpath(f".{self.VISUAL_ASSET_CACHE_DIR}-{uuid4().hex}.old").resolve()
+            if cache_dir.exists():
+                cache_dir.replace(backup_dir)
+            try:
+                staging_dir.replace(cache_dir)
+            except Exception:
+                if backup_dir.exists() and not cache_dir.exists():
+                    backup_dir.replace(cache_dir)
+                raise
+            if backup_dir.exists():
+                shutil.rmtree(backup_dir)
+            return assets_by_page, cache_dir
+        finally:
+            if staging_dir.exists():
+                shutil.rmtree(staging_dir)
 
     def _set_translation_failed(self, book: UploadedBook, error: str) -> None:
         book.translation_status = TRANSLATION_FAILED
@@ -1624,6 +2813,7 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
     ) -> str:
         file_name = self._translated_chunk_file_name(chunk)
         page_metadata = page_metadata or {}
+        expected_pages = set(chunk.page_numbers)
         payload = {
             "chunk": chunk.index,
             "startPage": chunk.start_page,
@@ -1635,6 +2825,7 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                     **page_metadata.get(page, {}),
                 }
                 for page, text in sorted(pages.items())
+                if page in expected_pages
             ],
         }
         work_dir.joinpath(file_name).write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
@@ -1671,6 +2862,64 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
 
     def _read_translated_chunk_pages(self, work_dir: Path, file_name: str) -> list[tuple[int, str]]:
         return [(record["page"], record["text"]) for record in self._read_translated_chunk_records(work_dir, file_name)]
+
+    def _merge_partial_translation_result(
+        self,
+        work_dir: Path,
+        result: ChunkTranslationResult,
+        previous_file: str | None,
+    ) -> tuple[str | None, int]:
+        expected_pages = set(result.chunk.page_numbers)
+        source_pages = self._source_pages_from_chunk(result.chunk)
+        merged_pages: dict[int, str] = {}
+        merged_metadata: dict[int, dict] = {}
+
+        if previous_file:
+            try:
+                previous_records = self._read_translated_chunk_records(work_dir, previous_file)
+            except (OSError, TypeError, ValueError):
+                previous_records = []
+            for record in previous_records:
+                page_number = record["page"]
+                if page_number not in expected_pages:
+                    continue
+                if self._translation_page_issue(
+                    page_number,
+                    source_pages.get(page_number, ""),
+                    record["text"],
+                ):
+                    continue
+                merged_pages[page_number] = record["text"]
+                merged_metadata[page_number] = {
+                    "title": record.get("title"),
+                    "entryType": record.get("entryType", "page"),
+                    "parentTitle": record.get("parentTitle"),
+                    "includeInContents": bool(record.get("includeInContents", False)),
+                }
+
+        result_metadata = result.page_metadata or {}
+        for page_number, translated_text in result.pages.items():
+            if page_number not in expected_pages:
+                continue
+            if self._translation_page_issue(
+                page_number,
+                source_pages.get(page_number, ""),
+                translated_text,
+            ):
+                continue
+            merged_pages[page_number] = translated_text
+            merged_metadata[page_number] = result_metadata.get(page_number, {})
+
+        if not merged_pages:
+            return None, 0
+
+        file_name = self._write_translated_chunk(
+            work_dir,
+            result.chunk,
+            merged_pages,
+            merged_metadata,
+        )
+        return file_name, len(merged_pages)
 
     def _translation_message(self, book: UploadedBook, chunk: BookTextChunk, target_language: str) -> str:
         return (
@@ -1724,7 +2973,12 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                 provider_disabled=provider_disabled,
             )
 
-        pages = {page.page: page.text for page in response.pages} if response else {}
+        expected_pages = set(chunk.page_numbers)
+        pages = {
+            page.page: page.text
+            for page in (response.pages if response else [])
+            if page.page in expected_pages
+        }
         page_metadata = {
             page.page: {
                 "title": page.title.strip() if page.title else None,
@@ -1733,14 +2987,15 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                 "includeInContents": page.include_in_contents,
             }
             for page in (response.pages if response else [])
+            if page.page in expected_pages
         }
-        expected_pages = set(chunk.page_numbers)
         if not expected_pages.issubset(set(pages)):
             missing = ", ".join(str(page) for page in sorted(expected_pages - set(pages))[:10])
             return ChunkTranslationResult(
                 chunk=chunk,
                 pages=pages,
                 provider_label=slot.label,
+                page_metadata=page_metadata,
                 error=f"AI translation response is missing page(s): {missing}",
                 retryable=True,
                 wait_seconds=None,
@@ -1778,6 +3033,7 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                     chunk=chunk,
                     pages=pages,
                     provider_label=slot.label,
+                    page_metadata=page_metadata,
                     wait_seconds=self._retry_wait_seconds(e),
                     error=self._short_error(e),
                     retryable=not provider_disabled,
@@ -1800,6 +3056,7 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                     chunk=chunk,
                     pages=pages,
                     provider_label=slot.label,
+                    page_metadata=page_metadata,
                     error="AI translation completeness check failed: " + "; ".join(remaining_issues[:6]),
                     retryable=True,
                     wait_seconds=None,
@@ -1909,7 +3166,7 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
         chunks: list[BookTextChunk],
         translated_pages: list[tuple[int, str]],
         *,
-        allow_missing_pages: bool = False,
+        allow_partial_pages: bool = False,
     ) -> dict:
         source_pages: dict[int, str] = {}
         expected_pages: set[int] = set()
@@ -1920,29 +3177,36 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
         translated_page_map = dict(translated_pages)
         missing_pages = sorted(expected_pages - set(translated_page_map))
         unexpected_pages = sorted(set(translated_page_map) - expected_pages)
-        suspicious_pages = [
-            issue
-            for page_number in sorted(expected_pages)
-            if page_number in translated_page_map or not allow_missing_pages
-            if (
-                issue := self._translation_page_issue(
-                    page_number,
-                    source_pages.get(page_number, ""),
-                    translated_page_map.get(page_number, ""),
-                )
+        suspicious_pages: list[str] = []
+        suspicious_page_numbers: list[int] = []
+        for page_number in sorted(expected_pages):
+            if page_number not in translated_page_map and allow_partial_pages:
+                continue
+            issue = self._translation_page_issue(
+                page_number,
+                source_pages.get(page_number, ""),
+                translated_page_map.get(page_number, ""),
             )
-        ]
+            if issue:
+                suspicious_pages.append(issue)
+                suspicious_page_numbers.append(page_number)
+        verified_translated_pages = max(
+            0,
+            len(expected_pages & set(translated_page_map)) - len(suspicious_page_numbers),
+        )
         audit = {
             "version": 1,
             "source_pages": len(expected_pages),
             "translated_pages": len(translated_page_map),
+            "verified_translated_pages": verified_translated_pages,
             "missing_pages": missing_pages,
             "unexpected_pages": unexpected_pages,
             "suspicious_pages": suspicious_pages,
-            "partial": bool(missing_pages),
-            "passed": (allow_missing_pages or not missing_pages) and not unexpected_pages and not suspicious_pages,
+            "suspicious_page_numbers": suspicious_page_numbers,
+            "partial": bool(missing_pages or unexpected_pages or suspicious_pages),
+            "passed": not missing_pages and not unexpected_pages and not suspicious_pages,
         }
-        if not audit["passed"]:
+        if not audit["passed"] and not allow_partial_pages:
             details = []
             if missing_pages:
                 details.append(f"missing pages: {', '.join(map(str, missing_pages[:12]))}")
@@ -1987,12 +3251,16 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
             entry_type = str(value.get("entryType") or "page").strip().lower()
             parent_title = str(value.get("parentTitle") or "").strip()
             include_in_contents = bool(value.get("includeInContents", False))
+            is_translated = bool(value.get("isTranslated", True))
+            visual_assets = value.get("visualAssets") if isinstance(value.get("visualAssets"), list) else []
         else:
             page_number, text = value
             title = ""
             entry_type = "page"
             parent_title = ""
             include_in_contents = False
+            is_translated = True
+            visual_assets = []
 
         fallback = UploadedBookTranslator._translated_page_heading(text, page_number, rtl)
         generic_titles = {
@@ -2011,6 +3279,8 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
             "entryType": entry_type,
             "parentTitle": parent_title,
             "includeInContents": include_in_contents,
+            "isTranslated": is_translated,
+            "visualAssets": visual_assets,
         }
 
     @staticmethod
@@ -2319,6 +3589,7 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
         translated_pages: list[dict] | list[tuple[int, str]],
         has_cover: bool = False,
         linked_recipe_sections: dict[int, list[str]] | None = None,
+        translation_audit: dict | None = None,
     ) -> str:
         rtl = self._is_rtl_language(target_language)
         direction = "rtl" if rtl else "ltr"
@@ -2351,9 +3622,68 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
             "close_progress": "מזער התקדמות" if rtl else "Collapse reading progress",
             "chapter_progress": "פרקים שנקראו" if rtl else "Chapters read",
             "chapter_complete": "סמן פרק כנקרא" if rtl else "Mark chapter as read",
+            "translation_progress": "התקדמות התרגום" if rtl else "Translation progress",
+            "translated_pages": "עמודים מתורגמים" if rtl else "pages translated",
+            "finish_translation": "השלם תרגום" if rtl else "Finish translation",
+            "translation_starting": "מפעיל השלמת תרגום..." if rtl else "Starting translation...",
+            "translation_started": "השלמת התרגום התחילה. ניתן לרענן או לפתוח שוב את הספר מאוחר יותר." if rtl
+            else "Translation resumed. Refresh or reopen the book later to see the completed pages.",
+            "translation_failed": "לא ניתן להפעיל את השלמת התרגום." if rtl
+            else "Translation could not be resumed.",
+            "source_page": "טקסט מקורי — ממתין לתרגום" if rtl else "Original text — translation pending",
+            "original_visual": "תמונה מהספר המקורי" if rtl else "Visual from the original book",
+            "original_page_image": "צילום העמוד המקורי" if rtl else "Original page image",
         }
         records = [self._translated_page_record(value, rtl) for value in translated_pages]
         records.sort(key=lambda record: record["page"])
+        translation_audit = translation_audit or {}
+        total_translation_pages = max(
+            int(translation_audit.get("source_pages") or len(records)),
+            len(records),
+            1,
+        )
+        translated_page_count_value = translation_audit.get("verified_translated_pages")
+        if translated_page_count_value is None:
+            translated_page_count_value = (
+                int(translation_audit.get("translated_pages") or 0)
+                - len(translation_audit.get("suspicious_pages") or [])
+            )
+        translated_page_count = min(
+            total_translation_pages,
+            max(
+                0,
+                int(
+                    translated_page_count_value
+                    if translation_audit
+                    else sum(1 for record in records if record.get("isTranslated", True))
+                ),
+            ),
+        )
+        translation_percent = round((translated_page_count / total_translation_pages) * 100)
+        try:
+            source_metadata = json.loads(book.book_metadata_json or "{}")
+        except (AttributeError, TypeError, ValueError):
+            source_metadata = {}
+        if not isinstance(source_metadata, dict):
+            source_metadata = {}
+        translation_options = source_metadata.get("translation_options")
+        if not isinstance(translation_options, dict):
+            translation_options = {}
+        source_book_id = str(getattr(book, "id", "") or "")
+        resume_payload = {
+            "pagesPerChunk": max(1, min(100, int(getattr(book, "translation_pages_per_chunk", 10) or 10))),
+            "targetLanguage": target_language,
+            "pageStart": getattr(book, "translation_page_start", None),
+            "pageEnd": getattr(book, "translation_page_end", None),
+            "includeLinkedRecipes": translation_options.get("include_linked_recipes", True),
+            "extractRecipes": translation_options.get("extract_recipes", False),
+            "autoRecipeImages": translation_options.get("auto_recipe_images", True),
+            "includeItemImages": translation_options.get("include_item_images", True),
+            "includeAiTips": translation_options.get("include_ai_tips", True),
+            "createShoppingLists": translation_options.get("create_shopping_lists", True),
+            "organizeShoppingListsWithAi": translation_options.get("organize_shopping_lists_with_ai", True),
+        }
+        resume_payload_json = json.dumps(resume_payload, ensure_ascii=False).replace("</", "<\\/")
         linked_recipe_sections = linked_recipe_sections or {}
         toc_entries = self._translated_book_toc(records, rtl)
         chapter_order = 0
@@ -2407,6 +3737,13 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
             page_heading = record["title"]
             page_title = html.escape(f"{labels['page']} {page_number}")
             page_text = html.escape(text.strip())
+            is_translated = bool(record.get("isTranslated", True))
+            page_status = (
+                ""
+                if is_translated
+                else f'<span class="source-page-badge">{html.escape(labels["source_page"])}</span>'
+            )
+            page_class = "book-page reading-position" + ("" if is_translated else " source-language-page")
             previous_link = (
                 f'<a href="#page-{records[index - 1]["page"]}">‹ {labels["previous"]}</a>'
                 if index > 0
@@ -2419,17 +3756,53 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
             )
             linked_markup = "".join(linked_recipe_sections.get(page_number, []))
             page_chapter_id = html.escape(chapter_by_page_index.get(index + 1, ""), quote=True)
+            visual_items: list[str] = []
+            for asset in record.get("visualAssets") or []:
+                if not isinstance(asset, dict):
+                    continue
+                file_name = str(asset.get("file") or "")
+                if not re.fullmatch(r"[A-Za-z0-9._-]+\.webp", file_name):
+                    continue
+                kind = "page" if asset.get("kind") == "page" else "image"
+                alt = str(asset.get("alt") or labels["original_visual"])
+                try:
+                    width = max(1, min(self.MAX_VISUAL_DIMENSION, int(asset.get("width") or 1)))
+                    height = max(1, min(self.MAX_VISUAL_DIMENSION, int(asset.get("height") or 1)))
+                except (TypeError, ValueError):
+                    width, height = 1, 1
+                caption = (
+                    f"<figcaption>{html.escape(labels['original_page_image'])}</figcaption>"
+                    if kind == "page"
+                    else ""
+                )
+                escaped_file_name = html.escape(file_name, quote=True)
+                visual_items.append(
+                    f'<figure class="page-visual page-visual--{kind}">'
+                    f'<a href="./assets/{escaped_file_name}" target="_blank" rel="noopener">'
+                    f'<img src="./assets/{escaped_file_name}" alt="{html.escape(alt, quote=True)}" '
+                    f'width="{width}" height="{height}" loading="lazy" decoding="async">'
+                    f"</a>{caption}</figure>"
+                )
+            visual_markup = (
+                '<div class="page-visuals">' + "".join(visual_items) + "</div>"
+                if visual_items
+                else ""
+            )
+            if visual_items:
+                page_class += " has-visuals"
             page_sections.append(
                 "\n".join(
                     [
-                        f'<article class="book-page reading-position" id="page-{page_number}" '
+                        f'<article class="{page_class}" id="page-{page_number}" '
                         f'data-page-index="{index + 1}" data-page-number="{page_number}" '
-                        f'data-page-label="{page_title}" data-chapter-id="{page_chapter_id}">',
+                        f'data-page-label="{page_title}" data-chapter-id="{page_chapter_id}" '
+                        f'data-translated="{str(is_translated).lower()}">',
                         '<header class="page-header">',
-                        f"<span>{html.escape(page_heading)}</span>",
+                        f"<span>{html.escape(page_heading)}{page_status}</span>",
                         f"<strong>{page_title}</strong>",
                         "</header>",
-                        f"<pre>{page_text}</pre>",
+                        visual_markup,
+                        f'<pre dir="{"inherit" if is_translated else "auto"}">{page_text}</pre>',
                         linked_markup,
                         '<footer class="page-footer">',
                         previous_link,
@@ -2446,6 +3819,30 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
             '<img class="cover-image" src="./cover" alt="" loading="eager">'
             if has_cover
             else '<div class="cover-fallback" aria-hidden="true">☰</div>'
+        )
+        finish_translation_markup = ""
+        if translation_percent < 100 and source_book_id:
+            finish_translation_markup = (
+                f'<button class="finish-translation" id="completeTranslationButton" type="button">'
+                f'{html.escape(labels["finish_translation"])}</button>'
+            )
+        translation_summary_markup = (
+            '<div class="translation-summary" aria-label="'
+            + html.escape(labels["translation_progress"])
+            + '">'
+            + '<span class="translation-summary__label">'
+            + html.escape(labels["translation_progress"])
+            + "</span>"
+            + f'<strong>{translation_percent}%</strong>'
+            + '<span class="translation-summary__count">'
+            + f"{translated_page_count}/{total_translation_pages} "
+            + html.escape(labels["translated_pages"])
+            + "</span>"
+            + '<span class="translation-summary__track" aria-hidden="true">'
+            + f'<span style="width:{translation_percent}%"></span></span>'
+            + finish_translation_markup
+            + '<span class="translation-summary__status" id="translationResumeStatus" role="status"></span>'
+            + "</div>"
         )
 
         return f"""<!doctype html>
@@ -2478,6 +3875,7 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
       background: rgba(255, 253, 248, 0.96);
       border-bottom: 1px solid #d9cebc;
       display: flex;
+      flex-wrap: wrap;
       gap: 18px;
       inset-inline: 0;
       justify-content: center;
@@ -2487,6 +3885,53 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
       z-index: 10;
     }}
     .book-toolbar a, .page-footer a {{ color: #8f3f1f; font-weight: 700; text-decoration: none; }}
+    .translation-summary {{
+      align-items: center;
+      display: flex;
+      flex-wrap: wrap;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 13px;
+      gap: 7px;
+      justify-content: center;
+    }}
+    .translation-summary__label {{ font-weight: 700; }}
+    .translation-summary__count {{ color: #6f6257; }}
+    .translation-summary__track {{
+      background: #eadfd2;
+      border-radius: 4px;
+      display: inline-block;
+      height: 7px;
+      overflow: hidden;
+      width: 84px;
+    }}
+    .translation-summary__track > span {{
+      background: #e8881f;
+      display: block;
+      height: 100%;
+    }}
+    .finish-translation {{
+      background: #e8881f;
+      border: 0;
+      border-radius: 4px;
+      color: #fff;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 700;
+      min-height: 32px;
+      padding: 6px 10px;
+    }}
+    .finish-translation:hover, .finish-translation:focus-visible {{
+      background: #b95f12;
+      outline: 2px solid #6e370c;
+      outline-offset: 2px;
+    }}
+    .finish-translation:disabled {{ cursor: wait; opacity: 0.65; }}
+    .translation-summary__status {{
+      flex-basis: 100%;
+      min-height: 0;
+      text-align: center;
+    }}
+    .translation-summary__status:empty {{ display: none; }}
     .book-sidebar {{
       background: rgba(255, 253, 248, 0.98);
       border: 1px solid #d9cebc;
@@ -2505,6 +3950,7 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
       z-index: 30;
     }}
     .book-sidebar.is-collapsed {{ width: 48px; }}
+    .book-sidebar.is-collapsed .reader-tools {{ display: none; }}
     .sidebar-header {{
       align-items: center;
       border-bottom: 1px solid #dfd4c4;
@@ -2681,6 +4127,53 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
       margin-bottom: 28px;
       padding-bottom: 12px;
     }}
+    .source-language-page {{
+      border-color: #d89242;
+      box-shadow: 0 8px 26px rgba(154, 77, 39, 0.18);
+    }}
+    .source-page-badge {{
+      background: #fff1dc;
+      border: 1px solid #e2a35d;
+      border-radius: 4px;
+      color: #8b430e;
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 700;
+      margin-inline-start: 10px;
+      padding: 2px 7px;
+    }}
+    .page-visuals {{
+      display: grid;
+      gap: 24px;
+      margin: 0 0 30px;
+    }}
+    .page-visual {{
+      margin: 0;
+      text-align: center;
+    }}
+    .page-visual a {{
+      display: block;
+      line-height: 0;
+    }}
+    .page-visual img {{
+      background: #f5f1e9;
+      border: 1px solid #d9cebc;
+      box-shadow: 0 8px 22px rgba(61, 45, 29, 0.14);
+      height: auto;
+      margin: 0 auto;
+      max-height: 820px;
+      max-width: 100%;
+      object-fit: contain;
+      width: auto;
+    }}
+    .page-visual--page img {{ width: 100%; }}
+    .page-visual figcaption {{
+      color: #75685b;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 12px;
+      line-height: 1.4;
+      margin-top: 8px;
+    }}
     pre {{
       white-space: pre-wrap;
       word-wrap: break-word;
@@ -2688,6 +4181,7 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
       margin: 0;
       min-height: 760px;
     }}
+    .book-page.has-visuals pre {{ min-height: 320px; }}
     .linked-recipe {{
       background: #fbf4e9;
       border: 1px solid #d9c5aa;
@@ -2760,8 +4254,10 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
     <a href="#cover">{labels['cover']}</a>
     <a href="#contents">{labels['contents']}</a>
     <span>{len(records)} {labels['pages']}</span>
+    {translation_summary_markup}
   </nav>
   <aside class="book-sidebar" id="bookSidebar" aria-label="{labels['contents']}">
+    {book_reader_panels(book_reader_labels(rtl))}
     <div class="sidebar-header">
       <button class="sidebar-toggle" id="sidebarToggle" type="button"
         aria-expanded="true" title="{labels['close_contents']}">‹</button>
@@ -2791,7 +4287,6 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
       </div>
     </div>
   </section>
-  {book_reader_panels(book_reader_labels(rtl))}
   <main class="book-shell">
     <section class="cover-page reading-position" id="cover" data-page-index="0"
       data-page-number="0" data-page-label="{labels['cover']}">
@@ -2811,6 +4306,38 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
   {book_reader_script(book_reader_labels(rtl))}
   <script>
     (() => {{
+      const completeTranslationButton = document.getElementById("completeTranslationButton");
+      const translationResumeStatus = document.getElementById("translationResumeStatus");
+      if (completeTranslationButton) {{
+        completeTranslationButton.addEventListener("click", async () => {{
+          if (completeTranslationButton.disabled) return;
+          completeTranslationButton.disabled = true;
+          if (translationResumeStatus) {{
+            translationResumeStatus.textContent = {json.dumps(labels["translation_starting"], ensure_ascii=False)};
+          }}
+          try {{
+            const response = await fetch(
+              `/api/households/uploaded-books/${{encodeURIComponent({json.dumps(source_book_id)})}}/translate`,
+              {{
+                method: "POST",
+                credentials: "same-origin",
+                headers: {{ "Content-Type": "application/json" }},
+                body: JSON.stringify({resume_payload_json}),
+              }},
+            );
+            if (!response.ok) throw new Error(`Translation request failed (${{response.status}})`);
+            if (translationResumeStatus) {{
+              translationResumeStatus.textContent = {json.dumps(labels["translation_started"], ensure_ascii=False)};
+            }}
+          }} catch (_error) {{
+            completeTranslationButton.disabled = false;
+            if (translationResumeStatus) {{
+              translationResumeStatus.textContent = {json.dumps(labels["translation_failed"], ensure_ascii=False)};
+            }}
+          }}
+        }});
+      }}
+
       const sidebar = document.getElementById("bookSidebar");
       const sidebarToggle = document.getElementById("sidebarToggle");
       const sidebarScroll = document.getElementById("sidebarScroll");
@@ -2942,6 +4469,50 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
 </html>
 """
 
+    def _replace_translated_visual_assets(
+        self,
+        target_dir: Path,
+        visual_assets_dir: Path | None,
+        visual_assets_by_page: dict[int, list[dict]] | None,
+    ) -> None:
+        if visual_assets_dir is None or visual_assets_by_page is None:
+            return
+
+        target_dir = target_dir.resolve()
+        source_dir = visual_assets_dir.resolve()
+        assets_dir = target_dir.joinpath("assets").resolve()
+        if not assets_dir.is_relative_to(target_dir):
+            raise ValueError("Invalid translated book assets target path")
+
+        staging_dir = target_dir.joinpath(f".assets-{uuid4().hex}.tmp").resolve()
+        backup_dir = target_dir.joinpath(f".assets-{uuid4().hex}.old").resolve()
+        if not staging_dir.is_relative_to(target_dir) or not backup_dir.is_relative_to(target_dir):
+            raise ValueError("Invalid translated book assets staging path")
+
+        staging_dir.mkdir(parents=True, exist_ok=False)
+        try:
+            for file_name in sorted(self._visual_asset_file_names(visual_assets_by_page)):
+                if Path(file_name).name != file_name or not file_name.endswith(".webp"):
+                    continue
+                source_path = source_dir.joinpath(file_name).resolve()
+                if not source_path.is_relative_to(source_dir) or not source_path.is_file():
+                    raise ValueError(f"Translated book visual asset is missing: {file_name}")
+                shutil.copy2(source_path, staging_dir.joinpath(file_name))
+
+            if assets_dir.exists():
+                assets_dir.replace(backup_dir)
+            try:
+                staging_dir.replace(assets_dir)
+            except Exception:
+                if backup_dir.exists() and not assets_dir.exists():
+                    backup_dir.replace(assets_dir)
+                raise
+            if backup_dir.exists():
+                shutil.rmtree(backup_dir)
+        finally:
+            if staging_dir.exists():
+                shutil.rmtree(staging_dir)
+
     def _create_translated_book(
         self,
         book: UploadedBook,
@@ -2950,6 +4521,9 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
         html_content: str,
         translation_audit: dict,
         include_linked_recipes: bool = True,
+        translation_status: str = TRANSLATION_COMPLETED,
+        visual_assets_dir: Path | None = None,
+        visual_assets_by_page: dict[int, list[dict]] | None = None,
     ) -> UploadedBook:
         translated_book = None
         if book.translated_book_id:
@@ -2972,10 +4546,20 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
         target_path = target_dir.joinpath(file_name).resolve()
         if not target_path.is_relative_to(target_dir):
             raise ValueError("Invalid translated book file path")
-        target_path.write_text(
-            html_content.replace(BOOK_READER_ID_PLACEHOLDER, str(translated_book_id)),
-            encoding="utf-8",
-        )
+        temporary_path = target_dir.joinpath(f".{file_name}.tmp").resolve()
+        try:
+            temporary_path.write_text(
+                html_content.replace(BOOK_READER_ID_PLACEHOLDER, str(translated_book_id)),
+                encoding="utf-8",
+            )
+            self._replace_translated_visual_assets(
+                target_dir,
+                visual_assets_dir,
+                visual_assets_by_page,
+            )
+            temporary_path.replace(target_path)
+        finally:
+            temporary_path.unlink(missing_ok=True)
 
         source_cover = UploadedBookCoverService.cover_path(uploaded_books_root, book)
         if source_cover.exists():
@@ -2993,6 +4577,11 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
             "translation_language": target_language,
             "translation_audit": translation_audit,
             "translation_include_linked_recipes": include_linked_recipes,
+            "visual_asset_count": sum(
+                len(assets)
+                for assets in (visual_assets_by_page or {}).values()
+            ),
+            "visual_asset_pages": sorted((visual_assets_by_page or {}).keys()),
         }
         if source_cover.exists():
             translated_metadata["cover_file_name"] = BOOK_COVER_FILE_NAME
@@ -3011,7 +4600,7 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
             "is_translated_book": True,
             "translated_from_book_id": book.id,
             "translation_language": target_language,
-            "translation_status": TRANSLATION_COMPLETED,
+            "translation_status": translation_status,
             "translation_page_start": book.translation_page_start,
             "translation_page_end": book.translation_page_end,
             "translation_completed_at": get_utc_now(),
@@ -3104,24 +4693,100 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
         for state in sorted(chunk_states.values(), key=lambda item: self._state_int(item, "index")):
             file_name = state.get("translatedChunkFile")
             if isinstance(file_name, str):
-                translated_records.extend(self._read_translated_chunk_records(work_dir, file_name))
+                try:
+                    translated_records.extend(self._read_translated_chunk_records(work_dir, file_name))
+                except (OSError, TypeError, ValueError):
+                    self.logger.warning(
+                        f"Ignoring unreadable partial translation file {file_name} for uploaded book {book.id}",
+                        exc_info=True,
+                    )
+        if not translated_records:
+            return None
+
+        expected_pages = {
+            page_number
+            for chunk in chunks
+            for page_number in chunk.page_numbers
+        }
+        ignored_unexpected_pages = sorted(
+            {
+                record["page"]
+                for record in translated_records
+                if record["page"] not in expected_pages
+            }
+        )
+        translated_records = [
+            record
+            for record in translated_records
+            if record["page"] in expected_pages
+        ]
         if not translated_records:
             return None
 
         translated_record_map = {record["page"]: record for record in translated_records}
-        translated_records = [translated_record_map[page] for page in sorted(translated_record_map)]
-        translated_pages = [(record["page"], record["text"]) for record in translated_records]
-        has_incomplete_chunks = any(
-            state.get("status") != CHUNK_COMPLETED
-            for state in chunk_states.values()
-        )
+        translated_pages = [(page, record["text"]) for page, record in translated_record_map.items()]
         translation_audit = self._audit_translated_pages(
             chunks,
             translated_pages,
-            allow_missing_pages=has_incomplete_chunks,
+            allow_partial_pages=True,
         )
-        available_pages = set(translated_record_map)
-        del translated_pages, translated_record_map
+        if ignored_unexpected_pages:
+            translation_audit["ignored_unexpected_pages"] = ignored_unexpected_pages
+
+        unverified_pages = {
+            int(page)
+            for page in (
+                list(translation_audit.get("missing_pages") or [])
+                + list(translation_audit.get("suspicious_page_numbers") or [])
+            )
+        }
+        source_text_by_page: dict[int, str] = {}
+        for chunk in chunks:
+            chunk_source_pages = self._source_pages_from_chunk(chunk)
+            source_text_by_page.update(chunk_source_pages)
+        for page_number in sorted(expected_pages):
+            translated_record = translated_record_map.get(page_number)
+            if translated_record is not None and page_number not in unverified_pages:
+                translated_record["isTranslated"] = True
+                continue
+            translated_record_map[page_number] = {
+                "page": page_number,
+                "text": source_text_by_page.get(page_number, ""),
+                "title": None,
+                "entryType": "page",
+                "parentTitle": None,
+                "includeInContents": False,
+                "isTranslated": False,
+            }
+
+        translated_records = [translated_record_map[page] for page in sorted(translated_record_map)]
+        available_pages = set(expected_pages)
+        del translated_pages, translated_record_map, unverified_pages
+
+        visual_assets_by_page: dict[int, list[dict]] = {}
+        visual_assets_dir: Path | None = None
+        try:
+            source_path = self._book_file_path(book, uploaded_books_root)
+            visual_assets_by_page, visual_assets_dir = await asyncio.to_thread(
+                self._visual_assets_for_translation,
+                source_path,
+                book.extension,
+                expected_pages,
+                source_text_by_page,
+                work_dir,
+            )
+        except Exception:
+            self.logger.warning(
+                f"Translated book {book.id} will be saved without some original visual assets",
+                exc_info=True,
+            )
+        for record in translated_records:
+            record["visualAssets"] = visual_assets_by_page.get(int(record["page"]), [])
+        translation_audit["visual_asset_pages"] = sorted(visual_assets_by_page)
+        translation_audit["visual_asset_count"] = sum(
+            len(assets) for assets in visual_assets_by_page.values()
+        )
+        del source_text_by_page
 
         cover_service = UploadedBookCoverService(self.repos)
         has_cover = await cover_service.ensure_cover(book, uploaded_books_root)
@@ -3136,6 +4801,7 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
             translated_records,
             has_cover=has_cover,
             linked_recipe_sections=linked_recipe_sections,
+            translation_audit=translation_audit,
         )
         translated_book = self._create_translated_book(
             book,
@@ -3144,14 +4810,27 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
             html_content,
             translation_audit,
             include_linked_recipes,
+            (
+                TRANSLATION_COMPLETED
+                if translation_audit["passed"]
+                else TRANSLATION_PARTIAL_FAILED
+            ),
+            visual_assets_dir,
+            visual_assets_by_page,
         )
-        del html_content, linked_recipe_sections, translated_records
+        del html_content, linked_recipe_sections, translated_records, visual_assets_by_page
         if classify:
-            await self._classify_translated_book(
-                translated_book,
-                uploaded_books_root,
-                target_language,
-            )
+            try:
+                await self._classify_translated_book(
+                    translated_book,
+                    uploaded_books_root,
+                    target_language,
+                )
+            except Exception:
+                self.logger.warning(
+                    f"Translated book {translated_book.id} was saved, but AI classification failed",
+                    exc_info=True,
+                )
         book.translated_book_id = translated_book.id
         return translated_book
 
@@ -3252,6 +4931,8 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
             classify=False,
         )
         if translated_book is not None:
+            if translated_book.translation_status == TRANSLATION_PARTIAL_FAILED:
+                final_status = TRANSLATION_PARTIAL_FAILED
             translated_book.translation_status = final_status
             translated_book.translation_completed_at = get_utc_now()
             self.repos.session.add(translated_book)
@@ -3322,6 +5003,25 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                 book, chunks, preserve_incomplete_attempts=resume
             )
             self._save_translation_progress(book, chunk_states, TRANSLATION_PROCESSING)
+            if (
+                resume
+                and not book.translated_book_id
+                and any(state.get("translatedChunkFile") for state in chunk_states.values())
+            ):
+                partial_snapshot = await self._assemble_translated_book(
+                    book,
+                    uploaded_books_root,
+                    target_language,
+                    chunks,
+                    chunk_states,
+                    work_dir,
+                    include_linked_recipes,
+                    classify=False,
+                )
+                if partial_snapshot is not None:
+                    partial_snapshot.translation_status = TRANSLATION_PARTIAL_FAILED
+                    self.repos.session.add(partial_snapshot)
+                    self._save_translation_progress(book, chunk_states, TRANSLATION_PROCESSING)
             if self._is_translation_cancelled(book):
                 self._set_translation_cancelled(book)
                 return
@@ -3411,6 +5111,20 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                         async with state_lock:
                             state = chunk_states[chunk.index]
                             attempts = self._state_int(state, "attempts")
+
+                            if result.error and result.pages:
+                                partial_file, partial_page_count = self._merge_partial_translation_result(
+                                    work_dir,
+                                    result,
+                                    (
+                                        state.get("translatedChunkFile")
+                                        if isinstance(state.get("translatedChunkFile"), str)
+                                        else None
+                                    ),
+                                )
+                                if partial_file:
+                                    state["translatedChunkFile"] = partial_file
+                                    state["pagesTranslated"] = partial_page_count
 
                             if result.error:
                                 if result.provider_disabled and has_usable_provider:
@@ -3502,6 +5216,8 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
                 include_linked_recipes,
             )
             final_status = TRANSLATION_PARTIAL_FAILED if failed_chunks else TRANSLATION_COMPLETED
+            if translated_book is not None and translated_book.translation_status == TRANSLATION_PARTIAL_FAILED:
+                final_status = TRANSLATION_PARTIAL_FAILED
             if translated_book is None and failed_chunks:
                 book.translation_status = final_status
                 book.translation_completed_at = get_utc_now()

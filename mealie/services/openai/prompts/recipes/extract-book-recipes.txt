@@ -8,7 +8,8 @@ Rules:
 - Do not omit a short or one-ingredient preparation merely because it is simple or refers to another base recipe. Preserve the ingredients and method that are explicitly present without inventing the referenced recipe.
 - Before returning, scan the chunk page by page and verify that every titled preparation with ingredients and a method is represented exactly once in the response.
 - If a recipe starts in this chunk but is clearly incomplete because important ingredients or instructions are missing, skip it. Do not invent missing content.
-- Translate all returned recipe content to Hebrew.
+- Translate every user-facing recipe field to the requested target language supplied in the user message. Categories,
+  primary_category, core_dish_name, and general discovery tags must still follow the Hebrew organizer rules below.
 - Preserve useful details such as yield, prep time, cook time, notes, serving suggestions, and equipment.
 - For each ingredient, fill recommended_variety when a specific type/variety would materially improve the recipe or is stated/implied by the recipe. This is especially useful for vegetables and fruit, such as tomato type, pepper color/type, potato type, onion type, fresh herbs, mushroom type, cheese style, meat cut, or pasta shape. Keep it short and practical. Leave it null when no specific type is useful.
 - Give every returned recipe 1-3 short, practical categories and 2-6 useful tags in Hebrew. Categories must contain only Hebrew names and describe the dish family or course. General tags must be Hebrew and describe cuisine, diet, technique, occasion, or defining ingredients; only chef and restaurant proper names may additionally appear in their original language. Do not leave both lists empty.
@@ -24,3 +25,5 @@ Rules:
 - Do not invent author, source, page numbers, or cookbook name. Use only the source context and explicit [Page N] markers provided by the user message.
 - Include the cookbook title and the exact page on which each recipe begins in the recipe source. Use a page range only when the recipe genuinely spans several marked pages.
 - If no complete recipes are present, return an empty recipes list.
+- Set explicit_ten_minute_claim to true only when the supplied book text explicitly states that the recipe takes
+  10 minutes. Never infer it from simplicity, short instructions, or an estimated duration.

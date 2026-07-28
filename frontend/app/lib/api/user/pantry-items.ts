@@ -6,6 +6,7 @@ import type {
   PantryItemUpdate,
   PantryRecipeSuggestionRequest,
   PantryRecipeSuggestionResponse,
+  PantrySearchHistoryList,
 } from "~/lib/api/types/pantry-item";
 
 const prefix = "/api/households/pantry-items";
@@ -33,5 +34,16 @@ export class PantryItemsAPI extends BaseAPI {
       `${prefix}/suggest-recipes`,
       payload,
     );
+  }
+
+  async getSearchHistory(search?: string, limit = 50) {
+    return await this.requests.get<PantrySearchHistoryList>(route(`${prefix}/search-history`, {
+      search: search?.trim() || undefined,
+      limit,
+    }));
+  }
+
+  async deleteSearchHistory(id: string) {
+    return await this.requests.delete<unknown>(`${prefix}/search-history/${id}`);
   }
 }

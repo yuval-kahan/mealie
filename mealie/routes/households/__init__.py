@@ -11,6 +11,7 @@ from . import (
     controller_mealplan,
     controller_mealplan_rules,
     controller_pantry_items,
+    controller_product_knowledge,
     controller_restaurants,
     controller_shopping_lists,
     controller_shopping_websites,
@@ -29,6 +30,7 @@ router.include_router(controller_household_self_service.router)
 router.include_router(controller_invitations.router)
 router.include_router(controller_linked_resources.router)
 router.include_router(controller_pantry_items.router)
+router.include_router(controller_product_knowledge.router)
 router.include_router(controller_restaurants.router)
 router.include_router(controller_shopping_lists.router)
 router.include_router(controller_shopping_lists.item_router)

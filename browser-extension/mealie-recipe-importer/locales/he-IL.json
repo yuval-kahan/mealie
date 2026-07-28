@@ -34,7 +34,14 @@
     "extract-mode": "מה לחלץ",
     "interface-language": "שפת ממשק",
     "automatic-language": "אוטומטי (שפת אתר Mealie, ולאחר מכן שפת הדפדפן)",
-    "translation-language": "שפת תרגום"
+    "translation-language": "שפת תרגום",
+    "website-type": "סוג האתר השמור"
+  },
+  "website-type": {
+    "auto": "זיהוי אוטומטי",
+    "recipe": "אתר מתכונים",
+    "shopping": "אתר קניות",
+    "both": "מתכונים וקניות"
   },
   "mode": {
     "auto": "זיהוי אוטומטי",

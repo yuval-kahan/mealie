@@ -1,0 +1,518 @@
+<template>
+  <v-container class="product-knowledge-page">
+    <BaseDialog
+      v-model="editorOpen"
+      :title="editingItem ? $t('product-knowledge.edit') : $t('product-knowledge.create')"
+      :icon="$globals.icons.informationOutline"
+      width="860"
+      max-width="96vw"
+      can-submit
+      keep-open
+      :loading="saving"
+      :submit-disabled="!canSubmit"
+      @submit="submitItem"
+      @close="resetEditor"
+    >
+      <v-card-text class="pt-4">
+        <v-tabs
+          v-if="!editingItem"
+          v-model="createMode"
+          color="primary"
+          density="comfortable"
+        >
+          <v-tab value="manual">
+            {{ $t("product-knowledge.manual") }}
+          </v-tab>
+          <v-tab value="ai">
+            {{ $t("product-knowledge.ai-explanation") }}
+          </v-tab>
+        </v-tabs>
+
+        <v-window
+          v-model="createMode"
+          class="mt-4"
+        >
+          <v-window-item value="manual">
+            <v-text-field
+              v-model="form.title"
+              :label="$t('product-knowledge.title')"
+              variant="outlined"
+              density="comfortable"
+              autofocus
+            />
+            <v-text-field
+              v-model="form.source"
+              :label="$t('product-knowledge.source')"
+              variant="outlined"
+              density="comfortable"
+            />
+            <v-textarea
+              v-model="form.summary"
+              :label="$t('product-knowledge.summary')"
+              variant="outlined"
+              rows="3"
+            />
+            <v-textarea
+              v-model="form.content"
+              :label="$t('product-knowledge.content')"
+              variant="outlined"
+              rows="12"
+            />
+            <ArticleOrganizerInputs
+              v-model:categories="form.categories"
+              v-model:tags="form.tags"
+              :category-items="categoryOptions"
+              :tag-items="tagOptions"
+            />
+          </v-window-item>
+
+          <v-window-item value="ai">
+            <v-textarea
+              v-model="aiTopic"
+              :label="$t('product-knowledge.ai-topic')"
+              :hint="$t('product-knowledge.ai-topic-hint')"
+              persistent-hint
+              variant="outlined"
+              rows="8"
+              autofocus
+            />
+            <v-text-field
+              :model-value="targetLanguage"
+              :label="$t('product-knowledge.target-language')"
+              variant="outlined"
+              density="comfortable"
+              readonly
+              class="mt-4"
+            />
+          </v-window-item>
+        </v-window>
+      </v-card-text>
+    </BaseDialog>
+
+    <BaseDialog
+      v-model="detailsOpen"
+      :title="selectedItem?.title || $t('product-knowledge.products-and-explanations')"
+      :icon="$globals.icons.informationOutline"
+      width="900"
+      max-width="96vw"
+    >
+      <v-card-text v-if="selectedItem" class="product-details">
+        <p v-if="selectedItem.summary" class="text-subtitle-1 mb-4">
+          {{ selectedItem.summary }}
+        </p>
+        <SafeMarkdown :source="selectedItem.content" />
+        <a
+          v-if="selectedItem.source"
+          :href="isWebUrl(selectedItem.source) ? selectedItem.source : undefined"
+          :target="isWebUrl(selectedItem.source) ? '_blank' : undefined"
+          :rel="isWebUrl(selectedItem.source) ? 'noopener noreferrer' : undefined"
+          class="d-block mt-5"
+        >
+          {{ selectedItem.source }}
+        </a>
+        <div class="d-flex flex-wrap ga-1 mt-4">
+          <v-chip
+            v-for="category in selectedItem.categories"
+            :key="`detail-category-${category}`"
+            size="small"
+            color="primary"
+            variant="tonal"
+          >
+            {{ category }}
+          </v-chip>
+          <v-chip
+            v-for="tag in selectedItem.tags"
+            :key="`detail-tag-${tag}`"
+            size="small"
+            color="accent"
+            variant="tonal"
+          >
+            {{ tag }}
+          </v-chip>
+        </div>
+      </v-card-text>
+      <template #custom-card-action>
+        <v-btn
+          v-if="selectedItem"
+          color="primary"
+          variant="text"
+          :prepend-icon="$globals.icons.edit"
+          @click="editSelectedItem"
+        >
+          {{ $t("general.edit") }}
+        </v-btn>
+      </template>
+    </BaseDialog>
+
+    <BaseDialog
+      v-model="deleteOpen"
+      :title="$t('general.confirm')"
+      :icon="$globals.icons.delete"
+      color="error"
+      can-confirm
+      :loading="deleting"
+      @confirm="deleteItem"
+    >
+      <v-card-text>
+        {{ $t("product-knowledge.delete-confirm", { title: deletingItem?.title || "" }) }}
+      </v-card-text>
+    </BaseDialog>
+
+    <BasePageTitle divider>
+      <template #header>
+        <v-icon size="72" color="primary">
+          {{ $globals.icons.informationOutline }}
+        </v-icon>
+      </template>
+      <template #title>
+        {{ $t("product-knowledge.products-and-explanations") }}
+      </template>
+      <template #subTitle>
+        {{ $t("product-knowledge.page-description") }}
+      </template>
+    </BasePageTitle>
+
+    <div class="product-toolbar">
+      <v-text-field
+        v-model="search"
+        :label="$t('search.search')"
+        variant="outlined"
+        density="comfortable"
+        hide-details
+        clearable
+        :prepend-inner-icon="$globals.icons.search"
+      />
+      <v-combobox
+        v-model="selectedCategories"
+        :items="categoryOptions"
+        :label="$t('category.categories')"
+        variant="outlined"
+        density="comfortable"
+        hide-details
+        multiple
+        chips
+        clearable
+      />
+      <v-combobox
+        v-model="selectedTags"
+        :items="tagOptions"
+        :label="$t('tag.tags')"
+        variant="outlined"
+        density="comfortable"
+        hide-details
+        multiple
+        chips
+        clearable
+      />
+      <BaseButton create @click="openCreate" />
+    </div>
+
+    <v-row class="mt-3">
+      <v-col
+        v-for="item in filteredItems"
+        :key="item.id"
+        cols="12"
+        md="6"
+        lg="4"
+      >
+        <v-card class="product-card" @click="openDetails(item)">
+          <v-card-title class="product-card__title">
+            {{ item.title }}
+          </v-card-title>
+          <v-card-text>
+            <p class="product-card__summary">
+              {{ item.summary || item.content }}
+            </p>
+            <div class="d-flex flex-wrap ga-1">
+              <v-chip
+                v-for="category in item.categories.slice(0, 3)"
+                :key="`${item.id}-category-${category}`"
+                size="small"
+                color="primary"
+                variant="tonal"
+              >
+                {{ category }}
+              </v-chip>
+              <v-chip
+                v-for="tag in item.tags.slice(0, 4)"
+                :key="`${item.id}-tag-${tag}`"
+                size="small"
+                color="accent"
+                variant="tonal"
+              >
+                {{ tag }}
+              </v-chip>
+            </div>
+          </v-card-text>
+          <v-card-actions @click.stop>
+            <v-spacer />
+            <v-btn
+              icon
+              variant="text"
+              :title="$t('general.edit')"
+              @click="openEdit(item)"
+            >
+              <v-icon>{{ $globals.icons.edit }}</v-icon>
+            </v-btn>
+            <v-btn
+              icon
+              variant="text"
+              color="error"
+              :title="$t('general.delete')"
+              @click="openDelete(item)"
+            >
+              <v-icon>{{ $globals.icons.delete }}</v-icon>
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-col>
+    </v-row>
+
+    <v-alert
+      v-if="ready && !filteredItems.length"
+      type="info"
+      variant="tonal"
+      class="mt-4"
+    >
+      {{ $t("product-knowledge.no-items") }}
+    </v-alert>
+  </v-container>
+</template>
+
+<script setup lang="ts">
+import ArticleOrganizerInputs from "~/components/Domain/Article/ArticleOrganizerInputs.vue";
+import SafeMarkdown from "~/components/global/SafeMarkdown.vue";
+import { useUserApi } from "~/composables/api/api-client";
+import { alert } from "~/composables/use-toast";
+import type {
+  ProductKnowledge,
+  ProductKnowledgeCreate,
+} from "~/lib/api/types/product-knowledge";
+
+const i18n = useI18n();
+const { $globals } = useNuxtApp();
+const api = useUserApi();
+
+useSeoMeta({
+  title: i18n.t("product-knowledge.products-and-explanations"),
+});
+
+const ready = ref(false);
+const items = ref<ProductKnowledge[]>([]);
+const editorOpen = ref(false);
+const detailsOpen = ref(false);
+const deleteOpen = ref(false);
+const saving = ref(false);
+const deleting = ref(false);
+const editingItem = ref<ProductKnowledge | null>(null);
+const selectedItem = ref<ProductKnowledge | null>(null);
+const deletingItem = ref<ProductKnowledge | null>(null);
+const createMode = ref<"manual" | "ai">("manual");
+const aiTopic = ref("");
+const search = ref("");
+const selectedCategories = ref<string[]>([]);
+const selectedTags = ref<string[]>([]);
+
+const form = reactive<ProductKnowledgeCreate>({
+  title: "",
+  summary: "",
+  content: "",
+  source: "",
+  categories: [],
+  tags: [],
+});
+
+const targetLanguage = computed(() => {
+  const locale = String(i18n.locale.value || "").toLocaleLowerCase();
+  return locale.startsWith("he")
+    ? i18n.t("cookbook.language-hebrew")
+    : i18n.t("cookbook.language-english");
+});
+const categoryOptions = computed(() => sortedUnique(items.value.flatMap(item => item.categories)));
+const tagOptions = computed(() => sortedUnique(items.value.flatMap(item => item.tags)));
+const canSubmit = computed(() => {
+  if (editingItem.value || createMode.value === "manual") {
+    return Boolean(form.title.trim() && form.content.trim());
+  }
+  return Boolean(aiTopic.value.trim());
+});
+const filteredItems = computed(() => {
+  const query = search.value.trim().toLocaleLowerCase();
+  const categories = new Set(selectedCategories.value.map(value => value.toLocaleLowerCase()));
+  const tags = new Set(selectedTags.value.map(value => value.toLocaleLowerCase()));
+  return items.value.filter((item) => {
+    const haystack = [
+      item.title,
+      item.summary,
+      item.content,
+      item.source,
+      item.categories.join(" "),
+      item.tags.join(" "),
+    ].join(" ").toLocaleLowerCase();
+    const itemCategories = item.categories.map(value => value.toLocaleLowerCase());
+    const itemTags = item.tags.map(value => value.toLocaleLowerCase());
+    return (!query || haystack.includes(query))
+      && (!categories.size || itemCategories.some(value => categories.has(value)))
+      && (!tags.size || itemTags.some(value => tags.has(value)));
+  });
+});
+
+onMounted(refreshItems);
+
+function sortedUnique(values: string[]) {
+  return Array.from(new Set(values.map(value => value.trim()).filter(Boolean)))
+    .sort((a, b) => a.localeCompare(b));
+}
+
+function isWebUrl(value: string | null | undefined) {
+  return /^https?:\/\//i.test(String(value || "").trim());
+}
+
+async function refreshItems() {
+  const { data, error } = await api.productKnowledge.getAll();
+  if (error || !data) {
+    alert.error(i18n.t("events.something-went-wrong"));
+  }
+  else {
+    items.value = data;
+  }
+  ready.value = true;
+}
+
+function resetEditor() {
+  editingItem.value = null;
+  createMode.value = "manual";
+  aiTopic.value = "";
+  form.title = "";
+  form.summary = "";
+  form.content = "";
+  form.source = "";
+  form.categories = [];
+  form.tags = [];
+}
+
+function openCreate() {
+  resetEditor();
+  editorOpen.value = true;
+}
+
+function openEdit(item: ProductKnowledge) {
+  resetEditor();
+  editingItem.value = item;
+  form.title = item.title;
+  form.summary = item.summary || "";
+  form.content = item.content;
+  form.source = item.source || "";
+  form.categories = [...item.categories];
+  form.tags = [...item.tags];
+  editorOpen.value = true;
+}
+
+function openDetails(item: ProductKnowledge) {
+  selectedItem.value = item;
+  detailsOpen.value = true;
+}
+
+function editSelectedItem() {
+  if (!selectedItem.value) return;
+  const item = selectedItem.value;
+  detailsOpen.value = false;
+  openEdit(item);
+}
+
+function openDelete(item: ProductKnowledge) {
+  deletingItem.value = item;
+  deleteOpen.value = true;
+}
+
+async function submitItem() {
+  saving.value = true;
+  const result = await (async () => {
+    if (editingItem.value) {
+      return await api.productKnowledge.updateOne(editingItem.value.id, form);
+    }
+    if (createMode.value === "manual") {
+      return await api.productKnowledge.createOne(form);
+    }
+    return await api.productKnowledge.createWithAI({
+      topic: aiTopic.value,
+      targetLanguage: targetLanguage.value,
+    });
+  })().finally(() => {
+    saving.value = false;
+  });
+
+  if (result.error || !result.data) {
+    alert.error(i18n.t("events.something-went-wrong"));
+    return;
+  }
+  editorOpen.value = false;
+  resetEditor();
+  await refreshItems();
+}
+
+async function deleteItem() {
+  if (!deletingItem.value) return;
+  deleting.value = true;
+  const { error } = await api.productKnowledge.deleteOne(deletingItem.value.id).finally(() => {
+    deleting.value = false;
+  });
+  if (error) {
+    alert.error(i18n.t("events.something-went-wrong"));
+    return;
+  }
+  deleteOpen.value = false;
+  deletingItem.value = null;
+  await refreshItems();
+}
+</script>
+
+<style scoped>
+.product-knowledge-page {
+  max-width: 1180px;
+}
+
+.product-toolbar {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(220px, 1fr) minmax(160px, 240px) minmax(160px, 240px) auto;
+  margin-top: 18px;
+}
+
+.product-card {
+  border-radius: 8px;
+  cursor: pointer;
+  height: 100%;
+}
+
+.product-card__title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  min-height: 64px;
+  overflow: hidden;
+  white-space: normal;
+}
+
+.product-card__summary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  line-clamp: 5;
+  min-height: 108px;
+  overflow: hidden;
+  white-space: pre-wrap;
+}
+
+.product-details {
+  max-height: min(70vh, 760px);
+  overflow-y: auto;
+}
+
+@media (max-width: 960px) {
+  .product-toolbar {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

@@ -132,58 +132,81 @@
     </v-row>
     <div v-if="recipes && ready">
       <div class="mt-2">
-        <v-row v-if="!useMobileCards">
-          <v-col
-            v-for="recipe in recipes"
-            :key="recipe.id!"
-            :sm="6"
-            :md="6"
-            :lg="4"
-            :xl="3"
-          >
-            <RecipeCard
-              :name="recipe.name!"
-              :description="recipe.description!"
-              :slug="recipe.slug!"
-              :rating="recipe.rating!"
-              :image="recipe.image!"
-              :tags="recipe.tags!"
-              :categories="recipe.recipeCategory!"
-              :recipe-id="recipe.id!"
-              :extras="recipe.extras"
-              @delete="$emit('delete', $event)"
-              @renamed="$emit('renamed', $event)"
-            />
-          </v-col>
-        </v-row>
-        <v-row
-          v-else
-          density="comfortable"
+        <template
+          v-for="group in recipeGroups"
+          :key="group.key"
         >
-          <v-col
-            v-for="recipe in recipes"
-            :key="recipe.id!"
-            cols="12"
-            :sm="singleColumn ? '12' : '12'"
-            :md="singleColumn ? '12' : '6'"
-            :lg="singleColumn ? '12' : '4'"
-            :xl="singleColumn ? '12' : '3'"
+          <button
+            v-if="showBookGroups"
+            type="button"
+            class="recipe-book-group"
+            :aria-expanded="isBookGroupExpanded(group.key)"
+            @click="toggleBookGroup(group.key)"
           >
-            <RecipeCardMobile
-              :name="recipe.name!"
-              :description="recipe.description!"
-              :slug="recipe.slug!"
-              :rating="recipe.rating!"
-              :image="recipe.image!"
-              :tags="recipe.tags!"
-              :categories="recipe.recipeCategory!"
-              :recipe-id="recipe.id!"
-              :extras="recipe.extras"
-              @delete="$emit('delete', $event)"
-              @renamed="$emit('renamed', $event)"
-            />
-          </v-col>
-        </v-row>
+            <v-icon>
+              {{ isBookGroupExpanded(group.key) ? $globals.icons.chevronDown : $globals.icons.chevronRight }}
+            </v-icon>
+            <v-icon>{{ group.bookId ? $globals.icons.book : $globals.icons.silverwareForkKnife }}</v-icon>
+            <strong>{{ group.title }}</strong>
+            <span>{{ group.recipes.length }}</span>
+          </button>
+          <v-expand-transition>
+            <div v-show="!showBookGroups || isBookGroupExpanded(group.key)">
+              <v-row v-if="!useMobileCards">
+                <v-col
+                  v-for="recipe in group.recipes"
+                  :key="recipe.id!"
+                  :sm="6"
+                  :md="6"
+                  :lg="4"
+                  :xl="3"
+                >
+                  <RecipeCard
+                    :name="recipe.name!"
+                    :description="recipe.description!"
+                    :slug="recipe.slug!"
+                    :rating="recipe.rating!"
+                    :image="recipe.image!"
+                    :tags="recipe.tags!"
+                    :categories="recipe.recipeCategory!"
+                    :recipe-id="recipe.id!"
+                    :extras="recipe.extras"
+                    @delete="$emit('delete', $event)"
+                    @renamed="$emit('renamed', $event)"
+                  />
+                </v-col>
+              </v-row>
+              <v-row
+                v-else
+                density="comfortable"
+              >
+                <v-col
+                  v-for="recipe in group.recipes"
+                  :key="recipe.id!"
+                  cols="12"
+                  :sm="singleColumn ? '12' : '12'"
+                  :md="singleColumn ? '12' : '6'"
+                  :lg="singleColumn ? '12' : '4'"
+                  :xl="singleColumn ? '12' : '3'"
+                >
+                  <RecipeCardMobile
+                    :name="recipe.name!"
+                    :description="recipe.description!"
+                    :slug="recipe.slug!"
+                    :rating="recipe.rating!"
+                    :image="recipe.image!"
+                    :tags="recipe.tags!"
+                    :categories="recipe.recipeCategory!"
+                    :recipe-id="recipe.id!"
+                    :extras="recipe.extras"
+                    @delete="$emit('delete', $event)"
+                    @renamed="$emit('renamed', $event)"
+                  />
+                </v-col>
+              </v-row>
+            </div>
+          </v-expand-transition>
+        </template>
       </div>
       <v-card v-intersect="infiniteScroll" variant="flat" />
     </div>
@@ -206,6 +229,8 @@ import { useLazyRecipes } from "~/composables/recipes";
 import type { Recipe } from "~/lib/api/types/recipe";
 import { useUserExperiencePreferences, useUserSortPreferences } from "~/composables/use-users/preferences";
 import type { RecipeSearchQuery } from "~/lib/api/user/recipes/recipe";
+import { useUserApi } from "~/composables/api/api-client";
+import type { UploadedBook } from "~/lib/api/types/uploaded-book";
 
 const REPLACE_RECIPES_EVENT = "replaceRecipes";
 const APPEND_RECIPES_EVENT = "appendRecipes";
@@ -251,6 +276,10 @@ const EVENTS = {
 
 const { $globals } = useNuxtApp();
 const { isOwnGroup, groupSlug } = useLoggedInState();
+const i18n = useI18n();
+const api = useUserApi();
+const uploadedBooks = ref<UploadedBook[]>([]);
+const expandedBookGroups = ref<Set<string>>(new Set());
 const aiCookbookRoute = computed(() => `/g/${groupSlug.value}/cookbooks?generate=true`);
 const useMobileCards = computed(() => {
   return display.smAndDown.value || preferences.value.useMobileCards;
@@ -269,6 +298,69 @@ const perPage = 32;
 const hasMore = ref(true);
 const ready = ref(false);
 const loading = ref(false);
+
+interface RecipeBookGroup {
+  key: string;
+  bookId: string | null;
+  title: string;
+  recipes: Recipe[];
+}
+
+const recipeGroups = computed<RecipeBookGroup[]>(() => {
+  const bookNames = new Map(uploadedBooks.value.map(book => [book.id, book.name]));
+  const groups = new Map<string, RecipeBookGroup>();
+  const unlinked: Recipe[] = [];
+
+  for (const recipe of props.recipes) {
+    const rawBookId = recipe.extras?.uploadedBookSourceId;
+    const bookId = typeof rawBookId === "string" ? rawBookId.trim() : "";
+    if (!bookId) {
+      unlinked.push(recipe);
+      continue;
+    }
+    let group = groups.get(bookId);
+    if (!group) {
+      group = {
+        key: `book:${bookId}`,
+        bookId,
+        title: i18n.t("recipe.recipes-from-book", {
+          book: bookNames.get(bookId) || i18n.t("cookbook.cookbook"),
+        }),
+        recipes: [],
+      };
+      groups.set(bookId, group);
+    }
+    group.recipes.push(recipe);
+  }
+
+  const result = Array.from(groups.values());
+  if (unlinked.length) {
+    result.push({
+      key: "unlinked",
+      bookId: null,
+      title: i18n.t("recipe.recipes-not-from-book"),
+      recipes: unlinked,
+    });
+  }
+  return result;
+});
+const showBookGroups = computed(() => recipeGroups.value.some(group => Boolean(group.bookId)));
+
+watch(
+  () => recipeGroups.value.map(group => group.key),
+  (keys) => {
+    const next = new Set(expandedBookGroups.value);
+    const currentKeys = new Set(keys);
+    for (const key of keys) {
+      if (!next.has(key)) next.add(key);
+    }
+    for (const key of next) {
+      if (!currentKeys.has(key)) next.delete(key);
+    }
+    expandedBookGroups.value = next;
+  },
+  { immediate: true },
+);
 
 const { fetchMore, getRandom } = useLazyRecipes(isOwnGroup.value ? null : groupSlug.value);
 const { savePosition, getSavedPage, restorePosition } = useScrollPosition();
@@ -312,6 +404,9 @@ async function fetchRecipes(pageCount = 1) {
 }
 
 onMounted(async () => {
+  if (isOwnGroup.value) {
+    void loadUploadedBooks();
+  }
   loading.value = true;
   try {
     const savedPage = getSavedPage(route.path);
@@ -343,6 +438,28 @@ onMounted(async () => {
     loading.value = false;
   }
 });
+
+async function loadUploadedBooks() {
+  try {
+    const { data } = await api.uploadedBooks.getAll();
+    uploadedBooks.value = data || [];
+  }
+  catch (error) {
+    console.error("Failed to load uploaded books for recipe grouping", error);
+    uploadedBooks.value = [];
+  }
+}
+
+function isBookGroupExpanded(key: string) {
+  return expandedBookGroups.value.has(key);
+}
+
+function toggleBookGroup(key: string) {
+  const next = new Set(expandedBookGroups.value);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  expandedBookGroups.value = next;
+}
 
 let lastQuery: string | undefined = JSON.stringify(props.query);
 watch(
@@ -507,8 +624,34 @@ function toggleMobileCards() {
 }
 </script>
 
-<style>
+<style scoped>
 .transparent {
   opacity: 1;
+}
+
+.recipe-book-group {
+  align-items: center;
+  background: rgb(var(--v-theme-surface));
+  border: 0;
+  border-block: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  gap: 8px;
+  margin: 12px 0 4px;
+  min-height: 44px;
+  padding: 8px 4px;
+  text-align: start;
+  width: 100%;
+}
+
+.recipe-book-group:hover,
+.recipe-book-group:focus-visible {
+  background: rgba(var(--v-theme-primary), 0.06);
+}
+
+.recipe-book-group span {
+  color: rgb(var(--v-theme-on-surface-variant));
+  margin-inline-start: auto;
 }
 </style>

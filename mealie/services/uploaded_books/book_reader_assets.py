@@ -92,22 +92,44 @@ def book_reader_css(direction: str) -> str:
       width: 17px;
     }
     .chapter-checkbox:focus-visible { outline: 2px solid #2e7d32; outline-offset: 2px; }
+    .reader-tools {
+      align-items: stretch;
+      border-bottom: 1px solid #dfd4c4;
+      display: flex;
+      flex: 0 0 auto;
+      flex-direction: column;
+      gap: 6px;
+      max-height: min(62vh, 640px);
+      pointer-events: auto;
+      position: relative;
+      width: 100%;
+      z-index: 1;
+    }
+    .reader-tools__toggles {
+      align-items: center;
+      box-sizing: border-box;
+      display: flex;
+      gap: 6px;
+      justify-content: flex-start;
+      padding: 6px;
+      width: 100%;
+    }
     .reader-panel {
       background: rgba(255, 253, 248, 0.98);
       border: 1px solid #d9cebc;
       border-radius: 6px;
+      box-sizing: border-box;
       box-shadow: 0 8px 26px rgba(61, 45, 29, 0.16);
       direction: __DIRECTION__;
       font-family: Arial, Helvetica, sans-serif;
       overflow: hidden;
-      position: fixed;
-      right: 12px;
-      width: 300px;
-      z-index: 32;
+      pointer-events: auto;
+      position: relative;
+      margin: 0 6px 6px;
+      width: calc(100% - 12px);
     }
-    .reader-settings { top: 64px; }
-    .reader-annotations { bottom: 12px; max-height: min(62vh, 620px); }
-    .reader-panel.is-collapsed { width: 48px; }
+    .reader-annotations { max-height: min(52vh, 560px); }
+    .reader-panel.is-collapsed { display: none; }
     .reader-panel__header {
       align-items: center;
       display: flex;
@@ -116,7 +138,7 @@ def book_reader_css(direction: str) -> str:
       padding: 6px;
     }
     .reader-panel__header strong { flex: 1; font-size: 14px; }
-    .reader-panel__toggle {
+    .reader-panel__toggle, .reader-tool-toggle {
       align-items: center;
       background: transparent;
       border: 0;
@@ -130,7 +152,14 @@ def book_reader_css(direction: str) -> str:
       justify-content: center;
       width: 34px;
     }
+    .reader-tool-toggle {
+      background: rgba(255, 253, 248, 0.98);
+      border: 1px solid #d9cebc;
+      box-shadow: 0 4px 14px rgba(61, 45, 29, 0.14);
+    }
     .reader-panel__toggle:hover, .reader-panel__toggle:focus-visible,
+    .reader-tool-toggle:hover, .reader-tool-toggle:focus-visible,
+    .reader-tool-toggle[aria-expanded="true"],
     .reader-action:hover, .reader-action:focus-visible {
       background: #f1e5d6;
       outline: 2px solid #b95f35;
@@ -138,14 +167,12 @@ def book_reader_css(direction: str) -> str:
     }
     .reader-panel__body {
       border-top: 1px solid #dfd4c4;
-      max-height: calc(62vh - 46px);
+      max-height: min(34vh, 420px);
       overflow: auto;
       overscroll-behavior: contain;
       padding: 12px;
       scrollbar-gutter: stable;
     }
-    .reader-panel.is-collapsed .reader-panel__header strong,
-    .reader-panel.is-collapsed .reader-panel__body { display: none; }
     .reader-field { display: grid; gap: 5px; margin-bottom: 12px; }
     .reader-field label { font-size: 12px; font-weight: 700; }
     .reader-field input[type="range"], .reader-field select,
@@ -213,21 +240,25 @@ def book_reader_css(direction: str) -> str:
     .progress-chapters__row { display: flex; font-size: 12px; justify-content: space-between; }
     .progress-chapters__fill { background: #2e7d32; }
     @media (max-width: 720px) {
-      .reader-panel { max-width: calc(100vw - 16px); right: 8px; }
-      .reader-settings { top: 58px; }
-      .reader-annotations { bottom: 8px; }
+      .reader-tools { max-height: min(58vh, 560px); }
+      .reader-panel { max-width: calc(100% - 12px); }
     }
-    @media print { .reader-panel { display: none; } }
+    @media print { .reader-tools { display: none; } }
     """.replace("__DIRECTION__", direction)
 
 
 def book_reader_panels(labels: dict[str, str]) -> str:
     escaped = {key: html.escape(value) for key, value in labels.items()}
     return f"""
+  <div class="reader-tools">
+  <div class="reader-tools__toggles" aria-label="{escaped['settings']}">
+    <button class="reader-tool-toggle" id="readerSettingsToggle" type="button"
+      aria-controls="readerSettings" aria-expanded="false" title="{escaped['open_settings']}">Aa</button>
+    <button class="reader-tool-toggle" id="readerAnnotationsToggle" type="button"
+      aria-controls="readerAnnotations" aria-expanded="false" title="{escaped['open_annotations']}">✎</button>
+  </div>
   <aside class="reader-panel reader-settings is-collapsed" id="readerSettings" aria-label="{escaped['settings']}">
     <div class="reader-panel__header">
-      <button class="reader-panel__toggle" id="readerSettingsToggle" type="button"
-        aria-expanded="false" title="{escaped['open_settings']}">Aa</button>
       <strong>{escaped['settings']}</strong>
     </div>
     <div class="reader-panel__body">
@@ -254,8 +285,6 @@ def book_reader_panels(labels: dict[str, str]) -> str:
   </aside>
   <aside class="reader-panel reader-annotations is-collapsed" id="readerAnnotations" aria-label="{escaped['annotations']}">
     <div class="reader-panel__header">
-      <button class="reader-panel__toggle" id="readerAnnotationsToggle" type="button"
-        aria-expanded="false" title="{escaped['open_annotations']}">✎</button>
       <strong>{escaped['annotations']}</strong>
     </div>
     <div class="reader-panel__body">
@@ -276,6 +305,7 @@ def book_reader_panels(labels: dict[str, str]) -> str:
       <ul class="reader-annotation-list" id="readerAnnotationList"></ul>
     </div>
   </aside>
+  </div>
     """
 
 

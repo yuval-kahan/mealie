@@ -43,3 +43,5 @@ Rules:
 - When a source URL is present, never discard it. Include both a concise human-readable source name and the complete URL in the source value.
 - Ignore advertising, navigation, comments, and unrelated page boilerplate.
 - Do not force unrelated text into a recipe.
+- Set explicit_ten_minute_claim to true only when the supplied text explicitly states that the recipe takes
+  10 minutes. Never infer it from simplicity or estimated timing.

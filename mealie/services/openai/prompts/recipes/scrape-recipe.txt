@@ -7,3 +7,6 @@ You will receive the webpage contents, including (but not necessarily limited to
 If the page explicitly includes a source, such as a website, blog, article, TV show, magazine, book, or page number, put it in the source field. If it explicitly credits a chef, author, book, show, publisher, channel, or organization, put that in the created_by field. Do not invent source or creator details.
 
 For each ingredient, fill recommended_variety when a specific type/variety would materially improve the recipe or is stated/implied by the recipe. This is especially useful for vegetables and fruit, such as tomato type, pepper color/type, potato type, onion type, fresh herbs, mushroom type, cheese style, meat cut, or pasta shape. Keep it short and practical. Leave it null when no specific type is useful.
+
+Set explicit_ten_minute_claim to true only when the webpage explicitly states that the recipe takes 10 minutes.
+Never infer it from simplicity, short instructions, or estimated timing.

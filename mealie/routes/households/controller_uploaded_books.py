@@ -27,6 +27,9 @@ from mealie.schema.cookbook.uploaded_book import (
     UploadedBookOut,
     UploadedBookReadingStateOut,
     UploadedBookReadingStateUpdate,
+    UploadedBookRecipeCatalogImportRequest,
+    UploadedBookRecipeCatalogRequest,
+    UploadedBookRecipeCatalogResponse,
     UploadedBookRecipeDeleteRequest,
     UploadedBookRecipeDeleteResponse,
     UploadedBookRecipeSummary,
@@ -665,7 +668,7 @@ class UploadedBooksController(BasePublicController):
         self._assert_valid_page_range(data.page_start, data.page_end)
 
         resume = (
-            book.translation_status == "partial_failed"
+            book.translation_status in {"partial_failed", "failed"}
             and book.translation_pages_per_chunk == data.pages_per_chunk
             and (book.translation_language or data.target_language) == data.target_language
             and book.translation_page_start == data.page_start
@@ -974,6 +977,29 @@ class UploadedBooksController(BasePublicController):
             headers={"Cache-Control": "public, max-age=86400", "X-Content-Type-Options": "nosniff"},
         )
 
+    @router.get("/{book_id}/assets/{file_name}", response_class=FileResponse)
+    def get_translated_book_asset(self, book_id: UUID4, file_name: str) -> FileResponse:
+        book = self._get_book_or_404(book_id)
+        if not book.is_translated_book or book.extension not in {".htm", ".html"}:
+            raise HTTPException(status.HTTP_404_NOT_FOUND)
+        if Path(file_name).name != file_name or not file_name.endswith(".webp"):
+            raise HTTPException(status.HTTP_404_NOT_FOUND)
+
+        book_dir = self._book_dir_path(book).resolve()
+        assets_dir = book_dir.joinpath("assets").resolve()
+        path = assets_dir.joinpath(file_name).resolve()
+        if not assets_dir.is_relative_to(book_dir) or not path.is_relative_to(assets_dir) or not path.is_file():
+            raise HTTPException(status.HTTP_404_NOT_FOUND)
+        return FileResponse(
+            path,
+            media_type="image/webp",
+            content_disposition_type="inline",
+            headers={
+                "Cache-Control": "private, max-age=86400",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
     @router.post("/{book_id}/cover", response_model=UploadedBookOut)
     async def upload_book_cover(self, book_id: UUID4, image: UploadFile = File(...)) -> UploadedBookOut:
         book = self._get_book_or_404(book_id)
@@ -988,6 +1014,82 @@ class UploadedBooksController(BasePublicController):
         except ValueError as error:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
         return UploadedBookOut.model_validate(book)
+
+    @router.post("/{book_id}/recipe-catalog", response_model=UploadedBookRecipeCatalogResponse)
+    async def discover_recipe_catalog(
+        self,
+        book_id: UUID4,
+        data: UploadedBookRecipeCatalogRequest,
+    ) -> UploadedBookRecipeCatalogResponse:
+        self._get_book_or_404(book_id)
+        try:
+            result = await UploadedBookRecipeExtractor(
+                self.repos,
+                self.user,
+                self.household,
+                self.translator,
+            ).discover_recipe_catalog(
+                book_id,
+                self.folders.DATA_DIR.joinpath("uploaded-books"),
+                data.query,
+                data.target_language,
+                data.refresh,
+            )
+        except ValueError as error:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+        return UploadedBookRecipeCatalogResponse.model_validate(result)
+
+    @router.post(
+        "/{book_id}/recipe-catalog/import",
+        response_model=UploadedBookOut,
+        status_code=status.HTTP_202_ACCEPTED,
+    )
+    def import_recipe_catalog_selection(
+        self,
+        book_id: UUID4,
+        data: UploadedBookRecipeCatalogImportRequest,
+        bg_tasks: BackgroundTasks,
+    ) -> UploadedBookOut:
+        requested_book = self._get_book_or_404(book_id)
+        source_book = (
+            self._get_book_or_404(requested_book.translated_from_book_id)
+            if requested_book.is_translated_book and requested_book.translated_from_book_id
+            else requested_book
+        )
+        if source_book.extraction_status in {"processing", "retrying"}:
+            raise HTTPException(status.HTTP_409_CONFLICT, detail="Book extraction is already running")
+        if source_book.translation_status in {"processing", "retrying"}:
+            raise HTTPException(status.HTTP_409_CONFLICT, detail="Book translation is already running")
+
+        source_book.extraction_status = "processing"
+        source_book.extraction_translate_language = data.target_language
+        source_book.extraction_total_chunks = len(data.candidate_ids)
+        source_book.extraction_completed_chunks = 0
+        source_book.extraction_failed_chunks = 0
+        source_book.extraction_recipes_found = 0
+        source_book.extraction_recipes_created = 0
+        source_book.extraction_error = None
+        source_book.extraction_started_at = get_utc_now()
+        source_book.extraction_completed_at = None
+        self.session.add(source_book)
+        self.session.commit()
+        self.session.refresh(source_book)
+
+        extractor = UploadedBookRecipeExtractor(self.repos, self.user, self.household, self.translator)
+        bg_tasks.add_task(
+            extractor.extract_selected_recipes,
+            requested_book.id,
+            self.folders.DATA_DIR.joinpath("uploaded-books"),
+            data.candidate_ids,
+            data.target_language,
+            data.auto_recipe_images,
+            data.include_item_images,
+            data.include_ai_tips,
+            data.create_shopping_lists,
+            data.organize_shopping_lists_with_ai,
+            data.allow_duplicate_recipes,
+        )
+        return UploadedBookOut.model_validate(source_book)
 
     @router.post("/{book_id}/cover-url", response_model=UploadedBookOut)
     async def save_book_cover_url(

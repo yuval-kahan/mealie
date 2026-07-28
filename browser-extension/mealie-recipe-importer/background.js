@@ -250,6 +250,7 @@ async function saveWebsiteFromUrl(payload) {
       url: extraction.url,
       page_title: extraction.title,
       page_text: extraction.markdown,
+      ...websiteTypeOverrides(payload?.websiteType),
     }),
   });
   const body = await safeJson(response);
@@ -258,6 +259,19 @@ async function saveWebsiteFromUrl(payload) {
   }
 
   return withExtractionPreview({ ok: true, website: body }, extraction);
+}
+
+function websiteTypeOverrides(value) {
+  if (value === "recipe") {
+    return { is_recipe_site: true, is_shopping_site: false };
+  }
+  if (value === "shopping") {
+    return { is_recipe_site: false, is_shopping_site: true };
+  }
+  if (value === "both") {
+    return { is_recipe_site: true, is_shopping_site: true };
+  }
+  return {};
 }
 
 async function saveRestaurantFromUrl(payload) {

@@ -30,6 +30,9 @@
           <v-tab value="ai-link">
             {{ $t("article.ai-link") }}
           </v-tab>
+          <v-tab value="ai-question">
+            {{ $t("article.ai-question") }}
+          </v-tab>
         </v-tabs>
 
         <v-window
@@ -119,9 +122,28 @@
               readonly
             />
           </v-window-item>
+
+          <v-window-item value="ai-question">
+            <v-textarea
+              v-model="aiQuestion"
+              :label="$t('article.question-or-topic')"
+              :hint="$t('article.question-or-topic-hint')"
+              persistent-hint
+              variant="outlined"
+              rows="10"
+            />
+            <v-text-field
+              :model-value="displayLanguage"
+              :label="$t('article.target-language')"
+              variant="outlined"
+              density="comfortable"
+              readonly
+              class="mt-4"
+            />
+          </v-window-item>
         </v-window>
         <div
-          v-if="!editingArticle && createMode !== 'manual'"
+          v-if="!editingArticle && (createMode === 'ai-text' || createMode === 'ai-link')"
           class="article-ai-options mt-2"
         >
           <v-checkbox
@@ -353,7 +375,7 @@ const articles = ref<Article[]>([]);
 const articleDialog = ref(false);
 const editingArticle = ref<Article | null>(null);
 const saving = ref(false);
-const createMode = ref<"manual" | "ai-text" | "ai-link">("manual");
+const createMode = ref<"manual" | "ai-text" | "ai-link" | "ai-question">("manual");
 const search = ref("");
 const selectedCategories = ref<string[]>([]);
 const selectedTags = ref<string[]>([]);
@@ -363,6 +385,7 @@ const aiSearchIds = ref<string[]>([]);
 const aiReasons = ref<Record<string, string>>({});
 const aiText = ref("");
 const aiUrl = ref("");
+const aiQuestion = ref("");
 const extractRecipeIfPresent = ref(true);
 const createShoppingListForExtractedRecipes = ref(true);
 const organizeExtractedShoppingListWithAI = ref(true);
@@ -392,7 +415,10 @@ const canSubmitArticle = computed(() => {
   if (createMode.value === "ai-text") {
     return Boolean(aiText.value.trim());
   }
-  return Boolean(aiUrl.value.trim());
+  if (createMode.value === "ai-link") {
+    return Boolean(aiUrl.value.trim());
+  }
+  return Boolean(aiQuestion.value.trim());
 });
 
 const filteredArticles = computed(() => {
@@ -483,6 +509,7 @@ function resetArticleForm() {
   form.tags = [];
   aiText.value = "";
   aiUrl.value = "";
+  aiQuestion.value = "";
   extractRecipeIfPresent.value = true;
   createShoppingListForExtractedRecipes.value = true;
   organizeExtractedShoppingListWithAI.value = true;
@@ -525,6 +552,12 @@ async function submitArticle() {
     }
     if (createMode.value === "manual") {
       return await api.articles.createOne(form);
+    }
+    if (createMode.value === "ai-question") {
+      return await api.articles.createFromQuestion({
+        question: aiQuestion.value,
+        targetLanguage: displayLanguage.value,
+      });
     }
     return await api.articles.createWithAI({
       text: createMode.value === "ai-text" ? aiText.value : null,

@@ -17,3 +17,11 @@ class OpenAIShoppingWebsite(OpenAIBase):
         default_factory=list,
         description="Other food categories or offerings that the website visibly provides.",
     )
+    is_recipe_site: bool = Field(
+        False,
+        description="True when the website publishes recipes or cooking instructions.",
+    )
+    is_shopping_site: bool = Field(
+        False,
+        description="True when the website sells, delivers, or accepts orders for food or ingredients.",
+    )

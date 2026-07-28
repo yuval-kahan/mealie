@@ -2201,7 +2201,35 @@ class OpenAIRecipeService(RecipeServiceBase):
 
         categories = self._hebrew_categories([openai_recipe.primary_category or "", *openai_recipe.categories])
         meal_periods = self._meal_periods(openai_recipe)
-        tags = [core_dish_name, *(MEAL_PERIOD_TAGS[period] for period in meal_periods), *openai_recipe.tags]
+        ten_minute_aliases = {
+            "10 minute",
+            "10 minutes",
+            "10-minute",
+            "10-minute recipe",
+            "ten minute",
+            "ten minutes",
+            "10 דקות",
+            "עשר דקות",
+            "מתכון 10 דקות",
+            "מתכון בעשר דקות",
+        }
+
+        def is_ten_minute_tag(tag: str) -> bool:
+            normalized = " ".join(str(tag).split()).strip().casefold()
+            has_ten = (
+                "10" in normalized
+                or bool(re.search(r"\bten\b", normalized))
+                or "עשר" in normalized
+            )
+            return normalized in ten_minute_aliases or (
+                has_ten
+                and any(word in normalized for word in ("minute", "minutes", "דקה", "דקות"))
+            )
+
+        supplied_tags = [tag for tag in openai_recipe.tags if not is_ten_minute_tag(tag)]
+        tags = [core_dish_name, *(MEAL_PERIOD_TAGS[period] for period in meal_periods), *supplied_tags]
+        if openai_recipe.explicit_ten_minute_claim:
+            tags.append("10 דקות")
         if openai_recipe.is_michelin_dish:
             tags.append("מישלן")
         if openai_recipe.is_gourmet_dish:

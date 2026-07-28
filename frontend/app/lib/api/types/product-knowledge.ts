@@ -1,0 +1,30 @@
+export interface ProductKnowledge {
+  id: string;
+  groupId: string;
+  householdId: string;
+  userId: string;
+  title: string;
+  summary?: string | null;
+  content: string;
+  source?: string | null;
+  categories: string[];
+  tags: string[];
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface ProductKnowledgeCreate {
+  title: string;
+  summary?: string | null;
+  content: string;
+  source?: string | null;
+  categories: string[];
+  tags: string[];
+}
+
+export type ProductKnowledgeUpdate = ProductKnowledgeCreate;
+
+export interface ProductKnowledgeAIRequest {
+  topic: string;
+  targetLanguage?: string | null;
+}

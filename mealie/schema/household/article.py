@@ -46,6 +46,11 @@ class ArticleAIRequest(MealieModel):
     include_item_images: bool = True
 
 
+class ArticleAIQuestionRequest(MealieModel):
+    question: str = Field(..., min_length=1, max_length=8000)
+    target_language: str | None = Field(None, max_length=80)
+
+
 class ArticleBrowserPageRequest(ArticleAIRequest):
     source_url: str | None = Field(None, max_length=2000)
     source_title: str | None = Field(None, max_length=255)

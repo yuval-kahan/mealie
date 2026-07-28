@@ -3,6 +3,7 @@ const STORAGE_KEYS = {
   extractMode: "extractMode",
   interfaceLanguage: "interfaceLanguage",
   translateLanguage: "translateLanguage",
+  websiteType: "websiteType",
   createShoppingList: "createShoppingList",
   organizeShoppingList: "organizeShoppingList",
   includeAiTips: "includeAiTips",
@@ -26,6 +27,7 @@ const DEFAULT_SETTINGS = {
   extractMode: "auto",
   interfaceLanguage: "auto",
   translateLanguage: "he-IL",
+  websiteType: "auto",
   createShoppingList: true,
   organizeShoppingList: true,
   includeAiTips: true,
@@ -58,6 +60,7 @@ const elements = {
   extractMode: document.getElementById("extractMode"),
   interfaceLanguage: document.getElementById("interfaceLanguage"),
   translateLanguage: document.getElementById("translateLanguage"),
+  websiteType: document.getElementById("websiteType"),
   createShoppingList: document.getElementById("createShoppingList"),
   organizeShoppingList: document.getElementById("organizeShoppingList"),
   includeAiTips: document.getElementById("includeAiTips"),
@@ -110,6 +113,7 @@ async function init() {
     elements.extractMode,
     elements.interfaceLanguage,
     elements.translateLanguage,
+    elements.websiteType,
     elements.createShoppingList,
     elements.organizeShoppingList,
     elements.includeAiTips,
@@ -211,6 +215,7 @@ function applySettings(settings) {
   if (!elements.translateLanguage.value) {
     elements.translateLanguage.value = DEFAULT_SETTINGS.translateLanguage;
   }
+  elements.websiteType.value = settings.websiteType || DEFAULT_SETTINGS.websiteType;
   elements.createShoppingList.checked = settings.createShoppingList !== false;
   elements.organizeShoppingList.checked = settings.organizeShoppingList !== false;
   elements.includeAiTips.checked = settings.includeAiTips !== false;
@@ -265,6 +270,7 @@ function currentSettings() {
     extractMode: elements.extractMode.value || DEFAULT_SETTINGS.extractMode,
     interfaceLanguage: elements.interfaceLanguage.value || DEFAULT_SETTINGS.interfaceLanguage,
     translateLanguage: elements.translateLanguage.value,
+    websiteType: elements.websiteType.value || DEFAULT_SETTINGS.websiteType,
     createShoppingList: elements.createShoppingList.checked,
     organizeShoppingList: elements.organizeShoppingList.checked,
     includeAiTips: elements.includeAiTips.checked,

@@ -13,7 +13,14 @@
     "extract-mode": "What to extract",
     "interface-language": "Interface language",
     "automatic-language": "Automatic (Mealie site language, then browser language)",
-    "translation-language": "Translation language"
+    "translation-language": "Translation language",
+    "website-type": "Saved website type"
+  },
+  "website-type": {
+    "auto": "Detect automatically",
+    "recipe": "Recipe website",
+    "shopping": "Shopping website",
+    "both": "Recipes and shopping"
   },
   "mode": {
     "auto": "Automatic detection",

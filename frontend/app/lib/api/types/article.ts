@@ -39,6 +39,11 @@ export interface ArticleAIRequest {
   includeItemImages?: boolean;
 }
 
+export interface ArticleAIQuestionRequest {
+  question: string;
+  targetLanguage?: string | null;
+}
+
 export interface ArticleBrowserPageResponse {
   article?: Article | null;
   contentKind: string;

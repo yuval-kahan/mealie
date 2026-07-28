@@ -56,6 +56,55 @@
       </v-card-text>
     </BaseDialog>
 
+    <BaseDialog
+      v-model="historyDialogOpen"
+      :title="$t('pantry.search-history')"
+      :icon="$globals.icons.clockOutline"
+    >
+      <v-card-text>
+        <v-text-field
+          v-model="historySearch"
+          :label="$t('pantry.search-history')"
+          :prepend-inner-icon="$globals.icons.search"
+          clearable
+          hide-details
+          density="compact"
+          class="mb-3"
+        />
+        <v-progress-linear v-if="historyLoading" indeterminate color="primary" class="mb-3" />
+        <div v-else-if="historyItems.length" class="pantry-history-dialog">
+          <button
+            v-for="entry in historyItems"
+            :key="entry.id"
+            type="button"
+            class="pantry-history-row"
+            @click="restoreHistory(entry)"
+          >
+            <v-icon size="small">
+              {{ entry.useAi ? $globals.icons.robot : $globals.icons.search }}
+            </v-icon>
+            <span class="pantry-history-row__text">
+              <strong>{{ entry.query }}</strong>
+              <small>{{ formatHistoryDate(entry.createdAt) }}</small>
+            </span>
+            <v-btn
+              icon
+              size="x-small"
+              variant="text"
+              color="error"
+              :title="$t('general.delete')"
+              @click.stop="deleteHistoryEntry(entry.id)"
+            >
+              <v-icon>{{ $globals.icons.delete }}</v-icon>
+            </v-btn>
+          </button>
+        </div>
+        <v-alert v-else type="info" variant="tonal">
+          {{ $t("pantry.no-search-history") }}
+        </v-alert>
+      </v-card-text>
+    </BaseDialog>
+
     <BasePageTitle divider>
       <template #title>
         {{ $t("pantry.food-i-have") }}
@@ -147,6 +196,33 @@
         :hint="$t('pantry.additional-food-hint')"
         persistent-hint
       />
+      <div v-if="recentHistory.length" class="pantry-recent mb-4">
+        <div class="pantry-recent__title">
+          <strong>{{ $t("pantry.recent-searches") }}</strong>
+          <v-btn
+            v-if="historyTotal > recentHistory.length"
+            size="small"
+            variant="text"
+            :prepend-icon="$globals.icons.clockOutline"
+            @click="openHistoryDialog"
+          >
+            {{ $t("pantry.all-searches", { count: historyTotal }) }}
+          </v-btn>
+        </div>
+        <div class="d-flex flex-wrap ga-2">
+          <v-chip
+            v-for="entry in recentHistory"
+            :key="entry.id"
+            :prepend-icon="entry.useAi ? $globals.icons.robot : $globals.icons.search"
+            color="primary"
+            variant="tonal"
+            class="pantry-recent__chip"
+            @click="restoreHistory(entry)"
+          >
+            {{ entry.query }}
+          </v-chip>
+        </div>
+      </div>
       <v-btn
         color="primary"
         :prepend-icon="suggestionMode === 'ai' ? $globals.icons.robot : $globals.icons.search"
@@ -209,6 +285,7 @@ import type {
   PantryItem,
   PantryItemCreate,
   PantryRecipeSuggestion,
+  PantrySearchHistory,
 } from "~/lib/api/types/pantry-item";
 import { useUserApi } from "~/composables/api/api-client";
 import { alert } from "~/composables/use-toast";
@@ -240,6 +317,15 @@ const availableText = ref("");
 const suggesting = ref(false);
 const suggestionsLoaded = ref(false);
 const suggestions = ref<PantryRecipeSuggestion[]>([]);
+const historyDialogOpen = ref(false);
+const historyLoading = ref(false);
+const historySearch = ref("");
+const historyItems = ref<PantrySearchHistory[]>([]);
+const historyTotal = ref(0);
+const RECENT_HISTORY_LIMIT = 6;
+let historySearchTimer: ReturnType<typeof setTimeout> | undefined;
+
+const recentHistory = computed(() => historyItems.value.slice(0, RECENT_HISTORY_LIMIT));
 
 const filteredItems = computed(() => {
   const query = search.value.trim().toLocaleLowerCase();
@@ -337,6 +423,7 @@ async function loadSuggestions() {
       useAi: suggestionMode.value === "ai",
       availableText: availableText.value.trim() || null,
       limit: 20,
+      targetLanguage: i18n.locale.value,
     });
     if (error || !data) {
       alert.error(i18n.t("pantry.suggestion-failed"));
@@ -344,13 +431,69 @@ async function loadSuggestions() {
     }
     suggestions.value = data.items;
     suggestionsLoaded.value = true;
+    await loadHistory(undefined, 50);
   }
   finally {
     suggesting.value = false;
   }
 }
 
-onMounted(loadItems);
+async function loadHistory(searchValue?: string, limit = 50) {
+  historyLoading.value = true;
+  try {
+    const { data } = await api.pantryItems.getSearchHistory(searchValue, limit);
+    historyItems.value = data?.items || [];
+    historyTotal.value = data?.total || 0;
+  }
+  finally {
+    historyLoading.value = false;
+  }
+}
+
+function restoreHistory(entry: PantrySearchHistory) {
+  suggestionMode.value = entry.useAi ? "ai" : "normal";
+  availableText.value = entry.query;
+  suggestions.value = entry.response.items;
+  suggestionsLoaded.value = true;
+  historyDialogOpen.value = false;
+}
+
+function openHistoryDialog() {
+  historySearch.value = "";
+  historyDialogOpen.value = true;
+  void loadHistory(undefined, 200);
+}
+
+async function deleteHistoryEntry(id: string) {
+  const { error } = await api.pantryItems.deleteSearchHistory(id);
+  if (error) return;
+  historyItems.value = historyItems.value.filter(entry => entry.id !== id);
+  historyTotal.value = Math.max(0, historyTotal.value - 1);
+}
+
+function formatHistoryDate(value?: string | null) {
+  if (!value) return "";
+  return new Intl.DateTimeFormat(i18n.locale.value, {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+watch(historySearch, (value) => {
+  if (!historyDialogOpen.value) return;
+  if (historySearchTimer) clearTimeout(historySearchTimer);
+  historySearchTimer = setTimeout(() => {
+    void loadHistory(value, 200);
+  }, 250);
+});
+
+onBeforeUnmount(() => {
+  if (historySearchTimer) clearTimeout(historySearchTimer);
+});
+
+onMounted(async () => {
+  await Promise.all([loadItems(), loadHistory(undefined, 50)]);
+});
 </script>
 
 <style scoped>
@@ -392,6 +535,64 @@ onMounted(loadItems);
   display: flex;
   min-height: 112px;
   border-radius: 6px;
+}
+
+.pantry-recent {
+  display: grid;
+  gap: 8px;
+}
+
+.pantry-recent__title {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.pantry-recent__chip {
+  max-width: min(100%, 320px);
+}
+
+.pantry-history-dialog {
+  display: grid;
+  gap: 4px;
+  max-height: min(55vh, 520px);
+  overflow-y: auto;
+}
+
+.pantry-history-row {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 10px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 10px 4px;
+  text-align: start;
+  width: 100%;
+}
+
+.pantry-history-row:hover,
+.pantry-history-row:focus-visible {
+  background: rgba(var(--v-theme-primary), 0.08);
+}
+
+.pantry-history-row__text {
+  display: grid;
+  min-width: 0;
+}
+
+.pantry-history-row__text strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pantry-history-row__text small {
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 
 @media (max-width: 600px) {

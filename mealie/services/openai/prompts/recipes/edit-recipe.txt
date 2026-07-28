@@ -13,3 +13,5 @@ language. Never add Michelin or
 media-source claims without explicit, reliable support.
 Keep food preparation tasks in mise_en_place_food and equipment in mise_en_place_tools. Leave the legacy combined
 mise_en_place field null for newly generated content.
+Preserve explicit_ten_minute_claim only when the supplied source or existing recipe explicitly states a 10-minute
+duration. Never infer it from the edited recipe's simplicity or estimated timing.

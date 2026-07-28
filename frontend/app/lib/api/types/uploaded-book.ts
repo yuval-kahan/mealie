@@ -17,6 +17,7 @@ export interface UploadedBook {
     included_recipe_slugs?: string[];
     generation_config?: AICookbookGenerateRequest;
     classification?: UploadedBookClassification;
+    translation_audit?: UploadedBookTranslationAudit;
     [key: string]: unknown;
   };
   classificationStatus?: "not_started" | "processing" | "completed" | "failed" | string;
@@ -57,11 +58,62 @@ export interface UploadedBook {
   updatedAt?: string | null;
 }
 
+export interface UploadedBookTranslationAudit {
+  version?: number;
+  source_pages: number;
+  translated_pages: number;
+  verified_translated_pages?: number;
+  missing_pages?: number[];
+  unexpected_pages?: number[];
+  suspicious_pages?: string[];
+  suspicious_page_numbers?: number[];
+  partial?: boolean;
+  passed?: boolean;
+}
+
 export interface UploadedBookExtractRequest {
   pagesPerChunk: number;
   translateLanguage?: string;
   pageStart?: number | null;
   pageEnd?: number | null;
+  autoRecipeImages?: boolean;
+  includeItemImages?: boolean;
+  includeAiTips?: boolean;
+  createShoppingLists?: boolean;
+  organizeShoppingListsWithAi?: boolean;
+  allowDuplicateRecipes?: boolean;
+}
+
+export interface UploadedBookRecipeCatalogRequest {
+  query?: string;
+  targetLanguage?: string;
+  refresh?: boolean;
+}
+
+export interface UploadedBookRecipeCandidate {
+  id: string;
+  title: string;
+  sourceTitle: string;
+  chapter?: string | null;
+  pageStart: number;
+  pageEnd: number;
+  reason?: string | null;
+  importedRecipeSlug?: string | null;
+}
+
+export interface UploadedBookRecipeCatalog {
+  bookId: string;
+  query: string;
+  source: "contents" | "headings" | "full_text" | "hybrid";
+  candidates: UploadedBookRecipeCandidate[];
+  generatedAt?: string | null;
+  usedAi: boolean;
+  warning?: string | null;
+}
+
+export interface UploadedBookRecipeCatalogImportRequest {
+  candidateIds: string[];
+  targetLanguage?: string;
   autoRecipeImages?: boolean;
   includeItemImages?: boolean;
   includeAiTips?: boolean;

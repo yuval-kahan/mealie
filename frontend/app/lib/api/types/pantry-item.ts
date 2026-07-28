@@ -28,6 +28,7 @@ export interface PantryRecipeSuggestionRequest {
   useAi: boolean;
   availableText?: string | null;
   limit?: number;
+  targetLanguage?: string | null;
 }
 
 export interface PantryRecipeSuggestion {
@@ -42,4 +43,18 @@ export interface PantryRecipeSuggestionResponse {
   items: PantryRecipeSuggestion[];
   availableItems: string[];
   recipeCount: number;
+}
+
+export interface PantrySearchHistory {
+  id: string;
+  query: string;
+  useAi: boolean;
+  targetLanguage?: string | null;
+  response: PantryRecipeSuggestionResponse;
+  createdAt?: string | null;
+}
+
+export interface PantrySearchHistoryList {
+  items: PantrySearchHistory[];
+  total: number;
 }

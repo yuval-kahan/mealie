@@ -67,6 +67,9 @@
             <v-tab value="ai-link">
               {{ $t("article.ai-link") }}
             </v-tab>
+            <v-tab value="ai-question">
+              {{ $t("article.ai-question") }}
+            </v-tab>
           </v-tabs>
 
           <v-window
@@ -156,9 +159,28 @@
                 readonly
               />
             </v-window-item>
+
+            <v-window-item value="ai-question">
+              <v-textarea
+                v-model="quickArticleAiQuestion"
+                :label="$t('article.question-or-topic')"
+                :hint="$t('article.question-or-topic-hint')"
+                persistent-hint
+                variant="outlined"
+                rows="10"
+              />
+              <v-text-field
+                :model-value="quickArticleTargetLanguage"
+                :label="$t('article.target-language')"
+                variant="outlined"
+                density="comfortable"
+                readonly
+                class="mt-4"
+              />
+            </v-window-item>
           </v-window>
           <div
-            v-if="quickArticleCreateMode !== 'manual'"
+            v-if="quickArticleCreateMode === 'ai-text' || quickArticleCreateMode === 'ai-link'"
             class="quick-article-ai-options mt-2"
           >
             <v-checkbox
@@ -1045,9 +1067,10 @@ const quickTextRecipeDialog = ref(false);
 const quickRestaurantDialog = ref(false);
 const quickArticleDialog = ref(false);
 const quickArticleSaving = ref(false);
-const quickArticleCreateMode = ref<"manual" | "ai-text" | "ai-link">("manual");
+const quickArticleCreateMode = ref<"manual" | "ai-text" | "ai-link" | "ai-question">("manual");
 const quickArticleAiText = ref("");
 const quickArticleAiUrl = ref("");
+const quickArticleAiQuestion = ref("");
 const quickArticleExtractRecipeIfPresent = ref(true);
 const quickArticleCreateShoppingList = ref(true);
 const quickArticleOrganizeShoppingList = ref(true);
@@ -1128,7 +1151,10 @@ const canSubmitQuickArticle = computed(() => {
   if (quickArticleCreateMode.value === "ai-text") {
     return Boolean(quickArticleAiText.value.trim());
   }
-  return Boolean(quickArticleAiUrl.value.trim());
+  if (quickArticleCreateMode.value === "ai-link") {
+    return Boolean(quickArticleAiUrl.value.trim());
+  }
+  return Boolean(quickArticleAiQuestion.value.trim());
 });
 const uploadedBookSupportedExtensions = [
   ".pdf",
@@ -2266,6 +2292,7 @@ function resetQuickArticleForm() {
   quickArticleCreateMode.value = "manual";
   quickArticleAiText.value = "";
   quickArticleAiUrl.value = "";
+  quickArticleAiQuestion.value = "";
   quickArticleExtractRecipeIfPresent.value = true;
   quickArticleCreateShoppingList.value = true;
   quickArticleOrganizeShoppingList.value = true;
@@ -2302,6 +2329,12 @@ async function submitQuickArticle() {
   const result = await (async () => {
     if (quickArticleCreateMode.value === "manual") {
       return await api.articles.createOne(quickArticleForm);
+    }
+    if (quickArticleCreateMode.value === "ai-question") {
+      return await api.articles.createFromQuestion({
+        question: quickArticleAiQuestion.value,
+        targetLanguage: quickArticleTargetLanguage.value,
+      });
     }
 
     return await api.articles.createWithAI({
@@ -2421,6 +2454,12 @@ const topLinks = computed<SideBarLink[]>(() => [
     icon: $globals.icons.foods,
     title: i18n.t("pantry.food-i-have"),
     to: "/pantry",
+    restricted: true,
+  },
+  {
+    icon: $globals.icons.informationOutline,
+    title: i18n.t("product-knowledge.products-and-explanations"),
+    to: "/product-knowledge",
     restricted: true,
   },
   {

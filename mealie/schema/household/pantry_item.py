@@ -36,6 +36,7 @@ class PantryRecipeSuggestionRequest(MealieModel):
     use_ai: bool = False
     available_text: str | None = Field(None, max_length=8000)
     limit: int = Field(12, ge=1, le=50)
+    target_language: str | None = Field(None, max_length=80)
 
 
 class PantryRecipeSuggestion(MealieModel):
@@ -50,3 +51,17 @@ class PantryRecipeSuggestionResponse(MealieModel):
     items: list[PantryRecipeSuggestion] = Field(default_factory=list)
     available_items: list[str] = Field(default_factory=list)
     recipe_count: int = 0
+
+
+class PantrySearchHistoryOut(MealieModel):
+    id: UUID4
+    query: str
+    use_ai: bool
+    target_language: str | None = None
+    response: PantryRecipeSuggestionResponse
+    created_at: datetime | None = None
+
+
+class PantrySearchHistoryList(MealieModel):
+    items: list[PantrySearchHistoryOut] = Field(default_factory=list)
+    total: int = 0

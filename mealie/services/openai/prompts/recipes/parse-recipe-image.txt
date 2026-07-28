@@ -24,3 +24,6 @@ is_michelin_dish, is_gourmet_dish, and is_complete_meal.
 Michelin may be true only when the image or supplied notes explicitly and reliably support Michelin recognition. Fill
 media_source_type and media_source_name only when the image or supplied notes explicitly identify a TV show, Instagram
 account, YouTube channel, TikTok account, website, cookbook, or magazine.
+
+Set explicit_ten_minute_claim to true only when visible image text or supplied notes explicitly state that the recipe
+takes 10 minutes. Never infer it from the number of ingredients or steps.

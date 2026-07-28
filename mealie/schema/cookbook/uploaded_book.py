@@ -136,6 +136,44 @@ class UploadedBookExtractRequest(MealieModel):
     allow_duplicate_recipes: bool = False
 
 
+class UploadedBookRecipeCatalogRequest(MealieModel):
+    query: str = Field("", max_length=500)
+    target_language: str = Field("Hebrew", min_length=2, max_length=80)
+    refresh: bool = False
+
+
+class UploadedBookRecipeCandidate(MealieModel):
+    id: str
+    title: str
+    source_title: str
+    chapter: str | None = None
+    page_start: int = Field(..., ge=1)
+    page_end: int = Field(..., ge=1)
+    reason: str | None = None
+    imported_recipe_slug: str | None = None
+
+
+class UploadedBookRecipeCatalogResponse(MealieModel):
+    book_id: UUID4
+    query: str = ""
+    source: Literal["contents", "headings", "full_text", "hybrid"]
+    candidates: list[UploadedBookRecipeCandidate] = Field(default_factory=list)
+    generated_at: str | None = None
+    used_ai: bool = False
+    warning: str | None = None
+
+
+class UploadedBookRecipeCatalogImportRequest(MealieModel):
+    candidate_ids: list[str] = Field(..., min_length=1, max_length=500)
+    target_language: str = Field("Hebrew", min_length=2, max_length=80)
+    auto_recipe_images: bool = True
+    include_item_images: bool = True
+    include_ai_tips: bool = True
+    create_shopping_lists: bool = True
+    organize_shopping_lists_with_ai: bool = True
+    allow_duplicate_recipes: bool = False
+
+
 class UploadedBookTranslateRequest(MealieModel):
     pages_per_chunk: int = Field(10, ge=1, le=100)
     target_language: str = Field("Hebrew", min_length=2, max_length=80)

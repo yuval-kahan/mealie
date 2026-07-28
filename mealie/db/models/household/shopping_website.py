@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import ForeignKey, String, Text, UniqueConstraint, orm
+from sqlalchemy import Boolean, ForeignKey, String, Text, UniqueConstraint, orm
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .._model_base import BaseMixins, FilterableColumn, SqlAlchemyBase
@@ -88,6 +88,8 @@ class ShoppingWebsite(SqlAlchemyBase, BaseMixins):
     url: FilterableColumn[str] = mapped_column(String(2000), nullable=False)
     page_food: FilterableColumn[str | None] = mapped_column(Text, nullable=True)
     offered_foods_json: FilterableColumn[str] = mapped_column(Text, nullable=False, default="[]")
+    is_recipe_site: FilterableColumn[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_shopping_site: FilterableColumn[bool] = mapped_column(Boolean, nullable=False, default=True)
     recipe_links: Mapped[list[RecipeShoppingWebsite]] = orm.relationship(
         RecipeShoppingWebsite,
         back_populates="shopping_website",

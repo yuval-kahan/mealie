@@ -7,6 +7,8 @@ export interface ShoppingWebsite {
   url: string;
   pageFood?: string | null;
   offeredFoods: string[];
+  isRecipeSite: boolean;
+  isShoppingSite: boolean;
   createdAt?: string | null;
   updatedAt?: string | null;
   recipeIds: string[];
@@ -20,12 +22,16 @@ export interface ShoppingWebsiteCreate {
   url: string;
   pageFood?: string | null;
   offeredFoods: string[];
+  isRecipeSite: boolean;
+  isShoppingSite: boolean;
 }
 
 export type ShoppingWebsiteUpdate = ShoppingWebsiteCreate;
 
 export interface ShoppingWebsiteAIRequest {
   url: string;
+  isRecipeSite?: boolean | null;
+  isShoppingSite?: boolean | null;
 }
 
 export interface ShoppingWebsiteBrowserPageRequest extends ShoppingWebsiteAIRequest {

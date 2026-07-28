@@ -47,6 +47,9 @@
     "manual": "ידני",
     "ai-text": "AI מטקסט",
     "ai-link": "AI מקישור",
+    "ai-question": "שאלה ל-AI",
+    "question-or-topic": "שאלה או נושא",
+    "question-or-topic-hint": "לדוגמה: מהו עמילן, או מהם רטבי האם של המטבח הצרפתי?",
     "title": "כותרת",
     "source": "מקור",
     "author": "כותב / מקור",
@@ -62,6 +65,23 @@
     "no-ai-results": "ה-AI לא מצא מאמרים מתאימים.",
     "no-articles": "עדיין אין מאמרים.",
     "delete-confirm": "למחוק את המאמר הזה?"
+  },
+  "product-knowledge": {
+    "products-and-explanations": "מוצרים והסברים",
+    "page-description": "ספריית ידע שימושית עם הסברים מעמיקים על מוצרים, חומרי גלם ושימושים בבישול.",
+    "create": "יצירת הסבר על מוצר",
+    "edit": "עריכת הסבר על מוצר",
+    "manual": "ידני",
+    "ai-explanation": "הסבר מעמיק עם AI",
+    "title": "מוצר או חומר גלם",
+    "summary": "תקציר קצר",
+    "content": "הסבר מפורט",
+    "source": "מקור",
+    "ai-topic": "על מה תרצה ללמוד?",
+    "ai-topic-hint": "לדוגמה: הסבר על סוגי פרמז'ן, יישון, חותמות, אחסון ושימושים בבישול.",
+    "target-language": "שפת ההסבר",
+    "no-items": "עדיין אין הסברים על מוצרים.",
+    "delete-confirm": "למחוק את “{title}”?"
   },
   "category": {
     "categories": "קטגוריות",
@@ -623,6 +643,8 @@
     "protein-content": "חלבון",
     "public-recipe": "מתכון ציבורי",
     "recipe-created": "מתכון נוצר",
+    "recipes-from-book": "מתכונים מתוך {book}",
+    "recipes-not-from-book": "מתכונים אחרים",
     "recipe-creation-failed": "יצירת מתכון נכשלה",
     "recipe-deleted": "מתכון נמחק",
     "recipe-image": "תמונת המתכון",
@@ -1243,6 +1265,15 @@
     "change-image": "שינוי תמונת האתר",
     "image-saved": "תמונת האתר נשמרה",
     "image-save-failed": "שמירת תמונת האתר נכשלה"
+    ,"website-types": "סוג האתר"
+    ,"website-types-help": "אתר יכול להכיל מתכונים, למכור מזון או לעשות את שניהם."
+    ,"recipe-site": "אתר מתכונים"
+    ,"shopping-site": "אתר קניות"
+    ,"recipe-sites": "אתרי מתכונים"
+    ,"shopping-sites": "אתרי קניות"
+    ,"group-by-type": "קבץ אתרים לפי סוג"
+    ,"detect-automatically": "תן ל-AI לזהות אוטומטית"
+    ,"recipe-and-shopping-site": "מתכונים וקניות"
   },
   "pantry": {
     "food-i-have": "אוכל שיש לי",
@@ -1269,7 +1300,11 @@
     "match-score": "{score}% התאמה",
     "suggestion-failed": "לא ניתן לקבל הצעות למתכונים",
     "item-saved": "המזון נשמר",
-    "item-save-failed": "לא ניתן לשמור את המזון"
+    "item-save-failed": "לא ניתן לשמור את המזון",
+    "recent-searches": "חיפושים אחרונים",
+    "search-history": "היסטוריית חיפושים",
+    "all-searches": "כל החיפושים ({count})",
+    "no-search-history": "לא נמצאו חיפושים קודמים."
   },
   "restaurant": {
     "restaurants": "מסעדות",
@@ -1870,6 +1905,24 @@
     "extract-recipes-after-upload": "חלץ מתכונים עם AI אחרי ההעלאה",
     "extract-recipes-with-ai": "חלץ מתכונים עם AI",
     "extract-again-with-ai": "חלץ שוב עם AI",
+    "choose-recipes-from-book": "בחירת מתכונים מהספר",
+    "book-recipe-search": "אילו מתכונים לחפש?",
+    "book-recipe-search-placeholder": "לדוגמה: מתכוני אורז, ריזוטו או כל מתכוני הפטריות",
+    "book-recipe-search-help": "Mealie קורא תחילה את תוכן העניינים או כותרות מקומיות. רק האינדקס הקטן נשלח ל־AI; עמודי המתכון יעובדו רק אחרי שתבחר אותם.",
+    "recipe-language": "שפת המתכון",
+    "find-recipes": "מצא מתכונים",
+    "recipe-catalog-source-contents": "נמצא בתוכן העניינים של הספר",
+    "recipe-catalog-source-headings": "נמצא מכותרות מקומיות",
+    "recipe-catalog-source-full_text": "אומת בחיפוש בכל תוכן הספר",
+    "recipe-catalog-source-hybrid": "נמצא בתוכן העניינים ובחיפוש מלא בספר",
+    "already-imported": "כבר יובא",
+    "no-matching-book-recipes": "לא נמצאו מתכונים תואמים באינדקס הזמין של הספר.",
+    "import-options": "אפשרויות ייבוא",
+    "import-selected-recipes": "ייבא את המתכונים שנבחרו",
+    "book-recipe-search-failed": "חיפוש המתכונים בספר נכשל",
+    "book-recipe-import-failed": "ייבוא המתכונים שנבחרו נכשל",
+    "book-recipe-import-started": "ייבוא המתכונים שנבחרו התחיל",
+    "pages": "עמודים",
     "translate-book-after-upload": "תרגם ספר עם AI אחרי ההעלאה",
     "translate-book-with-ai": "תרגם ספר עם AI",
     "translate-again-with-ai": "תרגם שוב עם AI",
@@ -1958,6 +2011,9 @@
     "translated-book": "ספר מתורגם",
     "uploaded-book": "ספר שהועלה",
     "current-reading-position": "מיקום נוכחי בספר",
+    "translation-completeness": "השלמת התרגום",
+    "translated-pages-count": "{translated} מתוך {total} עמודים תורגמו",
+    "finish-translation": "השלם תרגום",
     "chapters-read": "פרקים שנקראו",
     "book-completed": "הספר הושלם",
     "change-book-cover": "שינוי כריכת הספר",

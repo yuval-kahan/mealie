@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import UUID4
 from sqlalchemy.orm import selectinload
 
-from mealie.db.models.household.pantry_item import PantryItem
+from mealie.db.models.household.pantry_item import PantryItem, PantrySearchHistory
 from mealie.db.models.recipe.ingredient import RecipeIngredientModel
 from mealie.db.models.recipe.recipe import RecipeModel
 from mealie.routes._base import controller
@@ -17,6 +17,8 @@ from mealie.schema.household.pantry_item import (
     PantryRecipeSuggestion,
     PantryRecipeSuggestionRequest,
     PantryRecipeSuggestionResponse,
+    PantrySearchHistoryList,
+    PantrySearchHistoryOut,
 )
 from mealie.schema.recipe.recipe import RecipeSummary
 from mealie.services.recipe.recipe_service import RecipeService
@@ -26,6 +28,7 @@ router = APIRouter(prefix="/households/pantry-items", tags=["Households: Pantry 
 SPACE_RE = re.compile(r"\s+")
 SPLIT_RE = re.compile(r"[,;\n]+")
 MAX_RECIPE_CANDIDATES = 500
+MAX_HISTORY_ITEMS = 200
 
 
 def compact_text(value: str | None, limit: int) -> str:
@@ -93,6 +96,11 @@ class PantryItemsController(BaseUserController):
         )
         if extra_request:
             query += f" Additional request: {extra_request}"
+        if data.target_language:
+            query += (
+                f" Return every explanation, reason, matched item, and missing ingredient in "
+                f"{compact_text(data.target_language, 80)}."
+            )
         result = await RecipeService(
             self.repos,
             self.user,
@@ -176,6 +184,75 @@ class PantryItemsController(BaseUserController):
             recipe_count=len(recipes),
         )
 
+    def _history_to_out(self, history: PantrySearchHistory) -> PantrySearchHistoryOut | None:
+        try:
+            response = PantryRecipeSuggestionResponse.model_validate_json(history.response_json)
+        except (TypeError, ValueError):
+            return None
+        return PantrySearchHistoryOut(
+            id=history.id,
+            query=history.query,
+            use_ai=history.use_ai,
+            target_language=history.target_language,
+            response=response,
+            created_at=history.created_at,
+        )
+
+    def _save_history(
+        self,
+        data: PantryRecipeSuggestionRequest,
+        available_items: list[str],
+        response: PantryRecipeSuggestionResponse,
+    ) -> None:
+        label = compact_text(data.available_text, 8000) or ", ".join(available_items)
+        latest = self.session.execute(
+            sa.select(PantrySearchHistory)
+            .where(
+                PantrySearchHistory.group_id == self.group_id,
+                PantrySearchHistory.user_id == self.user.id,
+            )
+            .order_by(PantrySearchHistory.created_at.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        serialized = response.model_dump_json(by_alias=True)
+        if (
+            latest
+            and latest.query == label
+            and latest.use_ai == data.use_ai
+            and latest.target_language == data.target_language
+        ):
+            latest.response_json = serialized
+            self.session.add(latest)
+        else:
+            self.session.add(
+                PantrySearchHistory(
+                    group_id=self.group_id,
+                    household_id=self.household_id,
+                    user_id=self.user.id,
+                    query=label,
+                    use_ai=data.use_ai,
+                    target_language=compact_text(data.target_language, 80) or None,
+                    response_json=serialized,
+                    session=self.session,
+                )
+            )
+        self.session.flush()
+
+        stale_ids = list(
+            self.session.execute(
+                sa.select(PantrySearchHistory.id)
+                .where(
+                    PantrySearchHistory.group_id == self.group_id,
+                    PantrySearchHistory.user_id == self.user.id,
+                )
+                .order_by(PantrySearchHistory.created_at.desc())
+                .offset(MAX_HISTORY_ITEMS)
+            ).scalars()
+        )
+        if stale_ids:
+            self.session.execute(sa.delete(PantrySearchHistory).where(PantrySearchHistory.id.in_(stale_ids)))
+        self.session.commit()
+
     @router.get("", response_model=list[PantryItemOut])
     def get_all(self, search: str | None = Query(None)) -> list[PantryItemOut]:
         query = compact_text(search, 255).casefold()
@@ -228,6 +305,45 @@ class PantryItemsController(BaseUserController):
         self.session.delete(item)
         self.session.commit()
 
+    @router.get("/search-history", response_model=PantrySearchHistoryList)
+    def get_search_history(
+        self,
+        search: str | None = Query(None),
+        limit: int = Query(50, ge=1, le=200),
+    ) -> PantrySearchHistoryList:
+        statement = sa.select(PantrySearchHistory).where(
+            PantrySearchHistory.group_id == self.group_id,
+            PantrySearchHistory.user_id == self.user.id,
+        )
+        query = compact_text(search, 255)
+        if query:
+            statement = statement.where(PantrySearchHistory.query.ilike(f"%{query}%"))
+        rows = self.session.execute(
+            statement.order_by(PantrySearchHistory.created_at.desc()).limit(limit)
+        ).scalars().all()
+        items = [item for row in rows if (item := self._history_to_out(row)) is not None]
+        total = self.session.execute(
+            sa.select(sa.func.count(PantrySearchHistory.id)).where(
+                PantrySearchHistory.group_id == self.group_id,
+                PantrySearchHistory.user_id == self.user.id,
+            )
+        ).scalar_one()
+        return PantrySearchHistoryList(items=items, total=total)
+
+    @router.delete("/search-history/{history_id}", status_code=status.HTTP_204_NO_CONTENT)
+    def delete_search_history(self, history_id: UUID4) -> None:
+        history = self.session.execute(
+            sa.select(PantrySearchHistory).where(
+                PantrySearchHistory.id == history_id,
+                PantrySearchHistory.group_id == self.group_id,
+                PantrySearchHistory.user_id == self.user.id,
+            )
+        ).scalar_one_or_none()
+        if history is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND)
+        self.session.delete(history)
+        self.session.commit()
+
     @router.post("/suggest-recipes", response_model=PantryRecipeSuggestionResponse)
     async def suggest_recipes(self, data: PantryRecipeSuggestionRequest) -> PantryRecipeSuggestionResponse:
         available_items = self._available_items(data.available_text)
@@ -235,7 +351,7 @@ class PantryItemsController(BaseUserController):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Add at least one available food")
         if data.use_ai:
             try:
-                return await self._ai_suggestions(available_items, data)
+                response = await self._ai_suggestions(available_items, data)
             except HTTPException:
                 raise
             except Exception as exc:
@@ -244,4 +360,7 @@ class PantryItemsController(BaseUserController):
                     status.HTTP_502_BAD_GATEWAY,
                     detail="The AI provider could not suggest recipes right now",
                 ) from exc
-        return self._normal_suggestions(available_items, data)
+        else:
+            response = self._normal_suggestions(available_items, data)
+        self._save_history(data, available_items, response)
+        return response

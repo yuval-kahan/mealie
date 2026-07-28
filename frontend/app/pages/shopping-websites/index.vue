@@ -40,6 +40,32 @@
           type="url"
           :prepend-inner-icon="$globals.icons.link"
         />
+        <v-select
+          v-if="formMode === 'ai' && !editingWebsite"
+          v-model="aiWebsiteType"
+          :items="aiWebsiteTypeOptions"
+          item-title="title"
+          item-value="value"
+          :label="$t('shopping-website.website-types')"
+          variant="outlined"
+          class="mb-3"
+        />
+        <div v-else class="website-type-options mb-3">
+          <strong>{{ $t("shopping-website.website-types") }}</strong>
+          <v-checkbox
+            v-model="form.isRecipeSite"
+            :label="$t('shopping-website.recipe-site')"
+            hide-details
+            density="compact"
+          />
+          <v-checkbox
+            v-model="form.isShoppingSite"
+            :label="$t('shopping-website.shopping-site')"
+            hide-details
+            density="compact"
+          />
+          <small>{{ $t("shopping-website.website-types-help") }}</small>
+        </div>
         <template v-if="formMode === 'manual'">
           <v-textarea
             v-model="form.pageFood"
@@ -188,68 +214,100 @@
     </div>
 
     <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
-    <div v-else-if="filteredWebsites.length" class="shopping-websites-grid">
-      <v-card v-for="website in filteredWebsites" :key="website.id" class="shopping-website-card" variant="outlined">
-        <div class="shopping-website-image">
-          <v-img
-            v-if="website.hasImage"
-            :src="api.shoppingWebsites.imageUrl(website.id, website.imageVersion)"
-            height="180"
-            cover
-          />
-          <div v-else class="shopping-website-image-placeholder">
-            <v-icon size="72" color="primary">
-              {{ $globals.icons.web }}
-            </v-icon>
-          </div>
-          <v-btn
-            class="shopping-website-image-action"
-            icon
-            size="small"
-            color="primary"
-            :title="$t('shopping-website.change-image')"
-            @click="openImageDialog(website)"
-          >
-            <v-icon>{{ website.hasImage ? $globals.icons.edit : $globals.icons.fileImage }}</v-icon>
-          </v-btn>
+    <template v-else-if="filteredWebsites.length">
+      <v-checkbox
+        v-model="groupByType"
+        :label="$t('shopping-website.group-by-type')"
+        density="compact"
+        hide-details
+        class="mb-4"
+      />
+      <section
+        v-for="section in websiteSections"
+        :key="section.key"
+        class="shopping-website-section mb-7"
+      >
+        <div v-if="groupByType" class="shopping-website-section__header">
+          <v-icon>{{ section.icon }}</v-icon>
+          <h2 class="text-h6">
+            {{ section.title }}
+          </h2>
+          <v-chip size="small" variant="tonal">
+            {{ section.websites.length }}
+          </v-chip>
         </div>
-        <v-card-title class="d-flex align-center ga-2">
-          <v-icon color="primary">
-            {{ $globals.icons.web }}
-          </v-icon>
-          <span class="text-truncate">{{ website.name }}</span>
-        </v-card-title>
-        <v-card-subtitle>
-          <a :href="website.url" target="_blank" rel="noopener" class="shopping-website-link">
-            {{ website.url }}
-            <v-icon size="x-small">{{ $globals.icons.openInNew }}</v-icon>
-          </a>
-        </v-card-subtitle>
-        <v-card-text>
-          <div v-if="website.pageFood" class="mb-3">
-            <strong>{{ $t("shopping-website.saved-page-food") }}:</strong>
-            <div>{{ website.pageFood }}</div>
-          </div>
-          <div v-if="website.offeredFoods.length">
-            <strong>{{ $t("shopping-website.other-offered-foods") }}:</strong>
-            <div class="d-flex flex-wrap ga-1 mt-1">
-              <v-chip v-for="food in website.offeredFoods" :key="food" size="small" color="primary" variant="tonal">
-                {{ food }}
-              </v-chip>
+        <div class="shopping-websites-grid">
+          <v-card v-for="website in section.websites" :key="`${section.key}-${website.id}`" class="shopping-website-card" variant="outlined">
+            <div class="shopping-website-image">
+              <v-img
+                v-if="website.hasImage"
+                :src="api.shoppingWebsites.imageUrl(website.id, website.imageVersion)"
+                height="180"
+                cover
+              />
+              <div v-else class="shopping-website-image-placeholder">
+                <v-icon size="72" color="primary">
+                  {{ $globals.icons.web }}
+                </v-icon>
+              </div>
+              <v-btn
+                class="shopping-website-image-action"
+                icon
+                size="small"
+                color="primary"
+                :title="$t('shopping-website.change-image')"
+                @click="openImageDialog(website)"
+              >
+                <v-icon>{{ website.hasImage ? $globals.icons.edit : $globals.icons.fileImage }}</v-icon>
+              </v-btn>
             </div>
-          </div>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn icon variant="text" :title="$t('general.edit')" @click="openEditDialog(website)">
-            <v-icon>{{ $globals.icons.edit }}</v-icon>
-          </v-btn>
-          <v-btn icon variant="text" color="error" :title="$t('general.delete')" @click="openDeleteDialog(website)">
-            <v-icon>{{ $globals.icons.delete }}</v-icon>
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </div>
+            <v-card-title class="d-flex align-center ga-2">
+              <v-icon color="primary">
+                {{ $globals.icons.web }}
+              </v-icon>
+              <span class="text-truncate">{{ website.name }}</span>
+            </v-card-title>
+            <v-card-subtitle>
+              <a :href="website.url" target="_blank" rel="noopener" class="shopping-website-link">
+                {{ website.url }}
+                <v-icon size="x-small">{{ $globals.icons.openInNew }}</v-icon>
+              </a>
+            </v-card-subtitle>
+            <v-card-text>
+              <div class="d-flex flex-wrap ga-1 mb-3">
+                <v-chip v-if="website.isRecipeSite" size="small" color="primary" variant="tonal">
+                  {{ $t("shopping-website.recipe-site") }}
+                </v-chip>
+                <v-chip v-if="website.isShoppingSite" size="small" color="success" variant="tonal">
+                  {{ $t("shopping-website.shopping-site") }}
+                </v-chip>
+              </div>
+              <div v-if="website.pageFood" class="mb-3">
+                <strong>{{ $t("shopping-website.saved-page-food") }}:</strong>
+                <div>{{ website.pageFood }}</div>
+              </div>
+              <div v-if="website.offeredFoods.length">
+                <strong>{{ $t("shopping-website.other-offered-foods") }}:</strong>
+                <div class="d-flex flex-wrap ga-1 mt-1">
+                  <v-chip v-for="food in website.offeredFoods" :key="food" size="small" color="primary" variant="tonal">
+                    {{ food }}
+                  </v-chip>
+                </div>
+              </div>
+            </v-card-text>
+            <v-card-actions>
+              <v-spacer />
+              <v-btn icon variant="text" :title="$t('general.edit')" @click="openEditDialog(website)">
+                <v-icon>{{ $globals.icons.edit }}</v-icon>
+              </v-btn>
+              <v-btn icon variant="text" color="error" :title="$t('general.delete')" @click="openDeleteDialog(website)">
+                <v-icon>{{ $globals.icons.delete }}</v-icon>
+              </v-btn>
+            </v-card-actions>
+          </v-card>
+        </div>
+      </section>
+    </template>
     <v-alert v-else type="info" variant="tonal">
       {{ $t("shopping-website.no-websites") }}
     </v-alert>
@@ -282,11 +340,30 @@ const imageMode = ref<"upload" | "url" | "auto">("upload");
 const imageFile = ref<File | null>(null);
 const imageAddress = ref("");
 const formMode = ref<"manual" | "ai">("manual");
-const form = reactive<ShoppingWebsiteCreate>({ name: "", url: "", pageFood: "", offeredFoods: [] });
+const aiWebsiteType = ref<"auto" | "recipe" | "shopping" | "both">("auto");
+const groupByType = ref(true);
+const form = reactive<ShoppingWebsiteCreate>({
+  name: "",
+  url: "",
+  pageFood: "",
+  offeredFoods: [],
+  isRecipeSite: true,
+  isShoppingSite: true,
+});
 
 useSeoMeta({ title: i18n.t("shopping-website.websites") });
 
-const canSubmit = computed(() => Boolean(form.url.trim() && (formMode.value === "ai" || form.name.trim())));
+const canSubmit = computed(() => Boolean(
+  form.url.trim()
+  && (formMode.value === "ai" || form.isRecipeSite || form.isShoppingSite)
+  && (formMode.value === "ai" || form.name.trim()),
+));
+const aiWebsiteTypeOptions = computed(() => [
+  { title: i18n.t("shopping-website.detect-automatically"), value: "auto" },
+  { title: i18n.t("shopping-website.recipe-site"), value: "recipe" },
+  { title: i18n.t("shopping-website.shopping-site"), value: "shopping" },
+  { title: i18n.t("shopping-website.recipe-and-shopping-site"), value: "both" },
+]);
 const canSaveImage = computed(() => Boolean(
   imageWebsite.value
   && (imageMode.value === "auto"
@@ -303,6 +380,31 @@ const filteredWebsites = computed(() => {
     ...website.offeredFoods,
   ].join(" ").toLocaleLowerCase().includes(query));
 });
+const websiteSections = computed(() => {
+  if (!groupByType.value) {
+    return [{
+      key: "all",
+      title: i18n.t("shopping-website.websites"),
+      icon: $globals.icons.web,
+      websites: filteredWebsites.value,
+    }];
+  }
+
+  return [
+    {
+      key: "recipes",
+      title: i18n.t("shopping-website.recipe-sites"),
+      icon: $globals.icons.silverwareForkKnife,
+      websites: filteredWebsites.value.filter(website => website.isRecipeSite),
+    },
+    {
+      key: "shopping",
+      title: i18n.t("shopping-website.shopping-sites"),
+      icon: $globals.icons.cartCheck,
+      websites: filteredWebsites.value.filter(website => website.isShoppingSite),
+    },
+  ].filter(section => section.websites.length);
+});
 
 onMounted(loadWebsites);
 
@@ -317,7 +419,15 @@ async function loadWebsites() {
 function resetForm() {
   editingWebsite.value = null;
   formMode.value = "manual";
-  Object.assign(form, { name: "", url: "", pageFood: "", offeredFoods: [] });
+  aiWebsiteType.value = "auto";
+  Object.assign(form, {
+    name: "",
+    url: "",
+    pageFood: "",
+    offeredFoods: [],
+    isRecipeSite: true,
+    isShoppingSite: true,
+  });
 }
 
 function openCreateDialog() {
@@ -333,16 +443,27 @@ function openEditDialog(website: ShoppingWebsite) {
     url: website.url,
     pageFood: website.pageFood || "",
     offeredFoods: [...website.offeredFoods],
+    isRecipeSite: website.isRecipeSite,
+    isShoppingSite: website.isShoppingSite,
   });
   dialogOpen.value = true;
 }
 
 async function submitWebsite() {
   saving.value = true;
+  const aiTypeOverrides = aiWebsiteType.value === "auto"
+    ? {}
+    : {
+        isRecipeSite: aiWebsiteType.value === "recipe" || aiWebsiteType.value === "both",
+        isShoppingSite: aiWebsiteType.value === "shopping" || aiWebsiteType.value === "both",
+      };
   const response = editingWebsite.value
     ? await api.shoppingWebsites.updateOne(editingWebsite.value.id, form)
     : formMode.value === "ai"
-      ? await api.shoppingWebsites.createWithAI({ url: form.url })
+      ? await api.shoppingWebsites.createWithAI({
+          url: form.url,
+          ...aiTypeOverrides,
+        })
       : await api.shoppingWebsites.createOne(form);
   saving.value = false;
   if (!response.data || response.error) {
@@ -434,6 +555,26 @@ async function deleteWebsite() {
   display: grid;
   gap: 12px;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+}
+
+.website-type-options {
+  display: grid;
+  gap: 2px 12px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.website-type-options strong,
+.website-type-options small {
+  grid-column: 1 / -1;
+}
+
+.shopping-website-section__header {
+  align-items: center;
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
 }
 
 .shopping-website-card {

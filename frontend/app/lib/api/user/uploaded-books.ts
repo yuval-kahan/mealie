@@ -6,6 +6,9 @@ import type {
   UploadedBookDeletePreview,
   UploadedBookRecipeDeleteResponse,
   UploadedBookRecipeDeleteRequest,
+  UploadedBookRecipeCatalog,
+  UploadedBookRecipeCatalogImportRequest,
+  UploadedBookRecipeCatalogRequest,
   UploadedBookRecipeSummary,
   UploadedBookReadingState,
   UploadedBookReadingStateUpdate,
@@ -19,6 +22,8 @@ const routes = {
   uploadedBooks: `${prefix}/households/uploaded-books`,
   uploadedBook: (id: string) => `${prefix}/households/uploaded-books/${id}`,
   extractRecipes: (id: string) => `${prefix}/households/uploaded-books/${id}/extract-recipes`,
+  recipeCatalog: (id: string) => `${prefix}/households/uploaded-books/${id}/recipe-catalog`,
+  importRecipeCatalog: (id: string) => `${prefix}/households/uploaded-books/${id}/recipe-catalog/import`,
   cancelExtraction: (id: string) => `${prefix}/households/uploaded-books/${id}/extract-recipes/cancel`,
   translate: (id: string) => `${prefix}/households/uploaded-books/${id}/translate`,
   manualTranslationPage: (id: string) => `${prefix}/households/uploaded-books/${id}/translate/manual-page`,
@@ -58,6 +63,20 @@ export class UploadedBooksAPI extends BaseAPI {
 
   async extractRecipes(id: string, payload: UploadedBookExtractRequest) {
     return await this.requests.post<UploadedBook, UploadedBookExtractRequest>(routes.extractRecipes(id), payload);
+  }
+
+  async discoverRecipeCatalog(id: string, payload: UploadedBookRecipeCatalogRequest) {
+    return await this.requests.post<UploadedBookRecipeCatalog, UploadedBookRecipeCatalogRequest>(
+      routes.recipeCatalog(id),
+      payload,
+    );
+  }
+
+  async importRecipeCatalog(id: string, payload: UploadedBookRecipeCatalogImportRequest) {
+    return await this.requests.post<UploadedBook, UploadedBookRecipeCatalogImportRequest>(
+      routes.importRecipeCatalog(id),
+      payload,
+    );
   }
 
   async cancelExtraction(id: string) {

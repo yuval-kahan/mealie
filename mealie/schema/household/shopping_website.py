@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import UUID4, ConfigDict, Field
+from pydantic import UUID4, ConfigDict, Field, model_validator
 
 from mealie.schema._mealie import MealieModel
 from mealie.schema._mealie.mealie_model import UpdatedAtField
@@ -11,6 +11,14 @@ class ShoppingWebsiteBase(MealieModel):
     url: str = Field(..., min_length=1, max_length=2000)
     page_food: str | None = Field(None, max_length=4000)
     offered_foods: list[str] = Field(default_factory=list)
+    is_recipe_site: bool = False
+    is_shopping_site: bool = True
+
+    @model_validator(mode="after")
+    def validate_site_types(self):
+        if not self.is_recipe_site and not self.is_shopping_site:
+            raise ValueError("Select at least one website type")
+        return self
 
 
 class ShoppingWebsiteCreate(ShoppingWebsiteBase): ...
@@ -36,6 +44,8 @@ class ShoppingWebsiteOut(ShoppingWebsiteBase):
 
 class ShoppingWebsiteAIRequest(MealieModel):
     url: str = Field(..., min_length=1, max_length=2000)
+    is_recipe_site: bool | None = None
+    is_shopping_site: bool | None = None
 
 
 class ShoppingWebsiteImageURLRequest(MealieModel):

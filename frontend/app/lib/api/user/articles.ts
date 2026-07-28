@@ -3,6 +3,7 @@ import { route } from "../base";
 import type {
   Article,
   ArticleAIRequest,
+  ArticleAIQuestionRequest,
   ArticleAISearchRequest,
   ArticleAISearchResponse,
   ArticleBrowserPageResponse,
@@ -23,6 +24,7 @@ const routes = {
   article: (id: string) => `${prefix}/${id}`,
   aiCreate: `${prefix}/ai-create`,
   aiSearch: `${prefix}/ai-search`,
+  aiQuestion: `${prefix}/ai-question`,
 };
 
 export class ArticlesAPI extends BaseAPI {
@@ -40,6 +42,10 @@ export class ArticlesAPI extends BaseAPI {
 
   async createWithAI(payload: ArticleAIRequest) {
     return await this.requests.post<ArticleBrowserPageResponse, ArticleAIRequest>(routes.aiCreate, payload);
+  }
+
+  async createFromQuestion(payload: ArticleAIQuestionRequest) {
+    return await this.requests.post<Article, ArticleAIQuestionRequest>(routes.aiQuestion, payload);
   }
 
   async updateOne(id: string, payload: ArticleUpdate) {
