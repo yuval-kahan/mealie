@@ -1,4 +1,5 @@
 import type { ComputedRef, Ref } from "vue";
+import { useLocalStorage } from "@vueuse/core";
 
 export const DEFAULT_LIST_PAGE_SIZE = 100;
 export const LIST_PAGE_SIZE_OPTIONS = [25, 50, 100, 200];
