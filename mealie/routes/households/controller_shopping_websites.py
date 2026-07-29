@@ -23,12 +23,13 @@ from mealie.schema.household.shopping_website import (
     ShoppingWebsiteBrowserPageRequest,
     ShoppingWebsiteCreate,
     ShoppingWebsiteDeletePreview,
+    ShoppingWebsiteDiscoveryRequest,
     ShoppingWebsiteEntityLinksUpdate,
     ShoppingWebsiteImageURLRequest,
     ShoppingWebsiteOut,
     ShoppingWebsiteUpdate,
 )
-from mealie.schema.openai.shopping_website import OpenAIShoppingWebsite
+from mealie.schema.openai.shopping_website import OpenAIShoppingWebsite, OpenAIShoppingWebsiteSuggestions
 from mealie.schema.response.responses import ErrorResponse
 from mealie.services.entity_image_service import EntityImageService
 from mealie.services.openai import OpenAIService
@@ -314,6 +315,47 @@ class ShoppingWebsitesController(BaseUserController):
                 is_shopping_site=data.is_shopping_site,
             )
         )
+
+    @router.post("/ai-discover", response_model=list[ShoppingWebsiteCreate])
+    async def discover_with_ai(self, data: ShoppingWebsiteDiscoveryRequest) -> list[ShoppingWebsiteCreate]:
+        if not self._ai_enabled():
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=ErrorResponse.respond("OpenAI services are not enabled"),
+            )
+        openai_service = OpenAIService(self.repos)
+        response = await openai_service.get_response(
+            openai_service.get_prompt("websites.discover-shopping-websites"),
+            f"User request: {data.prompt.strip()}\nMaximum results: {data.limit}",
+            response_schema=OpenAIShoppingWebsiteSuggestions,
+        )
+        suggestions: list[ShoppingWebsiteCreate] = []
+        seen_urls: set[str] = set()
+        for item in (response.items if response else [])[: data.limit]:
+            if not item.is_food_website or not item.name.strip() or not item.url:
+                continue
+            try:
+                normalized_url = normalize_url(item.url)
+            except HTTPException:
+                continue
+            if normalized_url in seen_urls:
+                continue
+            seen_urls.add(normalized_url)
+            is_recipe_site = bool(item.is_recipe_site)
+            is_shopping_site = bool(item.is_shopping_site)
+            if not is_recipe_site and not is_shopping_site:
+                is_shopping_site = True
+            suggestions.append(
+                ShoppingWebsiteCreate(
+                    name=item.name.strip(),
+                    url=normalized_url,
+                    page_food=item.page_food.strip() or None,
+                    offered_foods=normalize_terms(item.offered_foods),
+                    is_recipe_site=is_recipe_site,
+                    is_shopping_site=is_shopping_site,
+                )
+            )
+        return suggestions
 
     @router.post("/browser-page", response_model=ShoppingWebsiteOut, status_code=status.HTTP_201_CREATED)
     async def create_from_browser_page(self, data: ShoppingWebsiteBrowserPageRequest) -> ShoppingWebsiteOut:

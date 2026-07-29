@@ -77,6 +77,11 @@
         @click="dialogs.organizer = true"
       />
     </v-row>
+    <BaseListPagination
+      v-model:page="organizerPage"
+      v-model:items-per-page="organizerItemsPerPage"
+      :total-items="organizerTotal"
+    />
     <section
       v-for="(itms, key, idx) in itemsSorted"
       :key="'header' + idx"
@@ -235,25 +240,30 @@ const fuzzyItems = computed<GenericItem[]>(() => {
   return result.map(x => x.item);
 });
 
+const sortedFuzzyItems = computed(() => {
+  return [...fuzzyItems.value].sort((a, b) => a.name.localeCompare(b.name));
+});
+
+const {
+  page: organizerPage,
+  itemsPerPage: organizerItemsPerPage,
+  totalItems: organizerTotal,
+  paginatedItems: paginatedOrganizerItems,
+} = useListPagination(sortedFuzzyItems);
+
 // =================================================================
 // Sorted Items
 
 const itemsSorted = computed(() => {
   const byLetter: { [key: string]: Array<GenericItem> } = {};
 
-  if (!fuzzyItems.value) {
-    return byLetter;
-  }
-
-  [...fuzzyItems.value]
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .forEach((item) => {
-      const letter = item.name[0].toUpperCase();
-      if (!byLetter[letter]) {
-        byLetter[letter] = [];
-      }
-      byLetter[letter].push(item);
-    });
+  paginatedOrganizerItems.value.forEach((item) => {
+    const letter = item.name[0].toUpperCase();
+    if (!byLetter[letter]) {
+      byLetter[letter] = [];
+    }
+    byLetter[letter].push(item);
+  });
 
   return byLetter;
 });

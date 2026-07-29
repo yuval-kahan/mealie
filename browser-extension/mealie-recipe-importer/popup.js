@@ -50,6 +50,8 @@ const MAX_EXTRACTED_TEXT_LENGTH = 180000;
 const POPUP_IMPORT_REQUEST = "MEALIE_EXTENSION_POPUP_IMPORT";
 const POPUP_SAVE_WEBSITE_REQUEST = "MEALIE_EXTENSION_POPUP_SAVE_WEBSITE";
 const POPUP_SAVE_RESTAURANT_REQUEST = "MEALIE_EXTENSION_POPUP_SAVE_RESTAURANT";
+const POPUP_SAVE_WANTED_BOOK_REQUEST = "MEALIE_EXTENSION_POPUP_SAVE_WANTED_BOOK";
+const POPUP_SAVE_CHEF_REQUEST = "MEALIE_EXTENSION_POPUP_SAVE_CHEF";
 const POPUP_SAVE_VIDEO_REQUEST = "MEALIE_EXTENSION_POPUP_SAVE_VIDEO";
 const AUTH_COOKIE_NAME = "mealie.access_token";
 const SITE_LOCALE_COOKIE_NAME = "i18n_redirected";
@@ -82,6 +84,8 @@ const elements = {
   sendToMealie: document.getElementById("sendToMealie"),
   saveWebsite: document.getElementById("saveWebsite"),
   saveRestaurant: document.getElementById("saveRestaurant"),
+  saveWantedBook: document.getElementById("saveWantedBook"),
+  saveChef: document.getElementById("saveChef"),
   saveVideo: document.getElementById("saveVideo"),
   connectMealie: document.getElementById("connectMealie"),
   previewPanel: document.getElementById("previewPanel"),
@@ -139,6 +143,8 @@ async function init() {
   elements.sendToMealie.addEventListener("click", handleSendToMealie);
   elements.saveWebsite.addEventListener("click", handleSaveWebsite);
   elements.saveRestaurant.addEventListener("click", handleSaveRestaurant);
+  elements.saveWantedBook.addEventListener("click", handleSaveWantedBook);
+  elements.saveChef.addEventListener("click", handleSaveChef);
   elements.saveVideo.addEventListener("click", handleSaveVideo);
   elements.saveVideoSettings.addEventListener("click", handleSaveVideoSettings);
   elements.connectMealie.addEventListener("click", handleConnectMealie);
@@ -680,6 +686,52 @@ async function handleSaveRestaurant() {
   }
 }
 
+async function handleSaveWantedBook() {
+  setBusy(true);
+  hideRecipeLink();
+  setStatus(translator.t("status.saving-wanted-book"));
+
+  try {
+    const settings = currentSettings();
+    void chrome.storage.sync.set(settings);
+    const response = await runBackgroundPageAction(POPUP_SAVE_WANTED_BOOK_REQUEST, settings);
+    if (response.preview) {
+      showPreview(response.preview);
+    }
+    setStatus(translator.t("status.wanted-book-saved", { title: response.book.title }), "success");
+    showWantedBooksLink(settings.mealieUrl);
+  }
+  catch (error) {
+    setStatus(errorMessage(error), "error");
+  }
+  finally {
+    setBusy(false);
+  }
+}
+
+async function handleSaveChef() {
+  setBusy(true);
+  hideRecipeLink();
+  setStatus(translator.t("status.saving-chef"));
+
+  try {
+    const settings = currentSettings();
+    void chrome.storage.sync.set(settings);
+    const response = await runBackgroundPageAction(POPUP_SAVE_CHEF_REQUEST, settings);
+    if (response.preview) {
+      showPreview(response.preview);
+    }
+    setStatus(translator.t("status.chef-saved", { name: response.chef.name }), "success");
+    showChefsLink(settings.mealieUrl);
+  }
+  catch (error) {
+    setStatus(errorMessage(error), "error");
+  }
+  finally {
+    setBusy(false);
+  }
+}
+
 async function handleSaveVideo() {
   setBusy(true);
   hideRecipeLink();
@@ -982,6 +1034,8 @@ function updateActionState() {
   elements.sendToMealie.disabled = isBusy || !mealieSiteReady;
   elements.saveWebsite.disabled = isBusy || !mealieSiteReady;
   elements.saveRestaurant.disabled = isBusy || !mealieSiteReady;
+  elements.saveWantedBook.disabled = isBusy || !mealieSiteReady;
+  elements.saveChef.disabled = isBusy || !mealieSiteReady;
   elements.saveVideo.disabled = isBusy || !mealieSiteReady;
   elements.saveVideoSettings.disabled = isBusy || !mealieSiteReady;
 }
@@ -1027,6 +1081,20 @@ function showRestaurantLink(baseUrl) {
   showResultLink(
     `${normalizeBaseUrl(baseUrl)}/restaurants`,
     translator.t("links.open-restaurants"),
+  );
+}
+
+function showWantedBooksLink(baseUrl) {
+  showResultLink(
+    `${normalizeBaseUrl(baseUrl)}/wanted-books`,
+    translator.t("links.open-wanted-books"),
+  );
+}
+
+function showChefsLink(baseUrl) {
+  showResultLink(
+    `${normalizeBaseUrl(baseUrl)}/chefs`,
+    translator.t("links.open-chefs"),
   );
 }
 

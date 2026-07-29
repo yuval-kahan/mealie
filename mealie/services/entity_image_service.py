@@ -16,6 +16,7 @@ ENTITY_IMAGE_FILE_NAME = "image.webp"
 ENTITY_IMAGE_MAX_BYTES = 12 * 1024 * 1024
 ENTITY_IMAGE_MAX_PIXELS = 30_000_000
 ENTITY_PAGE_MAX_BYTES = 2 * 1024 * 1024
+ENTITY_IMAGE_SEARCH_URL = "https://api.openverse.org/v1/images/"
 
 
 class EntityImageService(BaseService):
@@ -101,6 +102,83 @@ class EntityImageService(BaseService):
         if last_error:
             raise ValueError("No usable image was found on the website") from last_error
         raise ValueError("No image was found on the website")
+
+    async def search_and_save_public_image(self, target: Path, query: str) -> str:
+        """Find a bounded public image candidate and cache it locally."""
+        normalized_query = re.sub(r"\s+", " ", query).strip()[:240]
+        if not normalized_query:
+            raise ValueError("An image search phrase is required")
+
+        limits = httpx.Limits(max_connections=2, max_keepalive_connections=1)
+        async with httpx.AsyncClient(timeout=12.0, follow_redirects=True, limits=limits) as client:
+            candidates = await self._openverse_candidates(client, normalized_query)
+            if not candidates:
+                candidates = await self._wikimedia_candidates(client, normalized_query)
+
+        last_error: Exception | None = None
+        for candidate in candidates[:12]:
+            try:
+                await self.save_url(target, candidate)
+                return candidate
+            except (ValueError, httpx.HTTPError) as error:
+                last_error = error
+        if last_error:
+            raise ValueError("No usable public image was found") from last_error
+        raise ValueError("No public image was found")
+
+    @staticmethod
+    async def _openverse_candidates(client: httpx.AsyncClient, query: str) -> list[str]:
+        try:
+            response = await client.get(
+                ENTITY_IMAGE_SEARCH_URL,
+                params={"q": query, "page_size": 8, "mature": "false"},
+                headers={"User-Agent": "Mealie entity image search"},
+            )
+            response.raise_for_status()
+            payload = response.json()
+        except (httpx.HTTPError, ValueError):
+            return []
+
+        candidates: list[str] = []
+        for result in payload.get("results", []):
+            for value in (result.get("thumbnail"), result.get("url")):
+                candidate = str(value or "").strip()
+                if candidate.lower().startswith(("http://", "https://")) and candidate not in candidates:
+                    candidates.append(candidate)
+        return candidates
+
+    @staticmethod
+    async def _wikimedia_candidates(client: httpx.AsyncClient, query: str) -> list[str]:
+        try:
+            response = await client.get(
+                "https://commons.wikimedia.org/w/api.php",
+                params={
+                    "action": "query",
+                    "format": "json",
+                    "generator": "search",
+                    "gsrsearch": query,
+                    "gsrnamespace": 6,
+                    "gsrlimit": 8,
+                    "prop": "imageinfo",
+                    "iiprop": "url",
+                    "iiurlwidth": 1400,
+                },
+                headers={"User-Agent": "Mealie entity image search"},
+            )
+            response.raise_for_status()
+            payload = response.json()
+        except (httpx.HTTPError, ValueError):
+            return []
+
+        candidates: list[str] = []
+        for page in payload.get("query", {}).get("pages", {}).values():
+            image_info = page.get("imageinfo") or []
+            if not image_info:
+                continue
+            candidate = str(image_info[0].get("thumburl") or image_info[0].get("url") or "").strip()
+            if candidate.lower().startswith(("http://", "https://")):
+                candidates.append(candidate)
+        return candidates
 
     @staticmethod
     def _validate_http_url(url: str) -> str:

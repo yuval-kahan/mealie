@@ -86,6 +86,28 @@ export interface RecipeIngredientsAdjustWithAIResponse {
   adjustmentNote: string;
 }
 
+export interface RecipeIngredientsShoppingListSyncResponse {
+  shoppingListIds: string[];
+  syncedCount: number;
+}
+
+export interface RecipeMergeRequest {
+  sourceSlugs: string[];
+  name?: string | null;
+  keepOriginals: boolean;
+}
+
+export interface RecipeMergeResponse {
+  recipe: Recipe;
+  sourceCount: number;
+  archivedSourceCount: number;
+}
+
+export interface RecipeMergeUndoResponse {
+  removedMergedSlug: string;
+  restoredSourceSlugs: string[];
+}
+
 export interface RecipeDeletePreview {
   shoppingListIds: string[];
   shoppingListNames: string[];
@@ -122,8 +144,11 @@ const routes = {
   recipesRecipeSlugItemImagesEnsure: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/item-images/ensure`,
   recipesRecipeSlugScaleFromText: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/scale-from-text`,
   recipesRecipeSlugAdjustIngredientsWithAi: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/ingredients/adjust-with-ai`,
+  recipesRecipeSlugSyncIngredientsToShoppingLists: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/ingredients/sync-shopping-lists`,
   recipesRecipeSlugAssets: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/assets`,
   recipesRecipeSlugDeletePreview: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/delete-preview`,
+  recipesMerge: `${prefix}/recipes/merge`,
+  recipesMergeUndo: (recipe_slug: string) => `${prefix}/recipes/merge/${recipe_slug}/undo`,
 
   recipesSlugComments: (slug: string) => `${prefix}/recipes/${slug}/comments`,
   recipesSlugCommentsId: (slug: string, id: number) => `${prefix}/recipes/${slug}/comments/${id}`,
@@ -197,6 +222,18 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
     return await this.requests.post<RecipeAISearchResponse>(routes.recipesAISearch, payload);
   }
 
+  async getMerges() {
+    return await this.requests.get<Recipe[]>(routes.recipesMerge);
+  }
+
+  async merge(payload: RecipeMergeRequest) {
+    return await this.requests.post<RecipeMergeResponse, RecipeMergeRequest>(routes.recipesMerge, payload);
+  }
+
+  async undoMerge(slug: string) {
+    return await this.requests.post<RecipeMergeUndoResponse>(routes.recipesMergeUndo(slug), {});
+  }
+
   async scaleFromIngredientText(slug: string, text: string) {
     return await this.requests.post<RecipeIngredientScaleFromTextResponse, { text: string }>(
       routes.recipesRecipeSlugScaleFromText(slug),
@@ -208,6 +245,14 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
     return await this.requests.post<RecipeIngredientsAdjustWithAIResponse, { text: string }>(
       routes.recipesRecipeSlugAdjustIngredientsWithAi(slug),
       { text },
+      { suppressAlert: true },
+    );
+  }
+
+  async syncIngredientsToShoppingLists(slug: string) {
+    return await this.requests.post<RecipeIngredientsShoppingListSyncResponse>(
+      routes.recipesRecipeSlugSyncIngredientsToShoppingLists(slug),
+      {},
       { suppressAlert: true },
     );
   }

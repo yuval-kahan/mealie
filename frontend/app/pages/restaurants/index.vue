@@ -1,5 +1,9 @@
 <template>
   <v-container class="narrow-container">
+    <RestaurantDiscoverDialog
+      v-model="discoverDialogOpen"
+      @saved="loadRestaurants"
+    />
     <RestaurantCreateDialog
       v-model="dialogOpen"
       :restaurant="editingRestaurant"
@@ -40,10 +44,23 @@
       <v-btn color="primary" :prepend-icon="$globals.icons.create" @click="openCreateDialog">
         {{ $t("restaurant.quick-add") }}
       </v-btn>
+      <v-btn
+        color="primary"
+        variant="tonal"
+        :prepend-icon="$globals.icons.robot"
+        @click="discoverDialogOpen = true"
+      >
+        {{ $t("restaurant.find-with-ai") }}
+      </v-btn>
     </div>
 
     <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
     <template v-else-if="filteredRestaurants.length">
+      <BaseListPagination
+        v-model:page="restaurantPage"
+        v-model:items-per-page="restaurantsPerPage"
+        :total-items="restaurantTotal"
+      />
       <section
         v-for="section in restaurantSections"
         :key="section.status"
@@ -135,14 +152,36 @@
                 <strong>{{ $t("restaurant.price-range") }}:</strong> {{ restaurant.priceRange }}
               </div>
               <v-alert
-                v-if="restaurant.michelinInfo"
+                v-if="restaurant.michelinInfo || restaurant.isMichelinListed || restaurant.michelinStarCount"
                 type="info"
                 variant="tonal"
                 density="compact"
                 class="mt-3"
               >
-                <strong>{{ $t("restaurant.michelin-info") }}:</strong> {{ restaurant.michelinInfo }}
+                <strong>{{ $t("restaurant.michelin-info") }}:</strong>
+                {{ restaurant.michelinInfo || $t("restaurant.michelin-stars", { count: restaurant.michelinStarCount }) }}
               </v-alert>
+              <div v-if="restaurant.chefNames.length" class="restaurant-detail mt-3">
+                <strong>{{ $t("restaurant.linked-chefs") }}:</strong>
+                <NuxtLink
+                  v-for="chefName in restaurant.chefNames"
+                  :key="chefName"
+                  :to="`/chefs?search=${encodeURIComponent(chefName)}`"
+                  class="restaurant-related-link"
+                >
+                  {{ chefName }}
+                </NuxtLink>
+              </div>
+              <div v-if="restaurant.bookTitles.length" class="restaurant-detail mt-2">
+                <strong>{{ $t("restaurant.linked-books") }}:</strong>
+                <span
+                  v-for="bookTitle in restaurant.bookTitles"
+                  :key="bookTitle"
+                  class="restaurant-related-link"
+                >
+                  {{ bookTitle }}
+                </span>
+              </div>
               <div v-if="restaurant.googleRating || restaurant.ourRating" class="restaurant-ratings mt-3">
                 <a
                   v-if="restaurant.googleRating"
@@ -237,6 +276,7 @@ const restaurants = ref<Restaurant[]>([]);
 const loading = ref(true);
 const search = ref("");
 const dialogOpen = ref(false);
+const discoverDialogOpen = ref(false);
 const deleteDialogOpen = ref(false);
 const editingRestaurant = ref<Restaurant | null>(null);
 const deletingRestaurant = ref<Restaurant | null>(null);
@@ -266,16 +306,24 @@ const filteredRestaurants = computed(() => {
     restaurant.description || "",
     restaurant.notes || "",
     restaurant.michelinInfo || "",
+    ...restaurant.chefNames,
+    ...restaurant.bookTitles,
     ...restaurant.cuisineTypes,
     ...restaurant.addresses,
   ].join(" ").toLocaleLowerCase().includes(query));
 });
+const {
+  page: restaurantPage,
+  itemsPerPage: restaurantsPerPage,
+  totalItems: restaurantTotal,
+  paginatedItems: paginatedRestaurants,
+} = useListPagination(filteredRestaurants);
 
 const restaurantSections = computed(() => recommendationOptions.value
   .map(option => ({
     status: option.value,
     title: option.text,
-    items: filteredRestaurants.value.filter(item => item.recommendationStatus === option.value),
+    items: paginatedRestaurants.value.filter(item => item.recommendationStatus === option.value),
   }))
   .filter(section => section.items.length));
 
@@ -333,6 +381,12 @@ function restaurantPayload(restaurant: Restaurant): RestaurantCreate {
     description: restaurant.description,
     notes: restaurant.notes,
     michelinInfo: restaurant.michelinInfo,
+    michelinStarCount: restaurant.michelinStarCount,
+    isMichelinListed: restaurant.isMichelinListed,
+    chefNames: [...restaurant.chefNames],
+    bookTitles: [...restaurant.bookTitles],
+    chefIds: [...restaurant.chefIds],
+    uploadedBookIds: [...restaurant.uploadedBookIds],
     googleRating: restaurant.googleRating,
     googleReviewCount: restaurant.googleReviewCount,
     googleMapsUrl: restaurant.googleMapsUrl,
@@ -385,7 +439,7 @@ async function deleteRestaurant() {
   align-items: center;
   display: grid;
   gap: 12px;
-  grid-template-columns: minmax(220px, 1fr) auto;
+  grid-template-columns: minmax(220px, 1fr) auto auto;
 }
 
 .restaurants-grid {
@@ -416,6 +470,10 @@ async function deleteRestaurant() {
 .restaurant-detail,
 .restaurant-notes {
   overflow-wrap: anywhere;
+}
+
+.restaurant-related-link {
+  margin-inline-start: 8px;
 }
 
 .restaurant-ratings {

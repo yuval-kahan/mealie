@@ -1,5 +1,9 @@
 <template>
   <v-container class="narrow-container">
+    <ShoppingWebsiteDiscoverDialog
+      v-model="discoverDialogOpen"
+      @saved="loadWebsites"
+    />
     <BaseDialog
       v-model="dialogOpen"
       :title="editingWebsite ? $t('shopping-website.edit-website') : $t('shopping-website.save-website')"
@@ -211,6 +215,14 @@
       <v-btn color="primary" :prepend-icon="$globals.icons.create" @click="openCreateDialog">
         {{ $t("shopping-website.save-website") }}
       </v-btn>
+      <v-btn
+        color="primary"
+        variant="tonal"
+        :prepend-icon="$globals.icons.robot"
+        @click="discoverDialogOpen = true"
+      >
+        {{ $t("shopping-website.find-with-ai") }}
+      </v-btn>
     </div>
 
     <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
@@ -221,6 +233,11 @@
         density="compact"
         hide-details
         class="mb-4"
+      />
+      <BaseListPagination
+        v-model:page="websitePage"
+        v-model:items-per-page="websitesPerPage"
+        :total-items="websiteTotal"
       />
       <section
         v-for="section in websiteSections"
@@ -320,12 +337,14 @@ import { useUserApi } from "~/composables/api/api-client";
 import { alert } from "~/composables/use-toast";
 
 const i18n = useI18n();
+const { $globals } = useNuxtApp();
 const api = useUserApi();
 const websites = ref<ShoppingWebsite[]>([]);
 const loading = ref(true);
 const saving = ref(false);
 const search = ref("");
 const dialogOpen = ref(false);
+const discoverDialogOpen = ref(false);
 const deleteDialogOpen = ref(false);
 const editingWebsite = ref<ShoppingWebsite | null>(null);
 const deletingWebsite = ref<ShoppingWebsite | null>(null);
@@ -380,13 +399,19 @@ const filteredWebsites = computed(() => {
     ...website.offeredFoods,
   ].join(" ").toLocaleLowerCase().includes(query));
 });
+const {
+  page: websitePage,
+  itemsPerPage: websitesPerPage,
+  totalItems: websiteTotal,
+  paginatedItems: paginatedWebsites,
+} = useListPagination(filteredWebsites);
 const websiteSections = computed(() => {
   if (!groupByType.value) {
     return [{
       key: "all",
       title: i18n.t("shopping-website.websites"),
       icon: $globals.icons.web,
-      websites: filteredWebsites.value,
+      websites: paginatedWebsites.value,
     }];
   }
 
@@ -395,13 +420,13 @@ const websiteSections = computed(() => {
       key: "recipes",
       title: i18n.t("shopping-website.recipe-sites"),
       icon: $globals.icons.silverwareForkKnife,
-      websites: filteredWebsites.value.filter(website => website.isRecipeSite),
+      websites: paginatedWebsites.value.filter(website => website.isRecipeSite),
     },
     {
       key: "shopping",
       title: i18n.t("shopping-website.shopping-sites"),
       icon: $globals.icons.cartCheck,
-      websites: filteredWebsites.value.filter(website => website.isShoppingSite),
+      websites: paginatedWebsites.value.filter(website => website.isShoppingSite),
     },
   ].filter(section => section.websites.length);
 });
@@ -548,7 +573,7 @@ async function deleteWebsite() {
   align-items: center;
   display: grid;
   gap: 12px;
-  grid-template-columns: minmax(220px, 1fr) auto;
+  grid-template-columns: minmax(220px, 1fr) auto auto;
 }
 
 .shopping-websites-grid {

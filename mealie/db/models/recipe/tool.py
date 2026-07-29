@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import ConfigDict
 from slugify import slugify
-from sqlalchemy import Boolean, Column, ForeignKey, String, Table, UniqueConstraint, orm
+from sqlalchemy import Boolean, Column, ForeignKey, String, Table, Text, UniqueConstraint, orm
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mealie.db.models._model_base import BaseMixins, FilterableColumn, SqlAlchemyBase
@@ -50,6 +50,10 @@ class Tool(SqlAlchemyBase, BaseMixins):
 
     name: FilterableColumn[str] = mapped_column(String, index=True, nullable=False)
     slug: FilterableColumn[str] = mapped_column(String, index=True, nullable=False)
+    category: FilterableColumn[str | None] = mapped_column(String(120), nullable=True, index=True)
+    description: FilterableColumn[str | None] = mapped_column(Text, nullable=True)
+    image_source_url: FilterableColumn[str | None] = mapped_column(String(2000), nullable=True)
+    ai_enriched: FilterableColumn[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     households_with_tool: Mapped[list["Household"]] = orm.relationship(
         "Household", secondary=households_to_tools, back_populates="tools_on_hand"

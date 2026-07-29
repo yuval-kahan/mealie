@@ -10,6 +10,8 @@ Rules:
 - Include aging, origin, labels, quality grades, or production distinctions when they materially affect cooking.
 - Add related concepts that help the reader understand or use the product, but keep the article focused.
 - Use Markdown headings and concise lists so the entry is easy to scan.
+- Put every Markdown heading on its own line with a blank line before it. Never place `###` inside a paragraph.
 - Do not invent certifications, legal rules, health claims, or precise facts. Clearly mark uncertainty.
 - Categories must be broad and tags specific, searchable cooking terms.
 - Preserve proper names. Translate common category and tag terms into the requested language.
+- Return a concise English image_search_query for a clear, representative product photo without text or diagrams.

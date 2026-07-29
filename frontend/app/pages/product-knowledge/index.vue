@@ -46,6 +46,45 @@
               variant="outlined"
               density="comfortable"
             />
+            <v-file-input
+              v-model="imageFile"
+              accept="image/*"
+              :label="$t('product-knowledge.upload-image')"
+              :prepend-inner-icon="$globals.icons.fileImage"
+              prepend-icon=""
+              clearable
+              variant="outlined"
+              density="comfortable"
+            />
+            <v-text-field
+              v-model="imageUrl"
+              :label="$t('product-knowledge.image-url')"
+              :prepend-inner-icon="$globals.icons.link"
+              type="url"
+              variant="outlined"
+              density="comfortable"
+            />
+            <div v-if="editingItem" class="d-flex flex-wrap ga-2 mb-4">
+              <v-btn
+                variant="tonal"
+                color="primary"
+                :prepend-icon="$globals.icons.robot"
+                :loading="imageSaving"
+                @click="findProductImage(editingItem)"
+              >
+                {{ $t("product-knowledge.find-image-with-ai") }}
+              </v-btn>
+              <v-btn
+                v-if="editingItem.hasImage"
+                variant="text"
+                color="error"
+                :prepend-icon="$globals.icons.delete"
+                :loading="imageSaving"
+                @click="deleteProductImage(editingItem)"
+              >
+                {{ $t("product-knowledge.delete-image") }}
+              </v-btn>
+            </div>
             <v-textarea
               v-model="form.summary"
               :label="$t('product-knowledge.summary')"
@@ -97,6 +136,14 @@
       max-width="96vw"
     >
       <v-card-text v-if="selectedItem" class="product-details">
+        <v-img
+          v-if="selectedItem.hasImage && !imageErrors.has(selectedItem.id)"
+          :src="api.productKnowledge.imageUrl(selectedItem)"
+          :alt="selectedItem.title"
+          class="product-details__image mb-5"
+          cover
+          @error="imageErrors.add(selectedItem.id)"
+        />
         <p v-if="selectedItem.summary" class="text-subtitle-1 mb-4">
           {{ selectedItem.summary }}
         </p>
@@ -207,15 +254,35 @@
       <BaseButton create @click="openCreate" />
     </div>
 
+    <BaseListPagination
+      v-if="filteredItems.length"
+      v-model:page="productPage"
+      v-model:items-per-page="productsPerPage"
+      :total-items="productTotal"
+    />
+
     <v-row class="mt-3">
       <v-col
-        v-for="item in filteredItems"
+        v-for="item in paginatedProducts"
         :key="item.id"
         cols="12"
         md="6"
         lg="4"
       >
         <v-card class="product-card" @click="openDetails(item)">
+          <v-img
+            v-if="item.hasImage && !imageErrors.has(item.id)"
+            :src="api.productKnowledge.imageUrl(item)"
+            :alt="item.title"
+            height="190"
+            cover
+            @error="imageErrors.add(item.id)"
+          />
+          <div v-else class="product-card__image-placeholder">
+            <v-icon size="64" color="primary">
+              {{ $globals.icons.informationOutline }}
+            </v-icon>
+          </div>
           <v-card-title class="product-card__title">
             {{ item.title }}
           </v-card-title>
@@ -245,6 +312,15 @@
             </div>
           </v-card-text>
           <v-card-actions @click.stop>
+            <v-btn
+              icon
+              variant="text"
+              :title="$t('product-knowledge.find-image-with-ai')"
+              :loading="imageSaving && imageSavingId === item.id"
+              @click="findProductImage(item)"
+            >
+              <v-icon>{{ $globals.icons.fileImage }}</v-icon>
+            </v-btn>
             <v-spacer />
             <v-btn
               icon
@@ -304,6 +380,11 @@ const detailsOpen = ref(false);
 const deleteOpen = ref(false);
 const saving = ref(false);
 const deleting = ref(false);
+const imageSaving = ref(false);
+const imageSavingId = ref<string | null>(null);
+const imageFile = ref<File | File[] | null>(null);
+const imageUrl = ref("");
+const imageErrors = reactive(new Set<string>());
 const editingItem = ref<ProductKnowledge | null>(null);
 const selectedItem = ref<ProductKnowledge | null>(null);
 const deletingItem = ref<ProductKnowledge | null>(null);
@@ -356,6 +437,12 @@ const filteredItems = computed(() => {
       && (!tags.size || itemTags.some(value => tags.has(value)));
   });
 });
+const {
+  page: productPage,
+  itemsPerPage: productsPerPage,
+  totalItems: productTotal,
+  paginatedItems: paginatedProducts,
+} = useListPagination(filteredItems);
 
 onMounted(refreshItems);
 
@@ -389,6 +476,8 @@ function resetEditor() {
   form.source = "";
   form.categories = [];
   form.tags = [];
+  imageFile.value = null;
+  imageUrl.value = "";
 }
 
 function openCreate() {
@@ -405,6 +494,8 @@ function openEdit(item: ProductKnowledge) {
   form.source = item.source || "";
   form.categories = [...item.categories];
   form.tags = [...item.tags];
+  imageFile.value = null;
+  imageUrl.value = "";
   editorOpen.value = true;
 }
 
@@ -427,7 +518,7 @@ function openDelete(item: ProductKnowledge) {
 
 async function submitItem() {
   saving.value = true;
-  const result = await (async () => {
+  let result = await (async () => {
     if (editingItem.value) {
       return await api.productKnowledge.updateOne(editingItem.value.id, form);
     }
@@ -439,16 +530,74 @@ async function submitItem() {
       targetLanguage: targetLanguage.value,
     });
   })().finally(() => {
-    saving.value = false;
+    // Image persistence below is part of the same save operation.
   });
 
   if (result.error || !result.data) {
+    saving.value = false;
     alert.error(i18n.t("events.something-went-wrong"));
     return;
   }
+  const file = selectedImage();
+  if (file) {
+    result = await api.productKnowledge.uploadImage(result.data.id, file);
+  }
+  else if (imageUrl.value.trim()) {
+    result = await api.productKnowledge.saveImageUrl(result.data.id, imageUrl.value.trim());
+  }
+  saving.value = false;
+  if (result.error || !result.data) {
+    alert.error(i18n.t("product-knowledge.image-save-failed"));
+    return;
+  }
+  imageErrors.delete(result.data.id);
   editorOpen.value = false;
   resetEditor();
   await refreshItems();
+}
+
+function selectedImage(): File | null {
+  if (imageFile.value instanceof File) return imageFile.value;
+  return Array.isArray(imageFile.value) ? imageFile.value[0] || null : null;
+}
+
+async function findProductImage(item: ProductKnowledge) {
+  imageSaving.value = true;
+  imageSavingId.value = item.id;
+  const { data, error } = await api.productKnowledge.findImage(item.id).finally(() => {
+    imageSaving.value = false;
+    imageSavingId.value = null;
+  });
+  if (!data || error) {
+    alert.error(i18n.t("product-knowledge.image-save-failed"));
+    return;
+  }
+  imageErrors.delete(item.id);
+  await refreshItems();
+  const refreshed = items.value.find(candidate => candidate.id === item.id);
+  if (refreshed && editingItem.value?.id === item.id) {
+    openEdit(refreshed);
+  }
+  if (refreshed && selectedItem.value?.id === item.id) {
+    selectedItem.value = refreshed;
+  }
+}
+
+async function deleteProductImage(item: ProductKnowledge) {
+  imageSaving.value = true;
+  imageSavingId.value = item.id;
+  const { error } = await api.productKnowledge.deleteImage(item.id).finally(() => {
+    imageSaving.value = false;
+    imageSavingId.value = null;
+  });
+  if (error) {
+    alert.error(i18n.t("events.something-went-wrong"));
+    return;
+  }
+  imageErrors.delete(item.id);
+  await refreshItems();
+  const refreshed = items.value.find(candidate => candidate.id === item.id);
+  if (refreshed) openEdit(refreshed);
 }
 
 async function deleteItem() {
@@ -483,6 +632,20 @@ async function deleteItem() {
   border-radius: 8px;
   cursor: pointer;
   height: 100%;
+}
+
+.product-card__image-placeholder {
+  align-items: center;
+  background: rgb(var(--v-theme-surface-variant));
+  display: flex;
+  height: 190px;
+  justify-content: center;
+}
+
+.product-details__image {
+  aspect-ratio: 16 / 8;
+  border-radius: 6px;
+  max-height: 360px;
 }
 
 .product-card__title {

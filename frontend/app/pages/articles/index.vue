@@ -289,9 +289,16 @@
       {{ $t("article.no-ai-results") }}
     </v-alert>
 
+    <BaseListPagination
+      v-if="visibleArticles.length"
+      v-model:page="articlePage"
+      v-model:items-per-page="articlesPerPage"
+      :total-items="articleTotal"
+    />
+
     <v-row class="mt-2">
       <v-col
-        v-for="article in visibleArticles"
+        v-for="article in paginatedArticles"
         :key="article.id"
         cols="12"
         md="6"
@@ -453,6 +460,12 @@ const visibleArticles = computed(() => {
   const byId = new Map(filteredArticles.value.map(article => [article.id, article]));
   return aiSearchIds.value.map(id => byId.get(id)).filter((article): article is Article => !!article);
 });
+const {
+  page: articlePage,
+  itemsPerPage: articlesPerPage,
+  totalItems: articleTotal,
+  paginatedItems: paginatedArticles,
+} = useListPagination(visibleArticles);
 
 onMounted(async () => {
   await refreshArticles();

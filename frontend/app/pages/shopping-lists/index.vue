@@ -377,9 +377,16 @@
       </BasePageTitle>
     </v-container>
 
+    <BaseListPagination
+      v-if="shoppingListChoices.length"
+      v-model:page="shoppingListPage"
+      v-model:items-per-page="shoppingListsPerPage"
+      :total-items="shoppingListTotal"
+    />
+
     <section>
       <div
-        v-for="list in shoppingListChoices"
+        v-for="list in paginatedShoppingLists"
         :key="list.id"
         class="shopping-list-group"
       >
@@ -875,6 +882,12 @@ const shoppingListChoices = computed(() => {
 
   return matches.sort(compareShoppingLists);
 });
+const {
+  page: shoppingListPage,
+  itemsPerPage: shoppingListsPerPage,
+  totalItems: shoppingListTotal,
+  paginatedItems: paginatedShoppingLists,
+} = useListPagination(shoppingListChoices);
 
 function shoppingListItemCount(list: ShoppingListOut) {
   return Number(list.itemCount ?? list.listItems?.length ?? 0);

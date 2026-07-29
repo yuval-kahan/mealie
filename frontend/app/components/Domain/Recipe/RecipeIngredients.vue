@@ -4,12 +4,15 @@
       v-model="aiIngredientsDialog"
       :title="$t('recipe.adjust-ingredients-with-ai')"
       :icon="$globals.icons.robot"
-      width="640"
+      width="720"
       max-width="96vw"
       can-submit
-      :submit-disabled="aiIngredientRequest.trim().length < 2 || aiIngredientsLoading"
-      :submit-loading="aiIngredientsLoading"
+      keep-open
+      :submit-text="aiIngredientPreview ? $t('recipe.apply-ai-ingredient-adjustment') : $t('recipe.create-ai-ingredient-preview')"
+      :submit-disabled="aiIngredientSubmitDisabled"
+      :loading="aiIngredientsLoading"
       @submit="adjustIngredientsWithAI"
+      @close="resetAiIngredientDialog"
     >
       <v-card-text class="pt-4">
         <p class="mb-4">
@@ -25,6 +28,82 @@
           :placeholder="$t('recipe.adjust-ingredients-with-ai-placeholder')"
           :disabled="aiIngredientsLoading"
         />
+        <template v-if="aiIngredientPreview">
+          <v-alert
+            type="info"
+            variant="tonal"
+            density="compact"
+            class="mb-3"
+          >
+            {{ $t("recipe.ai-ingredient-preview-only") }}
+            <div
+              v-if="aiIngredientPreview.adjustmentNote"
+              class="mt-1"
+            >
+              {{ aiIngredientPreview.adjustmentNote }}
+            </div>
+          </v-alert>
+          <v-list
+            density="compact"
+            class="ai-ingredient-preview-list mb-3"
+          >
+            <template
+              v-for="(ingredient, index) in aiIngredientPreview.ingredients"
+              :key="`ai-preview-${index}`"
+            >
+              <v-list-subheader v-if="ingredient.title">
+                {{ ingredient.title }}
+              </v-list-subheader>
+              <v-list-item v-else>
+                {{ parseIngredientText(ingredient, 1, false) }}
+              </v-list-item>
+            </template>
+          </v-list>
+          <v-checkbox
+            v-model="applyAiIngredientPermanently"
+            color="primary"
+            hide-details
+            :label="$t('recipe.apply-ai-ingredient-adjustment-permanently')"
+          />
+          <v-checkbox
+            v-model="syncAiIngredientShoppingLists"
+            class="ms-6"
+            color="primary"
+            hide-details
+            :disabled="!applyAiIngredientPermanently"
+            :label="$t('recipe.sync-linked-shopping-lists')"
+          />
+        </template>
+
+        <v-expansion-panels
+          v-if="aiIngredientHistory.length"
+          class="mt-4"
+          variant="accordion"
+        >
+          <v-expansion-panel>
+            <v-expansion-panel-title>
+              {{ $t("recipe.ai-ingredient-adjustment-history") }}
+            </v-expansion-panel-title>
+            <v-expansion-panel-text>
+              <v-list
+                density="compact"
+                class="ai-ingredient-history-list"
+              >
+                <v-list-item
+                  v-for="entry in aiIngredientHistory"
+                  :key="entry.id"
+                  :title="entry.request"
+                  :subtitle="formatHistoryDate(entry.createdAt)"
+                  @click="restoreAiIngredientHistory(entry)"
+                >
+                  <template #append>
+                    <v-icon>{{ $globals.icons.timelineText }}</v-icon>
+                  </template>
+                </v-list-item>
+              </v-list>
+            </v-expansion-panel-text>
+          </v-expansion-panel>
+        </v-expansion-panels>
       </v-card-text>
     </BaseDialog>
     <BaseDialog
@@ -179,6 +258,7 @@
 </template>
 
 <script setup lang="ts">
+import { useLocalStorage } from "@vueuse/core";
 import RecipeIngredientListItem from "./RecipeIngredientListItem.vue";
 import { useStaticRoutes, useUserApi } from "~/composables/api";
 import { useIngredientTextParser } from "~/composables/recipes";
@@ -212,12 +292,17 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   "itemImagesEnsured": [];
   "update:scale": [scale: number];
-  "ingredientsAdjusted": [payload: { ingredients: RecipeIngredient[]; adjustmentNote: string }];
+  "ingredientsAdjusted": [payload: {
+    ingredients: RecipeIngredient[];
+    adjustmentNote: string;
+    syncShoppingLists: boolean;
+  }];
   "resetAiIngredientsAdjustment": [];
 }>();
 
 const { parseIngredientText } = useIngredientTextParser();
 const api = useUserApi();
+const auth = useMealieAuth();
 const i18n = useI18n();
 const { isOwnGroup } = useLoggedInState();
 const userExperiencePreferences = useUserExperiencePreferences();
@@ -231,6 +316,37 @@ const targetQuantity = ref<number | null>(null);
 const aiIngredientsDialog = ref(false);
 const aiIngredientRequest = ref("");
 const aiIngredientsLoading = ref(false);
+const aiIngredientPreview = ref<{
+  ingredients: RecipeIngredient[];
+  adjustmentNote: string;
+} | null>(null);
+const applyAiIngredientPermanently = ref(false);
+const syncAiIngredientShoppingLists = ref(false);
+
+interface AiIngredientAdjustmentHistoryEntry {
+  id: string;
+  createdAt: string;
+  request: string;
+  adjustmentNote: string;
+  ingredients: RecipeIngredient[];
+}
+
+const aiIngredientHistoryStorage = useLocalStorage<Record<string, AiIngredientAdjustmentHistoryEntry[]>>(
+  "mealie-ai-ingredient-adjustment-history-v1",
+  {},
+  { deep: true },
+);
+const aiIngredientHistoryKey = computed(() => {
+  return `${auth.user.value?.id || "anonymous"}:${props.recipeSlug || "unknown"}`;
+});
+const aiIngredientHistory = computed(() => {
+  return aiIngredientHistoryStorage.value[aiIngredientHistoryKey.value] || [];
+});
+const aiIngredientSubmitDisabled = computed(() => {
+  if (aiIngredientsLoading.value) return true;
+  if (!aiIngredientPreview.value) return aiIngredientRequest.value.trim().length < 2;
+  return !applyAiIngredientPermanently.value;
+});
 
 const validTargetQuantity = computed(() => Number.isFinite(Number(targetQuantity.value)) && Number(targetQuantity.value) > 0);
 const quantityScaleIngredientName = computed(() => {
@@ -260,6 +376,16 @@ watch(
     localItemImagesEnsured.value = recipeItemImagesEnsured({ itemImagesEnsured: value });
   },
 );
+
+watch(aiIngredientRequest, () => {
+  aiIngredientPreview.value = null;
+  applyAiIngredientPermanently.value = false;
+  syncAiIngredientShoppingLists.value = false;
+});
+
+watch(applyAiIngredientPermanently, (enabled) => {
+  if (!enabled) syncAiIngredientShoppingLists.value = false;
+});
 
 const ingredientCopyText = computed(() => {
   const components: string[] = [];
@@ -346,10 +472,22 @@ function applyQuantityScale() {
 
 async function adjustIngredientsWithAI() {
   const request = aiIngredientRequest.value.trim();
-  if (!props.recipeSlug || request.length < 2 || aiIngredientsLoading.value) {
+  if (!props.recipeSlug || aiIngredientsLoading.value) {
     return;
   }
 
+  if (aiIngredientPreview.value) {
+    if (!applyAiIngredientPermanently.value) return;
+    emit("ingredientsAdjusted", {
+      ingredients: aiIngredientPreview.value.ingredients,
+      adjustmentNote: aiIngredientPreview.value.adjustmentNote,
+      syncShoppingLists: syncAiIngredientShoppingLists.value,
+    });
+    aiIngredientsDialog.value = false;
+    return;
+  }
+
+  if (request.length < 2) return;
   aiIngredientsLoading.value = true;
   try {
     const { data, error } = await api.recipes.adjustIngredientsWithAI(props.recipeSlug, request);
@@ -358,16 +496,75 @@ async function adjustIngredientsWithAI() {
       return;
     }
 
-    emit("ingredientsAdjusted", {
+    aiIngredientPreview.value = {
       ingredients: data.ingredients,
       adjustmentNote: data.adjustmentNote || "",
-    });
-    aiIngredientRequest.value = "";
-    aiIngredientsDialog.value = false;
+    };
+    saveAiIngredientHistory(request, aiIngredientPreview.value);
   }
   finally {
     aiIngredientsLoading.value = false;
   }
+}
+
+function saveAiIngredientHistory(
+  request: string,
+  preview: { ingredients: RecipeIngredient[]; adjustmentNote: string },
+) {
+  const entry: AiIngredientAdjustmentHistoryEntry = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    createdAt: new Date().toISOString(),
+    request,
+    adjustmentNote: preview.adjustmentNote,
+    ingredients: JSON.parse(JSON.stringify(preview.ingredients)) as RecipeIngredient[],
+  };
+  const nextStorage = {
+    ...aiIngredientHistoryStorage.value,
+    [aiIngredientHistoryKey.value]: [
+      entry,
+      ...aiIngredientHistory.value,
+    ].slice(0, 20),
+  };
+  const keys = Object.keys(nextStorage);
+  if (keys.length > 100) {
+    const staleKeys = new Set(
+      keys
+        .sort((a, b) => {
+          const aDate = nextStorage[a]?.[0]?.createdAt || "";
+          const bDate = nextStorage[b]?.[0]?.createdAt || "";
+          return aDate.localeCompare(bDate);
+        })
+        .slice(0, keys.length - 100),
+    );
+    aiIngredientHistoryStorage.value = Object.fromEntries(
+      Object.entries(nextStorage).filter(([key]) => !staleKeys.has(key)),
+    );
+    return;
+  }
+  aiIngredientHistoryStorage.value = nextStorage;
+}
+
+async function restoreAiIngredientHistory(entry: AiIngredientAdjustmentHistoryEntry) {
+  aiIngredientRequest.value = entry.request;
+  await nextTick();
+  aiIngredientPreview.value = {
+    ingredients: JSON.parse(JSON.stringify(entry.ingredients)) as RecipeIngredient[],
+    adjustmentNote: entry.adjustmentNote,
+  };
+}
+
+function formatHistoryDate(value: string) {
+  return new Intl.DateTimeFormat(i18n.locale.value, {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function resetAiIngredientDialog() {
+  aiIngredientRequest.value = "";
+  aiIngredientPreview.value = null;
+  applyAiIngredientPermanently.value = false;
+  syncAiIngredientShoppingLists.value = false;
 }
 </script>
 
@@ -379,5 +576,12 @@ async function adjustIngredientsWithAI() {
 .recipe-completed-item,
 .recipe-completed-item * {
   text-decoration: line-through;
+}
+
+.ai-ingredient-preview-list,
+.ai-ingredient-history-list {
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
 }
 </style>

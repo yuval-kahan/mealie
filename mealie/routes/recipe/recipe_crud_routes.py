@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path as FileSystemPath
 from shutil import copyfileobj, rmtree
 from tempfile import mkdtemp
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import orjson
 import sqlalchemy
@@ -41,6 +41,7 @@ from mealie.db.models.household.shopping_list import (
 from mealie.db.models.household.shopping_website import RecipeShoppingWebsite, ShoppingWebsite
 from mealie.db.models.household.video import RecipeVideo, Video
 from mealie.db.models.recipe.api_extras import ShoppingListExtras
+from mealie.db.models.recipe.recipe import RecipeModel, recipe_merge_sources
 from mealie.pkgs import cache
 from mealie.repos.all_repositories import get_repositories
 from mealie.routes._base import controller
@@ -63,7 +64,9 @@ from mealie.schema.recipe.recipe import (
 from mealie.schema.recipe.recipe_ai_search import RecipeAISearchRequest, RecipeAISearchResponse
 from mealie.schema.recipe.recipe_asset import RecipeAsset
 from mealie.schema.recipe.recipe_ingredient import RecipeIngredient
+from mealie.schema.recipe.recipe_notes import RecipeNote
 from mealie.schema.recipe.recipe_scraper import ScrapeRecipeTest
+from mealie.schema.recipe.recipe_step import IngredientReferences, RecipeStep
 from mealie.schema.recipe.recipe_suggestion import RecipeSuggestionQuery, RecipeSuggestionResponse
 from mealie.schema.recipe.request_helpers import (
     RecipeDuplicate,
@@ -154,6 +157,28 @@ class RecipeAIImageRequest(MealieModel):
 class RecipeIngredientsAdjustWithAIResponse(MealieModel):
     ingredients: list[RecipeIngredient]
     adjustment_note: str = ""
+
+
+class RecipeIngredientsShoppingListSyncResponse(MealieModel):
+    shopping_list_ids: list[UUID4] = Field(default_factory=list)
+    synced_count: int = 0
+
+
+class RecipeMergeRequest(MealieModel):
+    source_slugs: list[str] = Field(..., min_length=2, max_length=50)
+    name: str | None = Field(None, max_length=255)
+    keep_originals: bool = True
+
+
+class RecipeMergeResponse(MealieModel):
+    recipe: Recipe
+    source_count: int
+    archived_source_count: int
+
+
+class RecipeMergeUndoResponse(MealieModel):
+    removed_merged_slug: str
+    restored_source_slugs: list[str] = Field(default_factory=list)
 
 
 class RecipeDeletePreview(MealieModel):
@@ -1284,6 +1309,18 @@ class RecipeController(BaseRecipeController):
         message = orjson.dumps(
             {
                 "user_request": data.text.strip(),
+                "recipe": {
+                    "name": recipe.name,
+                    "description": recipe.description or "",
+                    "yield": recipe.recipe_yield or "",
+                    "instructions": [
+                        {
+                            "title": step.title or "",
+                            "text": step.text or "",
+                        }
+                        for step in (recipe.recipe_instructions or [])
+                    ],
+                },
                 "ingredient_candidates": candidates,
             }
         ).decode()
@@ -1380,6 +1417,18 @@ class RecipeController(BaseRecipeController):
         message = orjson.dumps(
             {
                 "user_request": data.text.strip(),
+                "recipe": {
+                    "name": recipe.name,
+                    "description": recipe.description or "",
+                    "yield": recipe.recipe_yield or "",
+                    "instructions": [
+                        {
+                            "title": step.title or "",
+                            "text": step.text or "",
+                        }
+                        for step in (recipe.recipe_instructions or [])
+                    ],
+                },
                 "ingredient_candidates": candidates,
             }
         ).decode()
@@ -1405,7 +1454,20 @@ class RecipeController(BaseRecipeController):
 
         adjusted_by_index = {item.ingredient_index: item for item in response.ingredients}
         expected_indexes = set(range(len(original_ingredients)))
-        if len(adjusted_by_index) != len(response.ingredients) or set(adjusted_by_index) != expected_indexes:
+        if (
+            len(adjusted_by_index) != len(response.ingredients)
+            or not set(adjusted_by_index).issubset(expected_indexes)
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("AI did not return a complete ingredient list"),
+            )
+        missing_non_title_indexes = {
+            index
+            for index in expected_indexes - set(adjusted_by_index)
+            if not original_ingredients[index].title
+        }
+        if missing_non_title_indexes:
             raise HTTPException(
                 status_code=400,
                 detail=ErrorResponse.respond("AI did not return a complete ingredient list"),
@@ -1413,7 +1475,10 @@ class RecipeController(BaseRecipeController):
 
         adjusted_ingredients: list[RecipeIngredient] = []
         for index, original in enumerate(original_ingredients):
-            adjusted = adjusted_by_index[index]
+            adjusted = adjusted_by_index.get(index)
+            if adjusted is None:
+                adjusted_ingredients.append(original.model_copy(deep=True))
+                continue
             payload = original.model_dump(mode="json")
             payload.update(
                 {
@@ -1432,6 +1497,74 @@ class RecipeController(BaseRecipeController):
         return RecipeIngredientsAdjustWithAIResponse(
             ingredients=adjusted_ingredients,
             adjustment_note=response.reason.strip(),
+        )
+
+    @router.post(
+        "/{slug}/ingredients/sync-shopping-lists",
+        response_model=RecipeIngredientsShoppingListSyncResponse,
+    )
+    def sync_recipe_ingredients_to_shopping_lists(
+        self,
+        slug: str,
+    ) -> RecipeIngredientsShoppingListSyncResponse:
+        """Replace this recipe's ingredients in every linked shopping list."""
+
+        recipe = self.service.get_one(slug)
+        shopping_service = ShoppingListService(self.repos)
+        direct_references = self.session.execute(
+            sqlalchemy.select(
+                ShoppingListRecipeReference.shopping_list_id,
+                ShoppingListRecipeReference.recipe_quantity,
+            )
+            .join(ShoppingList, ShoppingList.id == ShoppingListRecipeReference.shopping_list_id)
+            .where(
+                ShoppingListRecipeReference.recipe_id == recipe.id,
+                ShoppingList.group_id == self.group_id,
+            )
+        ).all()
+        list_scales = {
+            row.shopping_list_id: max(float(row.recipe_quantity or 1), 0.001)
+            for row in direct_references
+        }
+
+        item_list_ids = self.session.execute(
+            sqlalchemy.select(ShoppingListItem.shopping_list_id)
+            .join(
+                ShoppingListItemRecipeReference,
+                ShoppingListItemRecipeReference.shopping_list_item_id == ShoppingListItem.id,
+            )
+            .join(ShoppingList, ShoppingList.id == ShoppingListItem.shopping_list_id)
+            .where(
+                ShoppingListItemRecipeReference.recipe_id == recipe.id,
+                ShoppingList.group_id == self.group_id,
+            )
+            .distinct()
+        ).scalars()
+        for list_id in item_list_ids:
+            list_scales.setdefault(list_id, 1.0)
+
+        synced_ids: list[UUID4] = []
+        for list_id, recipe_quantity in list_scales.items():
+            shopping_service.remove_recipe_ingredients_from_list(
+                list_id,
+                recipe.id,
+                recipe_decrement=recipe_quantity,
+            )
+            shopping_service.add_recipe_ingredients_to_list(
+                list_id,
+                [
+                    ShoppingListAddRecipeParamsBulk(
+                        recipe_id=recipe.id,
+                        recipe_increment_quantity=recipe_quantity,
+                        recipe_ingredients=recipe.recipe_ingredient or None,
+                    )
+                ],
+            )
+            synced_ids.append(list_id)
+
+        return RecipeIngredientsShoppingListSyncResponse(
+            shopping_list_ids=synced_ids,
+            synced_count=len(synced_ids),
         )
 
     @router.post("/ai-search", response_model=RecipeAISearchResponse)
@@ -1456,6 +1589,267 @@ class RecipeController(BaseRecipeController):
                 status_code=400,
                 detail=ErrorResponse.respond("AI recipe search failed"),
             ) from e
+
+    @router.get("/merge", response_model=list[RecipeSummary])
+    def get_recipe_merges(self) -> list[RecipeSummary]:
+        """Return a bounded list of reversible merged recipes for management."""
+
+        recipes = (
+            self.session.execute(
+                sqlalchemy.select(RecipeModel)
+                .where(
+                    RecipeModel.group_id == self.group_id,
+                    RecipeModel.is_merged_recipe.is_(True),
+                    RecipeModel.is_merge_archived.is_(False),
+                )
+                .order_by(RecipeModel.created_at.desc())
+                .limit(200)
+                .options(*RecipeSummary.loader_options())
+            )
+            .scalars()
+            .unique()
+            .all()
+        )
+        return [RecipeSummary.model_validate(recipe) for recipe in recipes]
+
+    @router.post("/merge", status_code=201, response_model=RecipeMergeResponse)
+    def merge_recipes(self, data: RecipeMergeRequest) -> RecipeMergeResponse:
+        """Create one reversible recipe from two or more existing recipes."""
+
+        source_slugs = list(dict.fromkeys(slug.strip() for slug in data.source_slugs if slug.strip()))
+        if len(source_slugs) < 2:
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("Choose at least two different recipes"),
+            )
+        if not self.service.can_update(source_slugs):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=ErrorResponse.respond("You do not have permission to merge all selected recipes"),
+            )
+
+        try:
+            sources = [self.service.get_one(slug) for slug in source_slugs]
+        except Exception as exc:
+            self.handle_exceptions(exc)
+            raise
+
+        if any(source.is_merge_archived for source in sources):
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("Archived merge sources cannot be merged again"),
+            )
+        if any(source.is_merged_recipe for source in sources):
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("Undo an existing merge before merging it again"),
+            )
+
+        requested_name = (data.name or "").strip()
+        if not requested_name:
+            requested_name = " + ".join(str(source.name or "").strip() for source in sources)
+        requested_name = requested_name[:255].strip()
+
+        merged: Recipe | None = None
+        try:
+            merged = self.service.duplicate_one(sources[0].slug, RecipeDuplicate(name=requested_name))
+
+            merged_ingredients: list[RecipeIngredient] = []
+            merged_steps: list[RecipeStep] = []
+            merged_notes: list[RecipeNote] = []
+            for source in sources:
+                ingredient_reference_map = {}
+                source_ingredients = source.recipe_ingredient or []
+                if source_ingredients:
+                    merged_ingredients.append(RecipeIngredient(title=source.name or ""))
+                for ingredient in source_ingredients:
+                    new_reference_id = uuid4()
+                    ingredient_reference_map[ingredient.reference_id] = new_reference_id
+                    merged_ingredients.append(
+                        ingredient.model_copy(
+                            deep=True,
+                            update={
+                                "reference_id": new_reference_id,
+                                "display": "",
+                            },
+                        )
+                    )
+
+                for step_index, step in enumerate(source.recipe_instructions or []):
+                    step_title = (step.title or "").strip()
+                    if step_index == 0:
+                        step_title = (
+                            f"{source.name} - {step_title}"
+                            if step_title
+                            else str(source.name or "")
+                        )
+                    merged_steps.append(
+                        step.model_copy(
+                            deep=True,
+                            update={
+                                "id": uuid4(),
+                                "title": step_title,
+                                "ingredient_references": [
+                                    IngredientReferences(
+                                        reference_id=ingredient_reference_map.get(
+                                            reference.reference_id,
+                                            reference.reference_id,
+                                        )
+                                    )
+                                    for reference in (step.ingredient_references or [])
+                                ],
+                            },
+                        )
+                    )
+
+                for note in source.notes or []:
+                    note_title = str(note.title or "").strip()
+                    merged_notes.append(
+                        RecipeNote(
+                            title=(
+                                f"{source.name} - {note_title}"
+                                if note_title
+                                else str(source.name or "")
+                            ),
+                            text=note.text,
+                        )
+                    )
+
+            def unique_organizers(attribute: str):
+                result = []
+                seen = set()
+                for source in sources:
+                    for item in getattr(source, attribute) or []:
+                        key = item.slug
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        result.append(item.model_copy(deep=True))
+                return result
+
+            source_names = [str(source.name or source.slug) for source in sources]
+            source_description = ", ".join(source_names)
+            merged.name = requested_name
+            merged.description = (
+                f"{merged.description.strip()}\n\n"
+                if merged.description and merged.description.strip()
+                else ""
+            ) + f"Merged from: {source_description}"
+            merged.recipe_ingredient = merged_ingredients
+            merged.recipe_instructions = merged_steps
+            merged.notes = merged_notes
+            merged.recipe_category = unique_organizers("recipe_category")
+            merged.tags = unique_organizers("tags")
+            merged.tools = unique_organizers("tools")
+            merged.is_merged_recipe = True
+            merged.is_merge_archived = False
+            merged.extras = {
+                **(merged.extras or {}),
+                "recipeMerge": {
+                    "createdAt": datetime.now(UTC).isoformat(),
+                    "keepOriginals": data.keep_originals,
+                    "sourceIds": [str(source.id) for source in sources],
+                    "sourceSlugs": [source.slug for source in sources],
+                    "sourceNames": source_names,
+                },
+            }
+            merged = self.service.update_one(merged.slug, merged)
+
+            self.session.execute(
+                recipe_merge_sources.insert(),
+                [
+                    {
+                        "merged_recipe_id": merged.id,
+                        "source_recipe_id": source.id,
+                        "position": position,
+                    }
+                    for position, source in enumerate(sources)
+                ],
+            )
+            if not data.keep_originals:
+                self.session.execute(
+                    sqlalchemy.update(RecipeModel)
+                    .where(RecipeModel.id.in_([source.id for source in sources]))
+                    .values(is_merge_archived=True)
+                )
+            self.session.commit()
+            merged = self.service.get_one(merged.slug)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            self.session.rollback()
+            if merged is not None:
+                with suppress(Exception):
+                    self.service.delete_one(merged.slug)
+            self.logger.exception("Failed to merge recipes")
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("Recipe merge failed"),
+            ) from exc
+
+        return RecipeMergeResponse(
+            recipe=merged,
+            source_count=len(sources),
+            archived_source_count=0 if data.keep_originals else len(sources),
+        )
+
+    @router.post("/merge/{slug}/undo", response_model=RecipeMergeUndoResponse)
+    def undo_recipe_merge(self, slug: str) -> RecipeMergeUndoResponse:
+        """Remove a merged recipe and restore every archived source recipe."""
+
+        merged = self.service.get_one(slug)
+        if not merged.is_merged_recipe:
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("This recipe is not a merged recipe"),
+            )
+        if not self.service.can_delete([merged.slug]):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=ErrorResponse.respond("You do not have permission to undo this merge"),
+            )
+
+        source_rows = self.session.execute(
+            sqlalchemy.select(
+                recipe_merge_sources.c.source_recipe_id,
+                recipe_merge_sources.c.position,
+            )
+            .where(recipe_merge_sources.c.merged_recipe_id == merged.id)
+            .order_by(recipe_merge_sources.c.position)
+        ).all()
+        source_ids = [row.source_recipe_id for row in source_rows]
+        source_slug_rows = self.session.execute(
+            sqlalchemy.select(RecipeModel.id, RecipeModel.slug)
+            .where(RecipeModel.id.in_(source_ids))
+        ).all()
+        source_slugs_by_id = {row.id: row.slug for row in source_slug_rows}
+        restored_slugs = [
+            source_slugs_by_id[source_id]
+            for source_id in source_ids
+            if source_id in source_slugs_by_id
+        ]
+        if source_ids:
+            self.session.execute(
+                sqlalchemy.update(RecipeModel)
+                .where(RecipeModel.id.in_(source_ids))
+                .values(is_merge_archived=False)
+            )
+            self.session.commit()
+
+        try:
+            self.service.delete_one(merged.slug)
+        except Exception as exc:
+            self.session.rollback()
+            self.logger.exception("Failed to undo recipe merge")
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("Could not undo the recipe merge"),
+            ) from exc
+
+        return RecipeMergeUndoResponse(
+            removed_merged_slug=slug,
+            restored_source_slugs=restored_slugs,
+        )
 
     # ==================================================================================================================
     # CRUD Operations

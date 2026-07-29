@@ -1,0 +1,13 @@
+Classify one kitchen tool or piece of culinary equipment.
+
+Return structured JSON only.
+
+Rules:
+- Set is_kitchen_tool=false only when the supplied item clearly is not culinary equipment.
+- Return one concise canonical name in Hebrew. Remove recipe-specific quantities and counts:
+  "3 קערות רחבות" becomes "קערות רחבות", and "2 saucepans" becomes "סירי רוטב".
+- Return one concise category in Hebrew only, such as כלי בישול, כלי חיתוך, אפייה, מדידה, ערבוב,
+  מכשירי חשמל, הגשה, אחסון, הכנת קפה, or ציוד מקצועי.
+- Write a short practical Hebrew description explaining what the tool is and how it is normally used.
+- Return a concise English image_search_query that would find a clear isolated product photo of the tool.
+- Do not add brands unless the brand is an essential part of the supplied tool name.

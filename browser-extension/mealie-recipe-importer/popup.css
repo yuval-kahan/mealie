@@ -140,6 +140,28 @@ button:disabled {
   background: #dcecf8;
 }
 
+.book-action {
+  background: #f5f1fb;
+  border: 1px solid #9b83bf;
+  color: #593e80;
+}
+
+.book-action:hover:not(:disabled),
+.book-action:focus-visible:not(:disabled) {
+  background: #e9e0f5;
+}
+
+.chef-action {
+  background: #f8f1ec;
+  border: 1px solid #b48a6a;
+  color: #6d4025;
+}
+
+.chef-action:hover:not(:disabled),
+.chef-action:focus-visible:not(:disabled) {
+  background: #f1e2d7;
+}
+
 .video-action {
   background: #fff3e6;
   border: 1px solid #ef9b45;

@@ -5,6 +5,7 @@ Return structured JSON only.
 Rules:
 - Set is_restaurant=false when the supplied information is not about a restaurant, cafe, bakery, bar, or food venue.
 - Keep the real public restaurant name concise and remove marketing slogans.
+- Treat a supplied free-form user request as a research brief and answer every requested field that can be supported.
 - Return cuisine_types and description in Hebrew only, even when the supplied source is written in another language.
   Transliterate unavoidable proper names into Hebrew in those fields. Do not leave English category, cuisine, tag, or
   description text. The official restaurant name may remain in its real public language.
@@ -16,10 +17,13 @@ Rules:
   Tel Aviv addresses first. If no Tel Aviv location exists, check the rest of Israel and return the verified locations.
 - Include phone, price range, and a concise Hebrew description only when supported.
 - Add Michelin information only when the source explicitly identifies a Michelin star, Bib Gourmand, or Michelin Guide listing.
+- Return michelin_star_count only for a reliably supported current star count, and set is_michelin_listed only for a
+  reliably supported current Michelin Guide listing.
 - A famous chef, tasting menu, luxury venue, or fine-dining description is not enough evidence for Michelin status.
 - Actively try to capture the restaurant's current Google rating, Google review count, and Google Maps listing URL.
   Prefer the Tel Aviv listing when a verified Tel Aviv branch exists, then other Israeli listings. Use only details
   explicitly present in the supplied page or reliably known as Google data. Never estimate a rating, fabricate a
   review count, or confuse a rating from another service with Google. Leave uncertain rating fields null.
 - When only a restaurant name is supplied, use reliable general knowledge only for well-known facts; leave uncertain fields empty.
+- Return explicitly associated chef names and cookbook titles. Never infer a cookbook merely from shared cuisine.
 - Do not add a recommendation opinion. Recommendation defaults are controlled by the user in Mealie.

@@ -58,6 +58,7 @@ from mealie.schema.recipe.recipe_tool import RecipeToolSave
 from mealie.schema.recipe.request_helpers import RecipeDuplicate
 from mealie.schema.user.user import PrivateUser, UserRatingCreate
 from mealie.services._base_service import BaseService
+from mealie.services.equipment_service import normalize_equipment_name
 from mealie.services.household_services.household_service import HouseholdService
 from mealie.services.openai import OpenAILocalImage, OpenAIService
 from mealie.services.recipe.recipe_data_service import RecipeDataService
@@ -2077,7 +2078,8 @@ class OpenAIRecipeService(RecipeServiceBase):
 
     def _get_or_create_tools(self, names: list[str]):
         tools = []
-        for name in self._clean_organizer_names(names):
+        canonical_names = [normalize_equipment_name(name) for name in names]
+        for name in self._clean_organizer_names(canonical_names):
             slug = slugify(name)
             if db_tool := self.repos.tools.get_one(slug, "slug"):
                 tools.append(db_tool)

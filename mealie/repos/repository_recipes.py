@@ -235,7 +235,10 @@ class RepositoryRecipes(HouseholdRepositoryGeneric[Recipe, RecipeModel]):
     ) -> RecipePagination:
         # Copy this, because calling methods (e.g. tests) might rely on it not getting mutated
         pagination_result = pagination.model_copy()
-        q = sa.select(self.model).filter(self.model.household_id.is_not(None))
+        q = sa.select(self.model).filter(
+            self.model.household_id.is_not(None),
+            self.model.is_merge_archived.is_(False),
+        )
 
         fltr = self._filter_builder()
         q = q.filter_by(**fltr)
@@ -338,7 +341,13 @@ class RepositoryRecipes(HouseholdRepositoryGeneric[Recipe, RecipeModel]):
 
     def get_random(self, limit=1) -> list[Recipe]:
         stmt = (
-            sa.select(RecipeModel).filter(RecipeModel.household_id.is_not(None)).order_by(sa.func.random()).limit(limit)
+            sa.select(RecipeModel)
+            .filter(
+                RecipeModel.household_id.is_not(None),
+                RecipeModel.is_merge_archived.is_(False),
+            )
+            .order_by(sa.func.random())
+            .limit(limit)
         )  # Postgres and SQLite specific
         if self.group_id:
             stmt = stmt.filter(RecipeModel.group_id == self.group_id)
@@ -410,7 +419,10 @@ class RepositoryRecipes(HouseholdRepositoryGeneric[Recipe, RecipeModel]):
         ingredients_alias = orm.aliased(RecipeIngredientModel)
         tools_alias = orm.aliased(Tool)
 
-        q = sa.select(self.model).filter(self.model.household_id.is_not(None))
+        q = sa.select(self.model).filter(
+            self.model.household_id.is_not(None),
+            self.model.is_merge_archived.is_(False),
+        )
         fltr = self._filter_builder()
         q = q.filter_by(**fltr)
 

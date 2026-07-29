@@ -49,7 +49,7 @@ export const useLazyRecipes = function (publicGroupSlug: string | null = null) {
 
   const recipes = ref<Recipe[]>([]);
 
-  async function fetchMore(
+  async function fetchPage(
     page: number,
     perPage: number,
     orderBy: string | null = null,
@@ -68,7 +68,28 @@ export const useLazyRecipes = function (publicGroupSlug: string | null = null) {
       router.push("/login");
     }
 
-    return data ? data.items : [];
+    return data;
+  }
+
+  async function fetchMore(
+    page: number,
+    perPage: number,
+    orderBy: string | null = null,
+    orderDirection = "desc",
+    orderByNullPosition: OrderByNullPosition | null = null,
+    query: RecipeSearchQuery | null = null,
+    queryFilter: string | null = null,
+  ) {
+    const data = await fetchPage(
+      page,
+      perPage,
+      orderBy,
+      orderDirection,
+      orderByNullPosition,
+      query,
+      queryFilter,
+    );
+    return data?.items ?? [];
   }
 
   function appendRecipes(val: Array<Recipe>) {
@@ -125,6 +146,7 @@ export const useLazyRecipes = function (publicGroupSlug: string | null = null) {
 
   return {
     recipes,
+    fetchPage,
     fetchMore,
     appendRecipes,
     assignSorted,

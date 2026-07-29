@@ -36,6 +36,29 @@ export class ProductKnowledgeAPI extends BaseAPI {
     return await this.requests.put<ProductKnowledge, ProductKnowledgeUpdate>(`${prefix}/${id}`, payload);
   }
 
+  async uploadImage(id: string, image: File) {
+    const formData = new FormData();
+    formData.append("image", image);
+    return await this.requests.post<ProductKnowledge>(`${prefix}/${id}/image`, formData);
+  }
+
+  async saveImageUrl(id: string, url: string) {
+    return await this.requests.post<ProductKnowledge, { url: string }>(`${prefix}/${id}/image-url`, { url });
+  }
+
+  async findImage(id: string) {
+    return await this.requests.post<ProductKnowledge>(`${prefix}/${id}/image-auto`);
+  }
+
+  async deleteImage(id: string) {
+    return await this.requests.delete<unknown>(`${prefix}/${id}/image`);
+  }
+
+  imageUrl(item: ProductKnowledge) {
+    const version = item.imageVersion ? `?v=${encodeURIComponent(item.imageVersion)}` : "";
+    return `${prefix}/${item.id}/image${version}`;
+  }
+
   async deleteOne(id: string) {
     return await this.requests.delete<unknown>(`${prefix}/${id}`);
   }

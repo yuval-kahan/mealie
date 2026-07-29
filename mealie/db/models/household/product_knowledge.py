@@ -43,6 +43,7 @@ class ProductKnowledge(SqlAlchemyBase, BaseMixins):
     summary: FilterableColumn[str | None] = mapped_column(Text, nullable=True)
     content: FilterableColumn[str] = mapped_column(Text, nullable=False)
     source: FilterableColumn[str | None] = mapped_column(String(2000), nullable=True)
+    image_source_url: FilterableColumn[str | None] = mapped_column(String(2000), nullable=True)
     categories_json: FilterableColumn[str] = mapped_column(Text, nullable=False, default="[]")
     tags_json: FilterableColumn[str] = mapped_column(Text, nullable=False, default="[]")
 

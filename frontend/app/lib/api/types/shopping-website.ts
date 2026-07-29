@@ -34,6 +34,11 @@ export interface ShoppingWebsiteAIRequest {
   isShoppingSite?: boolean | null;
 }
 
+export interface ShoppingWebsiteDiscoveryRequest {
+  prompt: string;
+  limit: number;
+}
+
 export interface ShoppingWebsiteBrowserPageRequest extends ShoppingWebsiteAIRequest {
   pageTitle?: string | null;
   pageText: string;

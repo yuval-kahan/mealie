@@ -1,5 +1,10 @@
 <template>
   <div>
+    <RecipeMergeDialog
+      v-if="isOwnGroup"
+      v-model="recipeMergeDialog"
+      @updated="loadRecipePage"
+    />
     <v-row
       v-if="!disableToolbar"
       class="align-center pb-2"
@@ -24,6 +29,18 @@
           {{ $globals.icons.book }}
         </v-icon>
         {{ $vuetify.display.xs ? null : $t("cookbook.create-book-with-ai") }}
+      </v-btn>
+      <v-btn
+        v-if="isOwnGroup"
+        variant="text"
+        :icon="$vuetify.display.xs"
+        :title="$t('recipe.merge-recipes')"
+        @click="recipeMergeDialog = true"
+      >
+        <v-icon :start="!$vuetify.display.xs">
+          {{ $globals.icons.merge }}
+        </v-icon>
+        {{ $vuetify.display.xs ? null : $t("recipe.merge-recipes") }}
       </v-btn>
       <v-btn
         :icon="$vuetify.display.xs"
@@ -208,7 +225,13 @@
           </v-expand-transition>
         </template>
       </div>
-      <v-card v-intersect="infiniteScroll" variant="flat" />
+      <BaseListPagination
+        :page="page"
+        :items-per-page="perPage"
+        :total-items="totalRecipes"
+        @update:page="changeRecipePage"
+        @update:items-per-page="changeRecipePageSize"
+      />
     </div>
     <v-fade-transition>
       <AppLoader
@@ -221,7 +244,6 @@
 </template>
 
 <script setup lang="ts">
-import { useThrottleFn } from "@vueuse/core";
 import RecipeCard from "./RecipeCard.vue";
 import RecipeCardMobile from "./RecipeCardMobile.vue";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
@@ -231,9 +253,9 @@ import { useUserExperiencePreferences, useUserSortPreferences } from "~/composab
 import type { RecipeSearchQuery } from "~/lib/api/user/recipes/recipe";
 import { useUserApi } from "~/composables/api/api-client";
 import type { UploadedBook } from "~/lib/api/types/uploaded-book";
+import { usePersistedListPageSize } from "~/composables/use-list-pagination";
 
 const REPLACE_RECIPES_EVENT = "replaceRecipes";
-const APPEND_RECIPES_EVENT = "appendRecipes";
 
 interface Props {
   disableToolbar?: boolean;
@@ -290,14 +312,15 @@ const displayTitleIcon = computed(() => {
 });
 
 const sortLoading = ref(false);
+const recipeMergeDialog = ref(false);
 const randomSeed = ref(Date.now().toString());
 
-const route = useRoute();
 const page = ref(1);
-const perPage = 32;
-const hasMore = ref(true);
+const perPage = usePersistedListPageSize();
+const totalRecipes = ref(0);
 const ready = ref(false);
 const loading = ref(false);
+let recipeRequestId = 0;
 
 interface RecipeBookGroup {
   key: string;
@@ -362,8 +385,7 @@ watch(
   { immediate: true },
 );
 
-const { fetchMore, getRandom } = useLazyRecipes(isOwnGroup.value ? null : groupSlug.value);
-const { savePosition, getSavedPage, restorePosition } = useScrollPosition();
+const { fetchPage, getRandom } = useLazyRecipes(isOwnGroup.value ? null : groupSlug.value);
 const router = useRouter();
 
 const queryFilter = computed(() => {
@@ -383,7 +405,7 @@ const queryFilter = computed(() => {
   // }
 });
 
-async function fetchRecipes(pageCount = 1) {
+async function fetchRecipes() {
   const orderDir = props.query?.orderDirection || preferences.value.orderDirection;
   const orderByNullPosition = props.query?.orderByNullPosition || orderDir === "asc" ? "first" : "last";
   const orderBy = props.query?.orderBy || preferences.value.orderBy;
@@ -391,9 +413,9 @@ async function fetchRecipes(pageCount = 1) {
   if (orderBy === "random") {
     localQuery._searchSeed = randomSeed.value;
   }
-  return await fetchMore(
+  return await fetchPage(
     page.value,
-    perPage * pageCount,
+    perPage.value,
     orderBy,
     orderDir,
     orderByNullPosition,
@@ -409,25 +431,7 @@ onMounted(async () => {
   }
   loading.value = true;
   try {
-    const savedPage = getSavedPage(route.path);
-
-    if (savedPage && savedPage > 2) {
-      page.value = 1;
-      hasMore.value = true;
-      const newRecipes = await fetchRecipes(savedPage);
-      if (newRecipes.length < perPage * savedPage) {
-        hasMore.value = false;
-      }
-      page.value = savedPage;
-      emit(REPLACE_RECIPES_EVENT, newRecipes);
-      restorePosition(route.path);
-    }
-    else {
-      await initRecipes();
-      if (savedPage) {
-        restorePosition(route.path);
-      }
-    }
+    await initRecipes();
   }
   catch (error) {
     console.error("Failed to load recipe cards", error);
@@ -488,41 +492,37 @@ async function initRecipes() {
     randomSeed.value = Date.now().toString();
   }
   page.value = 1;
-  hasMore.value = true;
-
-  // we double-up the first call to avoid a bug with large screens that render
-  // the entire first page without scrolling, preventing additional loading
-  const newRecipes = await fetchRecipes(page.value + 1);
-  if (newRecipes.length < perPage) {
-    hasMore.value = false;
-  }
-
-  // since we doubled the first call, we also need to advance the page
-  page.value = page.value + 1;
-
-  emit(REPLACE_RECIPES_EVENT, newRecipes);
+  await loadRecipePage();
 }
 
-const infiniteScroll = useThrottleFn(async () => {
-  if (!hasMore.value || loading.value) {
-    return;
-  }
-
+async function loadRecipePage() {
+  const requestId = ++recipeRequestId;
   loading.value = true;
-  page.value = page.value + 1;
-
-  const newRecipes = await fetchRecipes();
-  if (newRecipes.length < perPage) {
-    hasMore.value = false;
+  try {
+    const result = await fetchRecipes();
+    if (requestId !== recipeRequestId) return;
+    totalRecipes.value = result?.total ?? 0;
+    emit(REPLACE_RECIPES_EVENT, result?.items ?? []);
   }
-  if (newRecipes.length) {
-    emit(APPEND_RECIPES_EVENT, newRecipes);
+  finally {
+    if (requestId === recipeRequestId) {
+      loading.value = false;
+    }
   }
+}
 
-  savePosition(route.path, page.value);
+async function changeRecipePage(nextPage: number) {
+  if (nextPage === page.value || loading.value) return;
+  page.value = nextPage;
+  await loadRecipePage();
+}
 
-  loading.value = false;
-}, 500);
+async function changeRecipePageSize(nextPageSize: number) {
+  if (nextPageSize === perPage.value || loading.value) return;
+  perPage.value = nextPageSize;
+  page.value = 1;
+  await loadRecipePage();
+}
 
 async function sortRecipes(sortType: string) {
   if (sortLoading.value || loading.value) {
@@ -595,19 +595,11 @@ async function sortRecipes(sortType: string) {
       return;
   }
 
-  // reset pagination
   page.value = 1;
-  hasMore.value = true;
 
   sortLoading.value = true;
-  loading.value = true;
-
-  // fetch new recipes
-  const newRecipes = await fetchRecipes();
-  emit(REPLACE_RECIPES_EVENT, newRecipes);
-
+  await loadRecipePage();
   sortLoading.value = false;
-  loading.value = false;
 }
 
 async function navigateRandom() {

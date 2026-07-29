@@ -7,6 +7,9 @@ export interface ProductKnowledge {
   summary?: string | null;
   content: string;
   source?: string | null;
+  imageSourceUrl?: string | null;
+  hasImage: boolean;
+  imageVersion?: string | null;
   categories: string[];
   tags: string[];
   createdAt?: string | null;

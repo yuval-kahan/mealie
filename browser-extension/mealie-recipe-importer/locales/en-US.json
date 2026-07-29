@@ -41,6 +41,8 @@
     "send-article": "Send article to AI",
     "save-website": "Save website",
     "save-restaurant": "Save restaurant",
+    "save-wanted-book": "Save book to buy",
+    "save-chef": "Save chef",
     "save-video": "Save video",
     "connect-mealie": "Open / connect Mealie"
   },
@@ -69,6 +71,8 @@
     "open-article": "Open article in Mealie",
     "open-websites": "Open saved websites in Mealie",
     "open-restaurants": "Open saved restaurants in Mealie",
+    "open-wanted-books": "Open books to buy in Mealie",
+    "open-chefs": "Open chefs in Mealie",
     "open-videos": "Open saved videos in Mealie"
   },
   "status": {
@@ -96,6 +100,10 @@
     "website-saved": "Website saved: {name}",
     "saving-restaurant": "Analyzing and saving the current restaurant...",
     "restaurant-saved": "Restaurant saved: {name}",
+    "saving-wanted-book": "Analyzing and saving the current book...",
+    "wanted-book-saved": "Book saved to buy: {title}",
+    "saving-chef": "Analyzing and saving the current chef...",
+    "chef-saved": "Chef saved: {name}",
     "saving-video": "Saving the video. Download and AI processing will continue in the background...",
     "video-saved": "Video saved and background processing started: {title}",
     "video-settings-saved": "Video download settings saved"

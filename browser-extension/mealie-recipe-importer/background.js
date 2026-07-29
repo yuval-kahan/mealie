@@ -5,6 +5,8 @@ const IMAGE_BRIDGE_REQUEST = "MEALIE_EXTENSION_IMPORT_RECIPE_IMAGE_URL";
 const POPUP_IMPORT_REQUEST = "MEALIE_EXTENSION_POPUP_IMPORT";
 const POPUP_SAVE_WEBSITE_REQUEST = "MEALIE_EXTENSION_POPUP_SAVE_WEBSITE";
 const POPUP_SAVE_RESTAURANT_REQUEST = "MEALIE_EXTENSION_POPUP_SAVE_RESTAURANT";
+const POPUP_SAVE_WANTED_BOOK_REQUEST = "MEALIE_EXTENSION_POPUP_SAVE_WANTED_BOOK";
+const POPUP_SAVE_CHEF_REQUEST = "MEALIE_EXTENSION_POPUP_SAVE_CHEF";
 const POPUP_SAVE_VIDEO_REQUEST = "MEALIE_EXTENSION_POPUP_SAVE_VIDEO";
 const MAX_EXTRACTED_TEXT_LENGTH = 180000;
 const MAX_RETURNED_PREVIEW_LENGTH = 30000;
@@ -59,13 +61,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     ? saveWebsiteFromUrl
     : message?.type === POPUP_SAVE_RESTAURANT_REQUEST
       ? saveRestaurantFromUrl
+      : message?.type === POPUP_SAVE_WANTED_BOOK_REQUEST
+        ? saveWantedBookFromUrl
+        : message?.type === POPUP_SAVE_CHEF_REQUEST
+          ? saveChefFromUrl
       : message?.type === POPUP_SAVE_VIDEO_REQUEST
-        ? saveVideoFromUrl
-        : message?.type === IMAGE_BRIDGE_REQUEST
-          ? updateRecipeImageFromBrowser
-          : message?.type === BRIDGE_REQUEST || message?.type === POPUP_IMPORT_REQUEST
-            ? importRecipeFromUrl
-            : null;
+          ? saveVideoFromUrl
+          : message?.type === IMAGE_BRIDGE_REQUEST
+            ? updateRecipeImageFromBrowser
+            : message?.type === BRIDGE_REQUEST || message?.type === POPUP_IMPORT_REQUEST
+              ? importRecipeFromUrl
+              : null;
   if (!handler) {
     return false;
   }
@@ -318,6 +324,67 @@ async function saveRestaurantFromUrl(payload) {
   }
 
   return withExtractionPreview({ ok: true, restaurant: body }, extraction);
+}
+
+async function saveWantedBookFromUrl(payload) {
+  return saveExtractedEntity(
+    payload,
+    "/api/households/wanted-books/browser-page",
+    "book",
+  );
+}
+
+async function saveChefFromUrl(payload) {
+  return saveExtractedEntity(
+    payload,
+    "/api/households/chefs/browser-page",
+    "chef",
+  );
+}
+
+async function saveExtractedEntity(payload, endpoint, resultKey) {
+  const translator = await extensionI18n.create(
+    payload?.interfaceLanguage || payload?.translateLanguage,
+  );
+  const t = translator.t;
+  const mealieUrl = normalizeBaseUrl(payload?.mealieUrl);
+  const pageUrl = String(payload?.url || "").trim();
+  if (!mealieUrl || !/^https?:\/\//i.test(mealieUrl)) {
+    throw new Error(t("errors.invalid-mealie-url"));
+  }
+  if (!pageUrl || !/^https?:\/\//i.test(pageUrl)) {
+    throw new Error(t("errors.invalid-recipe-url"));
+  }
+
+  const authToken = payload?.authToken || await findMealieAuthToken(mealieUrl);
+  if (!authToken) {
+    throw new Error(t("status.open-and-login"));
+  }
+  const status = await checkMealieStatus(mealieUrl, authToken, t);
+  if (!statusAiEnabled(status)) {
+    throw new Error(aiProviderStatusMessage(status, t));
+  }
+
+  const extraction = await extractPageInBackgroundTab(pageUrl, translator);
+  const response = await fetch(`${mealieUrl}${endpoint}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(authToken),
+    },
+    body: JSON.stringify({
+      url: extraction.url,
+      page_title: extraction.title,
+      page_text: extraction.markdown,
+      page_image_url: extraction.imageUrl || null,
+    }),
+  });
+  const body = await safeJson(response);
+  if (!response.ok) {
+    throw new Error(apiErrorMessage(body, response.status, t));
+  }
+  return withExtractionPreview({ ok: true, [resultKey]: body }, extraction);
 }
 
 async function saveVideoFromUrl(payload) {

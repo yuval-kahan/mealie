@@ -32,12 +32,21 @@
       </v-btn-toggle>
 
       <template v-if="mode === 'ai' && !restaurant">
+        <v-textarea
+          v-model="aiPrompt"
+          :label="$t('restaurant.ai-research-request')"
+          :hint="$t('restaurant.ai-research-hint')"
+          persistent-hint
+          autofocus
+          rows="5"
+          auto-grow
+          variant="outlined"
+        />
         <v-text-field
           v-model="aiName"
           :label="$t('restaurant.restaurant-name')"
           :hint="$t('restaurant.ai-name-hint')"
           persistent-hint
-          autofocus
           variant="outlined"
           density="comfortable"
         />
@@ -122,6 +131,79 @@
           :label="$t('restaurant.michelin-info')"
           :hint="$t('restaurant.michelin-hint')"
           persistent-hint
+          variant="outlined"
+          density="comfortable"
+        />
+        <v-row dense>
+          <v-col cols="12" sm="6">
+            <v-text-field
+              v-model.number="form.michelinStarCount"
+              :label="$t('restaurant.michelin-star-count')"
+              type="number"
+              min="0"
+              max="3"
+              variant="outlined"
+              density="comfortable"
+            />
+          </v-col>
+          <v-col cols="12" sm="6">
+            <v-switch
+              v-model="form.isMichelinListed"
+              color="primary"
+              hide-details
+              :label="$t('restaurant.is-michelin-listed')"
+            />
+          </v-col>
+        </v-row>
+        <v-row dense>
+          <v-col cols="12" md="6">
+            <v-select
+              v-model="form.chefIds"
+              :items="chefOptions"
+              item-title="name"
+              item-value="id"
+              :label="$t('restaurant.linked-chefs')"
+              multiple
+              chips
+              closable-chips
+              clearable
+              variant="outlined"
+              density="comfortable"
+            />
+          </v-col>
+          <v-col cols="12" md="6">
+            <v-select
+              v-model="form.uploadedBookIds"
+              :items="bookOptions"
+              item-title="name"
+              item-value="id"
+              :label="$t('restaurant.linked-books')"
+              multiple
+              chips
+              closable-chips
+              clearable
+              variant="outlined"
+              density="comfortable"
+            />
+          </v-col>
+        </v-row>
+        <v-combobox
+          v-model="form.chefNames"
+          :label="$t('restaurant.other-chefs')"
+          multiple
+          chips
+          closable-chips
+          clearable
+          variant="outlined"
+          density="comfortable"
+        />
+        <v-combobox
+          v-model="form.bookTitles"
+          :label="$t('restaurant.other-books')"
+          multiple
+          chips
+          closable-chips
+          clearable
           variant="outlined"
           density="comfortable"
         />
@@ -215,6 +297,8 @@ import type {
   RestaurantRecommendationStatus,
   RestaurantVisitStatus,
 } from "~/lib/api/types/restaurant";
+import type { Chef } from "~/lib/api/types/chef";
+import type { UploadedBook } from "~/lib/api/types/uploaded-book";
 import { useUserApi } from "~/composables/api/api-client";
 import { alert } from "~/composables/use-toast";
 
@@ -229,8 +313,11 @@ const i18n = useI18n();
 const api = useUserApi();
 const saving = ref(false);
 const mode = ref<"manual" | "ai">("manual");
+const aiPrompt = ref("");
 const aiName = ref("");
 const aiUrl = ref("");
+const chefOptions = ref<Chef[]>([]);
+const bookOptions = ref<UploadedBook[]>([]);
 
 const emptyForm = (): RestaurantCreate => ({
   name: "",
@@ -242,6 +329,12 @@ const emptyForm = (): RestaurantCreate => ({
   description: "",
   notes: "",
   michelinInfo: "",
+  michelinStarCount: 0,
+  isMichelinListed: false,
+  chefNames: [],
+  bookTitles: [],
+  chefIds: [],
+  uploadedBookIds: [],
   googleRating: null,
   googleReviewCount: null,
   googleMapsUrl: "",
@@ -266,18 +359,26 @@ const visitOptions = computed<{ text: string; value: RestaurantVisitStatus }[]>(
 ]);
 
 const canSubmit = computed(() => mode.value === "ai" && !props.restaurant
-  ? Boolean(aiName.value.trim() || aiUrl.value.trim())
+  ? Boolean(aiPrompt.value.trim() || aiName.value.trim() || aiUrl.value.trim())
   : Boolean(form.name.trim()));
 
 watch(
   () => [dialogOpen.value, props.restaurant] as const,
-  ([open]) => {
-    if (open) loadForm();
+  async ([open]) => {
+    if (!open) return;
+    loadForm();
+    const [chefsResponse, booksResponse] = await Promise.all([
+      api.chefs.getAll(),
+      api.uploadedBooks.getAll(),
+    ]);
+    chefOptions.value = chefsResponse.data || [];
+    bookOptions.value = booksResponse.data || [];
   },
 );
 
 function loadForm() {
   mode.value = "manual";
+  aiPrompt.value = "";
   aiName.value = "";
   aiUrl.value = "";
   Object.assign(form, props.restaurant
@@ -291,6 +392,12 @@ function loadForm() {
         description: props.restaurant.description || "",
         notes: props.restaurant.notes || "",
         michelinInfo: props.restaurant.michelinInfo || "",
+        michelinStarCount: props.restaurant.michelinStarCount,
+        isMichelinListed: props.restaurant.isMichelinListed,
+        chefNames: [...props.restaurant.chefNames],
+        bookTitles: [...props.restaurant.bookTitles],
+        chefIds: [...props.restaurant.chefIds],
+        uploadedBookIds: [...props.restaurant.uploadedBookIds],
         googleRating: props.restaurant.googleRating ?? null,
         googleReviewCount: props.restaurant.googleReviewCount ?? null,
         googleMapsUrl: props.restaurant.googleMapsUrl || "",
@@ -303,6 +410,7 @@ function loadForm() {
 
 function resetForm() {
   mode.value = "manual";
+  aiPrompt.value = "";
   aiName.value = "";
   aiUrl.value = "";
   Object.assign(form, emptyForm());
@@ -313,7 +421,11 @@ async function submit() {
   const response = props.restaurant
     ? await api.restaurants.updateOne(props.restaurant.id, form)
     : mode.value === "ai"
-      ? await api.restaurants.createWithAI({ name: aiName.value || null, url: aiUrl.value || null })
+      ? await api.restaurants.createWithAI({
+          prompt: aiPrompt.value || null,
+          name: aiName.value || null,
+          url: aiUrl.value || null,
+        })
       : await api.restaurants.createOne(form);
   saving.value = false;
 

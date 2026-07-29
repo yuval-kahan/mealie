@@ -726,12 +726,19 @@
           />
         </div>
 
+        <BaseListPagination
+          v-if="filteredUploadedBooks.length"
+          v-model:page="uploadedBookPage"
+          v-model:items-per-page="uploadedBooksPerPage"
+          :total-items="uploadedBookTotal"
+        />
+
         <v-alert v-if="!uploadedBooksLoading && !filteredUploadedBooks.length" type="info" variant="tonal">
           {{ $t("cookbook.no-library-books") }}
         </v-alert>
         <div v-else class="cookbook-library__grid">
           <v-card
-            v-for="book in filteredUploadedBooks"
+            v-for="book in paginatedUploadedBooks"
             :key="book.id"
             variant="outlined"
             class="cookbook-library__book"
@@ -1221,6 +1228,12 @@ const filteredUploadedBooks = computed(() => {
       .includes(query);
   });
 });
+const {
+  page: uploadedBookPage,
+  itemsPerPage: uploadedBooksPerPage,
+  totalItems: uploadedBookTotal,
+  paginatedItems: paginatedUploadedBooks,
+} = useListPagination(filteredUploadedBooks);
 
 async function loadUploadedBooks() {
   uploadedBooksLoading.value = true;

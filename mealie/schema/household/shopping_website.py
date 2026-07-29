@@ -48,6 +48,11 @@ class ShoppingWebsiteAIRequest(MealieModel):
     is_shopping_site: bool | None = None
 
 
+class ShoppingWebsiteDiscoveryRequest(MealieModel):
+    prompt: str = Field(..., min_length=2, max_length=4000)
+    limit: int = Field(8, ge=1, le=20)
+
+
 class ShoppingWebsiteImageURLRequest(MealieModel):
     url: str = Field(..., min_length=1, max_length=4000)
 

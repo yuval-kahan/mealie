@@ -33,6 +33,9 @@ import { VideosAPI } from "./user/videos";
 import { LinkedResourcesAPI } from "./user/linked-resources";
 import { PantryItemsAPI } from "./user/pantry-items";
 import { ProductKnowledgeAPI } from "./user/product-knowledge";
+import { ChefsAPI } from "./user/chefs";
+import { EquipmentAPI } from "./user/equipment";
+import { WantedBooksAPI } from "./user/wanted-books";
 import type { ApiRequestInstance } from "~/lib/api/types/non-generated";
 
 export class UserApiClient {
@@ -71,6 +74,9 @@ export class UserApiClient {
   public linkedResources: LinkedResourcesAPI;
   public pantryItems: PantryItemsAPI;
   public productKnowledge: ProductKnowledgeAPI;
+  public chefs: ChefsAPI;
+  public equipment: EquipmentAPI;
+  public wantedBooks: WantedBooksAPI;
 
   constructor(requests: ApiRequestInstance) {
     // Recipes
@@ -107,6 +113,9 @@ export class UserApiClient {
     this.linkedResources = new LinkedResourcesAPI(requests);
     this.pantryItems = new PantryItemsAPI(requests);
     this.productKnowledge = new ProductKnowledgeAPI(requests);
+    this.chefs = new ChefsAPI(requests);
+    this.equipment = new EquipmentAPI(requests);
+    this.wantedBooks = new WantedBooksAPI(requests);
 
     // Admin
     this.backups = new BackupAPI(requests);

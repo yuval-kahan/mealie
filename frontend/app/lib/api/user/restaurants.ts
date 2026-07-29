@@ -5,6 +5,7 @@ import type {
   RestaurantAIRequest,
   RestaurantBrowserPageRequest,
   RestaurantCreate,
+  RestaurantDiscoveryRequest,
   RestaurantUpdate,
 } from "~/lib/api/types/restaurant";
 
@@ -22,6 +23,13 @@ export class RestaurantsAPI extends BaseAPI {
 
   async createWithAI(payload: RestaurantAIRequest) {
     return await this.requests.post<Restaurant, RestaurantAIRequest>(`${prefix}/ai-create`, payload);
+  }
+
+  async discoverWithAI(payload: RestaurantDiscoveryRequest) {
+    return await this.requests.post<RestaurantCreate[], RestaurantDiscoveryRequest>(
+      `${prefix}/ai-discover`,
+      payload,
+    );
   }
 
   async createFromBrowserPage(payload: RestaurantBrowserPageRequest) {

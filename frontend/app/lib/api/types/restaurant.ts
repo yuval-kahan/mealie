@@ -21,6 +21,12 @@ export interface Restaurant {
   description?: string | null;
   notes?: string | null;
   michelinInfo?: string | null;
+  michelinStarCount: number;
+  isMichelinListed: boolean;
+  chefNames: string[];
+  bookTitles: string[];
+  chefIds: string[];
+  uploadedBookIds: string[];
   googleRating?: number | null;
   googleReviewCount?: number | null;
   googleMapsUrl?: string | null;
@@ -41,6 +47,12 @@ export interface RestaurantCreate {
   description?: string | null;
   notes?: string | null;
   michelinInfo?: string | null;
+  michelinStarCount: number;
+  isMichelinListed: boolean;
+  chefNames: string[];
+  bookTitles: string[];
+  chefIds: string[];
+  uploadedBookIds: string[];
   googleRating?: number | null;
   googleReviewCount?: number | null;
   googleMapsUrl?: string | null;
@@ -52,8 +64,14 @@ export interface RestaurantCreate {
 export type RestaurantUpdate = RestaurantCreate;
 
 export interface RestaurantAIRequest {
+  prompt?: string | null;
   name?: string | null;
   url?: string | null;
+}
+
+export interface RestaurantDiscoveryRequest {
+  prompt: string;
+  limit: number;
 }
 
 export interface RestaurantBrowserPageRequest {

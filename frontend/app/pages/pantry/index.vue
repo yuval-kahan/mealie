@@ -129,43 +129,50 @@
     </div>
 
     <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
-    <div v-else-if="filteredItems.length" class="pantry-items mb-8">
-      <v-card
-        v-for="item in filteredItems"
-        :key="item.id"
-        variant="outlined"
-        class="pantry-item"
-      >
-        <v-card-text class="pantry-item__content">
-          <v-icon color="primary">
-            {{ $globals.icons.foods }}
-          </v-icon>
-          <div class="pantry-item__text">
-            <strong>{{ item.name }}</strong>
-            <span v-if="item.quantity != null">
-              {{ item.quantity }} {{ item.unit || "" }}
-            </span>
-            <small v-if="item.note">{{ item.note }}</small>
-          </div>
-          <v-chip v-if="item.category" size="small" variant="tonal" color="primary">
-            {{ item.category }}
-          </v-chip>
-          <v-btn icon size="small" variant="text" :title="$t('general.edit')" @click="openEditDialog(item)">
-            <v-icon>{{ $globals.icons.edit }}</v-icon>
-          </v-btn>
-          <v-btn
-            icon
-            size="small"
-            variant="text"
-            color="error"
-            :title="$t('general.delete')"
-            @click="openDeleteDialog(item)"
-          >
-            <v-icon>{{ $globals.icons.delete }}</v-icon>
-          </v-btn>
-        </v-card-text>
-      </v-card>
-    </div>
+    <template v-else-if="filteredItems.length">
+      <BaseListPagination
+        v-model:page="pantryPage"
+        v-model:items-per-page="pantryItemsPerPage"
+        :total-items="pantryTotal"
+      />
+      <div class="pantry-items mb-8">
+        <v-card
+          v-for="item in paginatedPantryItems"
+          :key="item.id"
+          variant="outlined"
+          class="pantry-item"
+        >
+          <v-card-text class="pantry-item__content">
+            <v-icon color="primary">
+              {{ $globals.icons.foods }}
+            </v-icon>
+            <div class="pantry-item__text">
+              <strong>{{ item.name }}</strong>
+              <span v-if="item.quantity != null">
+                {{ item.quantity }} {{ item.unit || "" }}
+              </span>
+              <small v-if="item.note">{{ item.note }}</small>
+            </div>
+            <v-chip v-if="item.category" size="small" variant="tonal" color="primary">
+              {{ item.category }}
+            </v-chip>
+            <v-btn icon size="small" variant="text" :title="$t('general.edit')" @click="openEditDialog(item)">
+              <v-icon>{{ $globals.icons.edit }}</v-icon>
+            </v-btn>
+            <v-btn
+              icon
+              size="small"
+              variant="text"
+              color="error"
+              :title="$t('general.delete')"
+              @click="openDeleteDialog(item)"
+            >
+              <v-icon>{{ $globals.icons.delete }}</v-icon>
+            </v-btn>
+          </v-card-text>
+        </v-card>
+      </div>
+    </template>
     <v-alert v-else type="info" variant="tonal" class="mb-8">
       {{ $t("pantry.no-items") }}
     </v-alert>
@@ -334,6 +341,12 @@ const filteredItems = computed(() => {
     `${item.name} ${item.category || ""} ${item.note || ""}`.toLocaleLowerCase().includes(query),
   );
 });
+const {
+  page: pantryPage,
+  itemsPerPage: pantryItemsPerPage,
+  totalItems: pantryTotal,
+  paginatedItems: paginatedPantryItems,
+} = useListPagination(filteredItems);
 
 function recipeImageUrl(id: string) {
   return id ? `/api/media/recipes/${id}/images/original.webp` : "";

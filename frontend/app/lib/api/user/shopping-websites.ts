@@ -6,6 +6,7 @@ import type {
   ShoppingWebsiteBrowserPageRequest,
   ShoppingWebsiteCreate,
   ShoppingWebsiteDeletePreview,
+  ShoppingWebsiteDiscoveryRequest,
   ShoppingWebsiteEntityLinksUpdate,
   ShoppingWebsiteUpdate,
 } from "~/lib/api/types/shopping-website";
@@ -24,6 +25,13 @@ export class ShoppingWebsitesAPI extends BaseAPI {
 
   async createWithAI(payload: ShoppingWebsiteAIRequest) {
     return await this.requests.post<ShoppingWebsite, ShoppingWebsiteAIRequest>(`${prefix}/ai-create`, payload);
+  }
+
+  async discoverWithAI(payload: ShoppingWebsiteDiscoveryRequest) {
+    return await this.requests.post<ShoppingWebsiteCreate[], ShoppingWebsiteDiscoveryRequest>(
+      `${prefix}/ai-discover`,
+      payload,
+    );
   }
 
   async createFromBrowserPage(payload: ShoppingWebsiteBrowserPageRequest) {

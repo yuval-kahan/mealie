@@ -28,6 +28,24 @@ class OpenAIRestaurant(OpenAIBase):
             "Never infer Michelin recognition from fine dining language or a chef's reputation."
         ),
     )
+    michelin_star_count: int = Field(
+        0,
+        ge=0,
+        le=3,
+        description="Current Michelin star count only when explicitly and reliably supported.",
+    )
+    is_michelin_listed: bool = Field(
+        False,
+        description="True only for a reliably supported current Michelin Guide listing.",
+    )
+    chef_names: list[str] = Field(
+        default_factory=list,
+        description="Chefs explicitly and reliably associated with the restaurant.",
+    )
+    book_titles: list[str] = Field(
+        default_factory=list,
+        description="Cookbooks explicitly and reliably associated with the restaurant or its chefs.",
+    )
     google_rating: float | None = Field(
         None,
         ge=0,
@@ -59,4 +77,11 @@ class OpenAIRestaurantHebrewMetadata(OpenAIBase):
     description: str | None = Field(
         None,
         description="The supplied restaurant description translated entirely into natural Hebrew.",
+    )
+
+
+class OpenAIRestaurantSuggestions(OpenAIBase):
+    items: list[OpenAIRestaurant] = Field(
+        default_factory=list,
+        description="Distinct restaurants matching the user's request.",
     )

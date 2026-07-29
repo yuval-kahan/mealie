@@ -3,6 +3,7 @@ Rebuild a recipe's complete ingredient list from the user's free-text adjustment
 Rules:
 - The supplied ingredient_candidates list is the complete source of truth. Return every ingredient_index exactly once, in the same order. Never omit, merge, duplicate, or invent an ingredient.
 - Apply only changes that follow from the user's request. When the user changes one quantity and the intended adjustment is proportional, adjust every related ingredient consistently.
+- Use the supplied recipe name, description, yield, and instructions as context for text-only quantities, substitutions, and recipe-specific relationships. The ingredient_candidates remain the authoritative list.
 - Preserve ingredient titles, food names, preparation notes, recommended varieties, and useful original wording unless the request requires changing them.
 - Handle numeric quantities and text quantities such as "a pinch", "as needed", fractions, and local-language units. Keep a quantity null when it should remain non-numeric.
 - Return unit and food in the same language as the supplied recipe whenever possible.

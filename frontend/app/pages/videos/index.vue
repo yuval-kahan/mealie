@@ -236,131 +236,138 @@
     </div>
 
     <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
-    <div v-else-if="filteredVideos.length" class="video-library-grid">
-      <v-card v-for="video in filteredVideos" :key="video.id" class="video-library-card" variant="outlined">
-        <div class="video-library-media">
-          <video
-            v-if="video.hasLocalMedia"
-            controls
-            preload="metadata"
-            :poster="thumbnailUrl(video)"
-          >
-            <source :src="api.videos.mediaUrl(video.id)">
-          </video>
-          <v-img v-else-if="video.hasLocalThumbnail || video.thumbnailUrl" :src="thumbnailUrl(video)" cover />
-          <div v-else class="video-library-placeholder">
-            <v-icon size="72" color="primary">
-              {{ $globals.icons.video }}
-            </v-icon>
-          </div>
-        </div>
-
-        <v-card-title class="video-card-title">
-          {{ video.title }}
-        </v-card-title>
-        <v-card-subtitle class="video-card-subtitle">
-          <span v-if="video.creator">{{ video.creator }}</span>
-          <span v-if="video.platform">{{ video.platform }}</span>
-          <span v-if="video.durationSeconds">{{ formatDuration(video.durationSeconds) }}</span>
-        </v-card-subtitle>
-
-        <v-card-text class="video-card-body">
-          <p v-if="video.description" class="video-description">
-            {{ video.description }}
-          </p>
-          <div class="d-flex flex-wrap ga-1 mt-2">
-            <v-chip v-for="category in video.categories" :key="`category-${category}`" size="x-small" color="primary" variant="tonal">
-              {{ category }}
-            </v-chip>
-            <v-chip v-for="tag in video.tags.slice(0, 6)" :key="`tag-${tag}`" size="x-small" variant="outlined">
-              {{ tag }}
-            </v-chip>
-          </div>
-
-          <div class="video-status-row mt-3">
-            <v-chip size="small" :color="statusColor(video.processingStatus)" variant="tonal">
-              {{ statusText(video.processingStatus) }}
-            </v-chip>
-            <span v-if="video.localResolution">{{ video.localResolution }}</span>
-            <span v-if="video.localFileSize">{{ formatFileSize(video.localFileSize) }}</span>
-          </div>
-          <v-progress-linear
-            v-if="isActive(video)"
-            :model-value="video.processingProgress"
-            color="primary"
-            height="6"
-            rounded
-            class="mt-2"
-          />
-          <v-alert v-if="video.processingError" type="error" variant="tonal" density="compact" class="mt-3 video-error">
-            {{ video.processingError }}
-          </v-alert>
-
-          <div v-if="video.recipeSlugs.length || video.shoppingListIds.length" class="video-links mt-3">
-            <NuxtLink
-              v-for="(slug, index) in video.recipeSlugs"
-              :key="slug"
-              :to="`/g/${groupSlug}/r/${slug}`"
+    <template v-else-if="filteredVideos.length">
+      <BaseListPagination
+        v-model:page="videoPage"
+        v-model:items-per-page="videosPerPage"
+        :total-items="videoTotal"
+      />
+      <div class="video-library-grid">
+        <v-card v-for="video in paginatedVideos" :key="video.id" class="video-library-card" variant="outlined">
+          <div class="video-library-media">
+            <video
+              v-if="video.hasLocalMedia"
+              controls
+              preload="metadata"
+              :poster="thumbnailUrl(video)"
             >
-              {{ $t("video-library.open-recipe", { number: index + 1 }) }}
-            </NuxtLink>
-            <NuxtLink
-              v-for="(listId, index) in video.shoppingListIds"
-              :key="listId"
-              :to="`/shopping-lists/${listId}`"
-            >
-              {{ $t("video-library.open-shopping-list", { number: index + 1 }) }}
-            </NuxtLink>
+              <source :src="api.videos.mediaUrl(video.id)">
+            </video>
+            <v-img v-else-if="video.hasLocalThumbnail || video.thumbnailUrl" :src="thumbnailUrl(video)" cover />
+            <div v-else class="video-library-placeholder">
+              <v-icon size="72" color="primary">
+                {{ $globals.icons.video }}
+              </v-icon>
+            </div>
           </div>
-        </v-card-text>
 
-        <v-card-actions class="video-card-actions">
-          <LinkedResourcesButton
-            v-if="video.recipeIds.length || video.shoppingListIds.length"
-            entity-type="video"
-            :entity-id="video.id"
-            :count="video.recipeIds.length + video.shoppingListIds.length"
-          />
-          <v-btn :href="video.url" target="_blank" icon variant="text" :title="$t('video-library.open-source')">
-            <v-icon>{{ $globals.icons.openInNew }}</v-icon>
-          </v-btn>
-          <v-btn
-            v-if="isActive(video)"
-            icon
-            variant="text"
-            color="warning"
-            :title="$t('video-library.cancel-processing')"
-            @click="cancelProcessing(video)"
-          >
-            <v-icon>{{ $globals.icons.close }}</v-icon>
-          </v-btn>
-          <v-btn
-            v-if="['failed', 'cancelled'].includes(video.processingStatus)"
-            icon
-            variant="text"
-            color="primary"
-            :title="$t('video-library.retry')"
-            @click="retryProcessing(video)"
-          >
-            <v-icon>{{ $globals.icons.refresh }}</v-icon>
-          </v-btn>
-          <v-spacer />
-          <v-btn icon variant="text" :title="$t('general.edit')" @click="openEditDialog(video)">
-            <v-icon>{{ $globals.icons.edit }}</v-icon>
-          </v-btn>
-          <v-btn
-            icon
-            variant="text"
-            color="error"
-            :disabled="isActive(video)"
-            :title="$t('general.delete')"
-            @click="openDeleteDialog(video)"
-          >
-            <v-icon>{{ $globals.icons.delete }}</v-icon>
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </div>
+          <v-card-title class="video-card-title">
+            {{ video.title }}
+          </v-card-title>
+          <v-card-subtitle class="video-card-subtitle">
+            <span v-if="video.creator">{{ video.creator }}</span>
+            <span v-if="video.platform">{{ video.platform }}</span>
+            <span v-if="video.durationSeconds">{{ formatDuration(video.durationSeconds) }}</span>
+          </v-card-subtitle>
+
+          <v-card-text class="video-card-body">
+            <p v-if="video.description" class="video-description">
+              {{ video.description }}
+            </p>
+            <div class="d-flex flex-wrap ga-1 mt-2">
+              <v-chip v-for="category in video.categories" :key="`category-${category}`" size="x-small" color="primary" variant="tonal">
+                {{ category }}
+              </v-chip>
+              <v-chip v-for="tag in video.tags.slice(0, 6)" :key="`tag-${tag}`" size="x-small" variant="outlined">
+                {{ tag }}
+              </v-chip>
+            </div>
+
+            <div class="video-status-row mt-3">
+              <v-chip size="small" :color="statusColor(video.processingStatus)" variant="tonal">
+                {{ statusText(video.processingStatus) }}
+              </v-chip>
+              <span v-if="video.localResolution">{{ video.localResolution }}</span>
+              <span v-if="video.localFileSize">{{ formatFileSize(video.localFileSize) }}</span>
+            </div>
+            <v-progress-linear
+              v-if="isActive(video)"
+              :model-value="video.processingProgress"
+              color="primary"
+              height="6"
+              rounded
+              class="mt-2"
+            />
+            <v-alert v-if="video.processingError" type="error" variant="tonal" density="compact" class="mt-3 video-error">
+              {{ video.processingError }}
+            </v-alert>
+
+            <div v-if="video.recipeSlugs.length || video.shoppingListIds.length" class="video-links mt-3">
+              <NuxtLink
+                v-for="(slug, index) in video.recipeSlugs"
+                :key="slug"
+                :to="`/g/${groupSlug}/r/${slug}`"
+              >
+                {{ $t("video-library.open-recipe", { number: index + 1 }) }}
+              </NuxtLink>
+              <NuxtLink
+                v-for="(listId, index) in video.shoppingListIds"
+                :key="listId"
+                :to="`/shopping-lists/${listId}`"
+              >
+                {{ $t("video-library.open-shopping-list", { number: index + 1 }) }}
+              </NuxtLink>
+            </div>
+          </v-card-text>
+
+          <v-card-actions class="video-card-actions">
+            <LinkedResourcesButton
+              v-if="video.recipeIds.length || video.shoppingListIds.length"
+              entity-type="video"
+              :entity-id="video.id"
+              :count="video.recipeIds.length + video.shoppingListIds.length"
+            />
+            <v-btn :href="video.url" target="_blank" icon variant="text" :title="$t('video-library.open-source')">
+              <v-icon>{{ $globals.icons.openInNew }}</v-icon>
+            </v-btn>
+            <v-btn
+              v-if="isActive(video)"
+              icon
+              variant="text"
+              color="warning"
+              :title="$t('video-library.cancel-processing')"
+              @click="cancelProcessing(video)"
+            >
+              <v-icon>{{ $globals.icons.close }}</v-icon>
+            </v-btn>
+            <v-btn
+              v-if="['failed', 'cancelled'].includes(video.processingStatus)"
+              icon
+              variant="text"
+              color="primary"
+              :title="$t('video-library.retry')"
+              @click="retryProcessing(video)"
+            >
+              <v-icon>{{ $globals.icons.refresh }}</v-icon>
+            </v-btn>
+            <v-spacer />
+            <v-btn icon variant="text" :title="$t('general.edit')" @click="openEditDialog(video)">
+              <v-icon>{{ $globals.icons.edit }}</v-icon>
+            </v-btn>
+            <v-btn
+              icon
+              variant="text"
+              color="error"
+              :disabled="isActive(video)"
+              :title="$t('general.delete')"
+              @click="openDeleteDialog(video)"
+            >
+              <v-icon>{{ $globals.icons.delete }}</v-icon>
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </div>
+    </template>
     <v-alert v-else type="info" variant="tonal">
       {{ $t("video-library.no-videos") }}
     </v-alert>
@@ -477,6 +484,12 @@ const filteredVideos = computed(() => {
     ...video.tags,
   ].join(" ").toLocaleLowerCase().includes(query));
 });
+const {
+  page: videoPage,
+  itemsPerPage: videosPerPage,
+  totalItems: videoTotal,
+  paginatedItems: paginatedVideos,
+} = useListPagination(filteredVideos);
 
 useSeoMeta({ title: i18n.t("video-library.videos") });
 

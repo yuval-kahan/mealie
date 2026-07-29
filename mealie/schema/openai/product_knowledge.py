@@ -13,3 +13,7 @@ class OpenAIProductKnowledge(OpenAIBase):
     source: str = Field("", description="Optional concise source or source note when one is known.")
     categories: list[str] = Field(default_factory=list, description="Broad cooking-reference categories.")
     tags: list[str] = Field(default_factory=list, description="Specific searchable product and cooking terms.")
+    image_search_query: str = Field(
+        "",
+        description="Concise English public-image search phrase for a clear representative product photo.",
+    )

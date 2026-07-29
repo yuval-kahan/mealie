@@ -62,6 +62,8 @@
     "send-article": "שלח מאמר ל-AI",
     "save-website": "שמור אתר",
     "save-restaurant": "שמור מסעדה",
+    "save-wanted-book": "שמור ספר לקנייה",
+    "save-chef": "שמור שף",
     "save-video": "שמור סרטון",
     "connect-mealie": "פתח / התחבר ל-Mealie"
   },
@@ -90,6 +92,8 @@
     "open-article": "פתח מאמר ב-Mealie",
     "open-websites": "פתח אתרים שמורים ב-Mealie",
     "open-restaurants": "פתח מסעדות שמורות ב-Mealie",
+    "open-wanted-books": "פתח ספרים לקנייה ב-Mealie",
+    "open-chefs": "פתח רשימת שפים ב-Mealie",
     "open-videos": "פתח סרטונים שמורים ב-Mealie"
   },
   "status": {
@@ -117,6 +121,10 @@
     "website-saved": "האתר נשמר: {name}",
     "saving-restaurant": "מנתח ושומר את המסעדה הנוכחית...",
     "restaurant-saved": "המסעדה נשמרה: {name}",
+    "saving-wanted-book": "מנתח ושומר את הספר הנוכחי...",
+    "wanted-book-saved": "הספר נשמר ברשימת ספרים לקנייה: {title}",
+    "saving-chef": "מנתח ושומר את השף הנוכחי...",
+    "chef-saved": "השף נשמר: {name}",
     "saving-video": "שומר את הסרטון. ההורדה ועיבוד ה-AI ימשיכו ברקע...",
     "video-saved": "הסרטון נשמר והעיבוד ברקע התחיל: {title}",
     "video-settings-saved": "הגדרות הורדת הסרטונים נשמרו"

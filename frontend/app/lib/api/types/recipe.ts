@@ -254,6 +254,8 @@ export interface Recipe {
   createdAt?: string | null;
   updatedAt?: string | null;
   lastMade?: string | null;
+  isMergeArchived?: boolean;
+  isMergedRecipe?: boolean;
   recipeIngredient?: RecipeIngredient[];
   recipeInstructions?: RecipeStep[] | null;
   nutrition?: Nutrition | null;
@@ -338,6 +340,8 @@ export interface RecipeSummary {
   createdAt?: string | null;
   updatedAt?: string | null;
   lastMade?: string | null;
+  isMergeArchived?: boolean;
+  isMergedRecipe?: boolean;
 }
 export interface RecipeCommentCreate {
   recipeId: string;

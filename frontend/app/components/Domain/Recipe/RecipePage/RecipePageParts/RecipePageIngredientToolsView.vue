@@ -163,7 +163,11 @@ async function persistRecipeIngredients(
   return true;
 }
 
-async function applyAiIngredientAdjustment(payload: { ingredients: RecipeIngredient[]; adjustmentNote: string }) {
+async function applyAiIngredientAdjustment(payload: {
+  ingredients: RecipeIngredient[];
+  adjustmentNote: string;
+  syncShoppingLists: boolean;
+}) {
   if (!aiIngredientAdjustmentOriginal.value) {
     aiIngredientAdjustmentOriginal.value = cloneIngredients(props.recipe.recipeIngredient || []);
   }
@@ -178,6 +182,12 @@ async function applyAiIngredientAdjustment(payload: { ingredients: RecipeIngredi
   if (!saved) {
     aiIngredientAdjustmentOriginal.value = null;
     return;
+  }
+  if (payload.syncShoppingLists) {
+    const { error } = await api.recipes.syncIngredientsToShoppingLists(props.recipe.slug);
+    if (error) {
+      alert.warning(i18n.t("recipe.shopping-list-sync-failed"));
+    }
   }
   emit("update:scale", 1);
 }

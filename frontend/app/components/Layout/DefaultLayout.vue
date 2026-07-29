@@ -22,6 +22,18 @@
         v-model="quickRestaurantDialog"
         @saved="quickRestaurantDialog = false"
       />
+      <ChefCreateDialog
+        v-model="quickChefDialog"
+        @saved="quickChefDialog = false"
+      />
+      <EquipmentCreateDialog
+        v-model="quickEquipmentDialog"
+        @saved="quickEquipmentDialog = false"
+      />
+      <WantedBookCreateDialog
+        v-model="quickWantedBookDialog"
+        @saved="quickWantedBookDialog = false"
+      />
       <BaseDialog
         v-model="quickTextRecipeDialog"
         :title="$t('recipe.create-recipe-from-text')"
@@ -1065,6 +1077,9 @@ const showImageImport = computed(() => group.value?.aiProviderSettings?.imagePro
 const sidebar = ref<boolean>(false);
 const quickTextRecipeDialog = ref(false);
 const quickRestaurantDialog = ref(false);
+const quickChefDialog = ref(false);
+const quickEquipmentDialog = ref(false);
+const quickWantedBookDialog = ref(false);
 const quickArticleDialog = ref(false);
 const quickArticleSaving = ref(false);
 const quickArticleCreateMode = ref<"manual" | "ai-text" | "ai-link" | "ai-question">("manual");
@@ -2470,6 +2485,34 @@ const topLinks = computed<SideBarLink[]>(() => [
   },
   {
     icon: $globals.icons.chefHat,
+    title: i18n.t("chef.chefs"),
+    to: "/chefs",
+    restricted: true,
+  },
+  {
+    icon: $globals.icons.createAlt,
+    title: i18n.t("chef.quick-add"),
+    onClick: () => {
+      quickChefDialog.value = true;
+    },
+    restricted: true,
+  },
+  {
+    icon: $globals.icons.tools,
+    title: i18n.t("equipment.equipment"),
+    to: "/equipment",
+    restricted: true,
+  },
+  {
+    icon: $globals.icons.createAlt,
+    title: i18n.t("equipment.quick-add"),
+    onClick: () => {
+      quickEquipmentDialog.value = true;
+    },
+    restricted: true,
+  },
+  {
+    icon: $globals.icons.chefHat,
     title: i18n.t("restaurant.restaurants"),
     to: "/restaurants",
     restricted: true,
@@ -2516,6 +2559,20 @@ const topLinks = computed<SideBarLink[]>(() => [
     icon: $globals.icons.book,
     to: `/g/${groupSlug.value}/cookbooks`,
     title: i18n.t("cookbook.cookbooks"),
+    restricted: true,
+  },
+  {
+    icon: $globals.icons.book,
+    to: "/wanted-books",
+    title: i18n.t("wanted-book.books-to-buy"),
+    restricted: true,
+  },
+  {
+    icon: $globals.icons.createAlt,
+    title: i18n.t("wanted-book.quick-add"),
+    onClick: () => {
+      quickWantedBookDialog.value = true;
+    },
     restricted: true,
   },
   uploadBookActionLink(),

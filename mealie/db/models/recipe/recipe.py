@@ -39,6 +39,26 @@ if TYPE_CHECKING:
     from . import Category, Tag, Tool
 
 
+recipe_merge_sources = sa.Table(
+    "recipe_merge_sources",
+    SqlAlchemyBase.metadata,
+    sa.Column(
+        "merged_recipe_id",
+        GUID,
+        sa.ForeignKey("recipes.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    sa.Column(
+        "source_recipe_id",
+        GUID,
+        sa.ForeignKey("recipes.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    sa.Column("position", sa.Integer, nullable=False, default=0),
+    sa.Index("ix_recipe_merge_sources_source_recipe_id", "source_recipe_id"),
+)
+
+
 class RecipeModel(SqlAlchemyBase, BaseMixins):
     __tablename__ = "recipes"
     __table_args__: tuple[sa.UniqueConstraint, ...] = (
@@ -185,6 +205,20 @@ class RecipeModel(SqlAlchemyBase, BaseMixins):
     # Deprecated
     recipeCuisine: Mapped[str | None] = mapped_column(sa.String)
     is_ocr_recipe: Mapped[bool | None] = mapped_column(sa.Boolean, default=False)
+    is_merge_archived: FilterableColumn[bool] = mapped_column(
+        sa.Boolean,
+        nullable=False,
+        default=False,
+        server_default=sa.false(),
+        index=True,
+    )
+    is_merged_recipe: FilterableColumn[bool] = mapped_column(
+        sa.Boolean,
+        nullable=False,
+        default=False,
+        server_default=sa.false(),
+        index=True,
+    )
 
     @validates("name")
     def validate_name(self, _, name):

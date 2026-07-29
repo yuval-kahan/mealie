@@ -6,18 +6,27 @@ import httpx
 import sqlalchemy as sa
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import UUID4
+from sqlalchemy.orm import selectinload
 
+from mealie.db.models.household.chef import Chef
 from mealie.db.models.household.restaurant import Restaurant
+from mealie.db.models.household.uploaded_book import UploadedBook
+from mealie.pkgs import safehttp
 from mealie.routes._base import controller
 from mealie.routes._base.base_controllers import BaseUserController
 from mealie.schema.household.restaurant import (
     RestaurantAIRequest,
     RestaurantBrowserPageRequest,
     RestaurantCreate,
+    RestaurantDiscoveryRequest,
     RestaurantOut,
     RestaurantUpdate,
 )
-from mealie.schema.openai.restaurant import OpenAIRestaurant, OpenAIRestaurantHebrewMetadata
+from mealie.schema.openai.restaurant import (
+    OpenAIRestaurant,
+    OpenAIRestaurantHebrewMetadata,
+    OpenAIRestaurantSuggestions,
+)
 from mealie.schema.response.responses import ErrorResponse
 from mealie.services.openai import OpenAIService
 
@@ -93,6 +102,16 @@ def needs_hebrew_localization(cuisine_types: list[str], description: str | None)
 
 @controller(router)
 class RestaurantsController(BaseUserController):
+    def _statement(self):
+        return (
+            sa.select(Restaurant)
+            .options(
+                selectinload(Restaurant.chefs),
+                selectinload(Restaurant.uploaded_books),
+            )
+            .where(Restaurant.group_id == self.group_id)
+        )
+
     def _ai_enabled(self) -> bool:
         settings = (
             self.session.execute(
@@ -126,6 +145,12 @@ class RestaurantsController(BaseUserController):
             description=restaurant.description,
             notes=restaurant.notes,
             michelin_info=restaurant.michelin_info,
+            michelin_star_count=restaurant.michelin_star_count,
+            is_michelin_listed=restaurant.is_michelin_listed,
+            chef_names=json.loads(restaurant.chef_names_json or "[]"),
+            book_titles=json.loads(restaurant.book_titles_json or "[]"),
+            chef_ids=[chef.id for chef in restaurant.chefs],
+            uploaded_book_ids=[book.id for book in restaurant.uploaded_books],
             google_rating=restaurant.google_rating,
             google_review_count=restaurant.google_review_count,
             google_maps_url=restaurant.google_maps_url,
@@ -138,11 +163,42 @@ class RestaurantsController(BaseUserController):
 
     def _get_or_404(self, restaurant_id: UUID4) -> Restaurant:
         restaurant = self.session.execute(
-            sa.select(Restaurant).where(Restaurant.id == restaurant_id, Restaurant.group_id == self.group_id)
+            self._statement().where(Restaurant.id == restaurant_id)
         ).scalar_one_or_none()
         if restaurant is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND)
         return restaurant
+
+    def _validated_chefs(self, ids: list[UUID4]) -> list[Chef]:
+        unique_ids = list(dict.fromkeys(ids))
+        if not unique_ids:
+            return []
+        chefs = list(
+            self.session.execute(
+                sa.select(Chef).where(Chef.group_id == self.group_id, Chef.id.in_(unique_ids))
+            ).scalars()
+        )
+        if len(chefs) != len(unique_ids):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="One or more chefs were not found")
+        by_id = {chef.id: chef for chef in chefs}
+        return [by_id[item_id] for item_id in unique_ids]
+
+    def _validated_books(self, ids: list[UUID4]) -> list[UploadedBook]:
+        unique_ids = list(dict.fromkeys(ids))
+        if not unique_ids:
+            return []
+        books = list(
+            self.session.execute(
+                sa.select(UploadedBook).where(
+                    UploadedBook.group_id == self.group_id,
+                    UploadedBook.id.in_(unique_ids),
+                )
+            ).scalars()
+        )
+        if len(books) != len(unique_ids):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="One or more books were not found")
+        by_id = {book.id: book for book in books}
+        return [by_id[item_id] for item_id in unique_ids]
 
     def _apply(self, restaurant: Restaurant, data: RestaurantCreate | RestaurantUpdate) -> None:
         restaurant.name = data.name.strip()
@@ -156,6 +212,20 @@ class RestaurantsController(BaseUserController):
         restaurant.description = (data.description or "").strip() or None
         restaurant.notes = (data.notes or "").strip() or None
         restaurant.michelin_info = (data.michelin_info or "").strip() or None
+        restaurant.michelin_star_count = max(0, min(3, int(data.michelin_star_count or 0)))
+        restaurant.is_michelin_listed = bool(data.is_michelin_listed or restaurant.michelin_star_count)
+        chefs = self._validated_chefs(data.chef_ids)
+        uploaded_books = self._validated_books(data.uploaded_book_ids)
+        restaurant.chef_names_json = json.dumps(
+            normalize_terms([*data.chef_names, *(chef.name for chef in chefs)]),
+            ensure_ascii=False,
+        )
+        restaurant.book_titles_json = json.dumps(
+            normalize_terms([*data.book_titles, *(book.name for book in uploaded_books)], limit=120),
+            ensure_ascii=False,
+        )
+        restaurant.chefs = chefs
+        restaurant.uploaded_books = uploaded_books
         restaurant.google_rating = data.google_rating if data.google_rating and data.google_rating > 0 else None
         restaurant.google_review_count = data.google_review_count
         restaurant.google_maps_url = normalize_optional_url(data.google_maps_url)
@@ -170,7 +240,13 @@ class RestaurantsController(BaseUserController):
     async def _fetch_url_text(self, url: str) -> str:
         chunks: list[bytes] = []
         total = 0
-        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+        limits = httpx.Limits(max_connections=2, max_keepalive_connections=1)
+        async with httpx.AsyncClient(
+            transport=safehttp.AsyncSafeTransport(impersonate="chrome"),
+            timeout=30,
+            follow_redirects=True,
+            limits=limits,
+        ) as client:
             async with client.stream("GET", url, headers={"User-Agent": "Mealie Restaurants/1.0"}) as response:
                 response.raise_for_status()
                 async for chunk in response.aiter_bytes():
@@ -184,6 +260,7 @@ class RestaurantsController(BaseUserController):
     async def _analyze(
         self,
         *,
+        prompt: str | None = None,
         name: str | None = None,
         url: str | None = None,
         page_text: str | None = None,
@@ -196,6 +273,8 @@ class RestaurantsController(BaseUserController):
             )
         normalized_url = normalize_optional_url(url)
         message_parts: list[str] = []
+        if prompt:
+            message_parts.append(f"User research request:\n{prompt.strip()}")
         if name:
             message_parts.append(f"Restaurant name supplied by user: {name.strip()}")
         if normalized_url:
@@ -257,6 +336,12 @@ class RestaurantsController(BaseUserController):
             price_range=response.price_range,
             description=description,
             michelin_info=response.michelin_info,
+            michelin_star_count=response.michelin_star_count,
+            is_michelin_listed=response.is_michelin_listed,
+            chef_names=normalize_terms(response.chef_names),
+            book_titles=normalize_terms(response.book_titles, limit=120),
+            chef_ids=self._matching_chef_ids(response.chef_names),
+            uploaded_book_ids=self._matching_book_ids(response.book_titles),
             google_rating=response.google_rating,
             google_review_count=response.google_review_count,
             google_maps_url=maps_url,
@@ -265,13 +350,36 @@ class RestaurantsController(BaseUserController):
             visit_status="not_tried",
         )
 
+    def _matching_chef_ids(self, names: list[str]) -> list[UUID4]:
+        wanted = {name.casefold() for name in names if name.strip()}
+        if not wanted:
+            return []
+        return [
+            chef.id
+            for chef in self.session.execute(
+                sa.select(Chef).where(Chef.group_id == self.group_id)
+            ).scalars()
+            if chef.name.casefold() in wanted
+        ]
+
+    def _matching_book_ids(self, titles: list[str]) -> list[UUID4]:
+        wanted = {title.casefold() for title in titles if title.strip()}
+        if not wanted:
+            return []
+        result: list[UUID4] = []
+        for book in self.session.execute(
+            sa.select(UploadedBook).where(UploadedBook.group_id == self.group_id)
+        ).scalars():
+            if wanted.intersection({book.name.casefold(), book.original_file_name.casefold()}):
+                result.append(book.id)
+        return result
+
     def _create_or_update(self, data: RestaurantCreate) -> RestaurantOut:
         normalized_url = normalize_optional_url(data.website_url)
         identity_filters = [sa.func.lower(Restaurant.name) == data.name.strip().lower()]
         if normalized_url:
             identity_filters.append(Restaurant.website_url == normalized_url)
-        statement = sa.select(Restaurant).where(
-            Restaurant.group_id == self.group_id,
+        statement = self._statement().where(
             sa.or_(*identity_filters),
         )
         restaurant = self.session.execute(statement).scalar_one_or_none()
@@ -286,13 +394,12 @@ class RestaurantsController(BaseUserController):
         self._apply(restaurant, data.model_copy(update={"website_url": normalized_url}))
         self.session.add(restaurant)
         self.session.commit()
-        self.session.refresh(restaurant)
-        return self._to_out(restaurant)
+        return self._to_out(self._get_or_404(restaurant.id))
 
     @router.get("", response_model=list[RestaurantOut])
     def get_all(self, search: str | None = Query(None)) -> list[RestaurantOut]:
         query = (search or "").strip()
-        statement = sa.select(Restaurant).where(Restaurant.group_id == self.group_id)
+        statement = self._statement()
         if query and query.casefold() not in {"undefined", "null"}:
             escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             pattern = f"%{escaped}%"
@@ -305,6 +412,8 @@ class RestaurantsController(BaseUserController):
                     Restaurant.description.ilike(pattern, escape="\\"),
                     Restaurant.notes.ilike(pattern, escape="\\"),
                     Restaurant.michelin_info.ilike(pattern, escape="\\"),
+                    Restaurant.chef_names_json.ilike(pattern, escape="\\"),
+                    Restaurant.book_titles_json.ilike(pattern, escape="\\"),
                 )
             )
         restaurants = (
@@ -330,8 +439,71 @@ class RestaurantsController(BaseUserController):
                     detail=ErrorResponse.respond("The restaurant website returned no text"),
                 )
         return self._create_or_update(
-            await self._analyze(name=data.name, url=normalized_url, page_text=page_text)
+            await self._analyze(
+                prompt=data.prompt,
+                name=data.name,
+                url=normalized_url,
+                page_text=page_text,
+            )
         )
+
+    @router.post("/ai-discover", response_model=list[RestaurantCreate])
+    async def discover_with_ai(self, data: RestaurantDiscoveryRequest) -> list[RestaurantCreate]:
+        if not self._ai_enabled():
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=ErrorResponse.respond("OpenAI services are not enabled"),
+            )
+        openai_service = OpenAIService(self.repos)
+        response = await openai_service.get_response(
+            openai_service.get_prompt("restaurants.discover-restaurants"),
+            f"User request: {data.prompt.strip()}\nMaximum results: {data.limit}",
+            response_schema=OpenAIRestaurantSuggestions,
+        )
+        suggestions: list[RestaurantCreate] = []
+        seen: set[str] = set()
+        for item in (response.items if response else [])[: data.limit]:
+            name = item.name.strip()
+            if not item.is_restaurant or not name:
+                continue
+            normalized_url = None
+            if item.website_url:
+                try:
+                    normalized_url = normalize_optional_url(item.website_url)
+                except HTTPException:
+                    normalized_url = None
+            identity = normalized_url or name.casefold()
+            if identity in seen:
+                continue
+            seen.add(identity)
+            addresses = prioritize_tel_aviv_addresses(
+                normalize_terms(item.addresses, limit=100, item_limit=1000)
+            )
+            suggestions.append(
+                RestaurantCreate(
+                    name=name,
+                    website_url=normalized_url,
+                    cuisine_types=normalize_terms(item.cuisine_types),
+                    addresses=addresses,
+                    phone=item.phone,
+                    price_range=item.price_range,
+                    description=(item.description or "").strip() or None,
+                    michelin_info=item.michelin_info,
+                    michelin_star_count=item.michelin_star_count,
+                    is_michelin_listed=item.is_michelin_listed,
+                    chef_names=normalize_terms(item.chef_names),
+                    book_titles=normalize_terms(item.book_titles, limit=120),
+                    chef_ids=self._matching_chef_ids(item.chef_names),
+                    uploaded_book_ids=self._matching_book_ids(item.book_titles),
+                    google_rating=item.google_rating,
+                    google_review_count=item.google_review_count,
+                    google_maps_url=item.google_maps_url or google_maps_search_url(name, addresses),
+                    our_rating=None,
+                    recommendation_status="recommended",
+                    visit_status="not_tried",
+                )
+            )
+        return suggestions
 
     @router.post("/browser-page", response_model=RestaurantOut, status_code=status.HTTP_201_CREATED)
     async def create_from_browser_page(self, data: RestaurantBrowserPageRequest) -> RestaurantOut:
@@ -345,8 +517,7 @@ class RestaurantsController(BaseUserController):
         self._apply(restaurant, data)
         self.session.add(restaurant)
         self.session.commit()
-        self.session.refresh(restaurant)
-        return self._to_out(restaurant)
+        return self._to_out(self._get_or_404(restaurant.id))
 
     @router.delete("/{restaurant_id}", status_code=status.HTTP_204_NO_CONTENT)
     def delete(self, restaurant_id: UUID4) -> None:
