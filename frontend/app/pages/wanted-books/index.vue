@@ -38,6 +38,29 @@
       />
       <BaseButton create @click="openCreate" />
     </div>
+    <div class="wanted-filters mb-5">
+      <v-autocomplete
+        v-model="selectedAuthor"
+        :items="authorOptions"
+        :label="$t('wanted-book.authors')"
+        density="compact"
+        clearable
+        hide-details
+      />
+      <v-autocomplete
+        v-model="selectedCategory"
+        :items="categoryOptions"
+        :label="$t('category.categories')"
+        density="compact"
+        clearable
+        hide-details
+      />
+      <BaseListSortControls
+        v-model:sort-by="bookSortBy"
+        v-model:sort-direction="bookSortDirection"
+        :options="bookSortOptions"
+      />
+    </div>
 
     <BaseListPagination
       v-if="filteredBooks.length"
@@ -119,6 +142,8 @@ const api = useUserApi();
 const books = ref<WantedBook[]>([]);
 const loading = ref(true);
 const search = ref("");
+const selectedAuthor = ref<string | null>(null);
+const selectedCategory = ref<string | null>(null);
 const dialogOpen = ref(false);
 const deleteDialogOpen = ref(false);
 const editingBook = ref<WantedBook | null>(null);
@@ -127,26 +152,58 @@ const imageErrors = reactive(new Set<string>());
 
 useSeoMeta({ title: i18n.t("wanted-book.books-to-buy") });
 
+const authorOptions = computed(() => [...new Set(books.value.flatMap(book => book.authors))]
+  .sort((left, right) => left.localeCompare(right, i18n.locale.value, { sensitivity: "base" })));
+const categoryOptions = computed(() => [...new Set(books.value.flatMap(book => book.categories))]
+  .sort((left, right) => left.localeCompare(right, i18n.locale.value, { sensitivity: "base" })));
+const WANTED_BOOK_SORT_KEYS = ["title", "author", "publishedYear", "created"] as const;
+type WantedBookSortKey = typeof WANTED_BOOK_SORT_KEYS[number];
+const {
+  sortBy: bookSortBy,
+  sortDirection: bookSortDirection,
+} = usePersistedListSort(WANTED_BOOK_SORT_KEYS, "title", "asc", "wanted-books");
+const bookSortOptions = computed<{ title: string; value: WantedBookSortKey }[]>(() => [
+  { title: i18n.t("wanted-book.title"), value: "title" },
+  { title: i18n.t("wanted-book.authors"), value: "author" },
+  { title: i18n.t("wanted-book.published-year"), value: "publishedYear" },
+  { title: i18n.t("catalog.created-at"), value: "created" },
+]);
+
 const filteredBooks = computed(() => {
   const query = search.value.trim().toLocaleLowerCase();
-  if (!query) return books.value;
-  return books.value.filter(book => [
-    book.title,
-    book.subtitle || "",
-    book.authors.join(" "),
-    book.isbn10 || "",
-    book.isbn13 || "",
-    book.publisher || "",
-    book.categories.join(" "),
-    book.tags.join(" "),
-  ].join(" ").toLocaleLowerCase().includes(query));
+  return books.value.filter((book) => {
+    if (selectedAuthor.value && !book.authors.includes(selectedAuthor.value)) return false;
+    if (selectedCategory.value && !book.categories.includes(selectedCategory.value)) return false;
+    if (!query) return true;
+    return [
+      book.title,
+      book.subtitle || "",
+      book.authors.join(" "),
+      book.isbn10 || "",
+      book.isbn13 || "",
+      book.publisher || "",
+      book.categories.join(" "),
+      book.tags.join(" "),
+    ].join(" ").toLocaleLowerCase().includes(query);
+  });
 });
+const sortedBooks = sortListItems(
+  filteredBooks,
+  book => ({
+    title: book.title,
+    author: book.authors[0],
+    publishedYear: book.publishedYear,
+    created: book.createdAt,
+  })[bookSortBy.value],
+  bookSortDirection,
+  i18n.locale,
+);
 const {
   page: bookPage,
   itemsPerPage: booksPerPage,
   totalItems: bookTotal,
   paginatedItems: paginatedBooks,
-} = useListPagination(filteredBooks, 100, "wanted-books");
+} = useListPagination(sortedBooks, 100, "wanted-books");
 
 onMounted(loadBooks);
 
@@ -200,6 +257,13 @@ async function deleteBook() {
   grid-template-columns: minmax(260px, 1fr) auto;
 }
 
+.wanted-filters {
+  align-items: start;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(170px, 0.8fr) minmax(170px, 0.8fr) minmax(280px, 1.6fr);
+}
+
 .wanted-grid {
   display: grid;
   gap: 16px;
@@ -238,6 +302,10 @@ async function deleteBook() {
 
 @media (max-width: 600px) {
   .wanted-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .wanted-filters {
     grid-template-columns: 1fr;
   }
 }

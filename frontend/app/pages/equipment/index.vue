@@ -133,6 +133,31 @@
         {{ $t("equipment.organize-missing-with-ai") }}
       </v-btn>
     </div>
+    <div class="equipment-filters mb-6">
+      <v-select
+        v-model="aiStatusFilter"
+        :items="aiStatusOptions"
+        item-title="title"
+        item-value="value"
+        :label="$t('catalog.ai-status')"
+        density="compact"
+        hide-details
+      />
+      <v-select
+        v-model="imageStatusFilter"
+        :items="imageStatusOptions"
+        item-title="title"
+        item-value="value"
+        :label="$t('catalog.image-status')"
+        density="compact"
+        hide-details
+      />
+      <BaseListSortControls
+        v-model:sort-by="equipmentSortBy"
+        v-model:sort-direction="equipmentSortDirection"
+        :options="equipmentSortOptions"
+      />
+    </div>
 
     <v-alert type="info" variant="tonal" density="compact" class="mb-5">
       {{ $t("equipment.automatic-catalog-help") }}
@@ -258,6 +283,8 @@ const saving = ref(false);
 const bulkEnriching = ref(false);
 const search = ref("");
 const selectedCategory = ref<string | null>(null);
+const aiStatusFilter = ref<"all" | "organized" | "not-organized">("all");
+const imageStatusFilter = ref<"all" | "with-image" | "without-image">("all");
 const createDialogOpen = ref(false);
 const editDialogOpen = ref(false);
 const editingEquipment = ref<Equipment | null>(null);
@@ -274,11 +301,38 @@ const categoryOptions = computed(() => [...new Set(equipment.value
   .map(item => item.category || i18n.t("equipment.uncategorized")))]
   .sort((left, right) => left.localeCompare(right, i18n.locale.value)));
 
+const aiStatusOptions = computed(() => [
+  { title: i18n.t("catalog.all"), value: "all" },
+  { title: i18n.t("equipment.ai-organized"), value: "organized" },
+  { title: i18n.t("equipment.not-ai-organized"), value: "not-organized" },
+]);
+const imageStatusOptions = computed(() => [
+  { title: i18n.t("catalog.all"), value: "all" },
+  { title: i18n.t("catalog.with-image"), value: "with-image" },
+  { title: i18n.t("catalog.without-image"), value: "without-image" },
+]);
+const EQUIPMENT_SORT_KEYS = ["name", "category", "recipeCount", "aiStatus"] as const;
+type EquipmentSortKey = typeof EQUIPMENT_SORT_KEYS[number];
+const {
+  sortBy: equipmentSortBy,
+  sortDirection: equipmentSortDirection,
+} = usePersistedListSort(EQUIPMENT_SORT_KEYS, "name", "asc", "equipment");
+const equipmentSortOptions = computed<{ title: string; value: EquipmentSortKey }[]>(() => [
+  { title: i18n.t("general.name"), value: "name" },
+  { title: i18n.t("equipment.category"), value: "category" },
+  { title: i18n.t("catalog.recipe-count"), value: "recipeCount" },
+  { title: i18n.t("catalog.ai-status"), value: "aiStatus" },
+]);
+
 const filteredEquipment = computed(() => {
   const query = search.value.trim().toLocaleLowerCase();
   return equipment.value.filter((item) => {
     const category = item.category || i18n.t("equipment.uncategorized");
     if (selectedCategory.value && category !== selectedCategory.value) return false;
+    if (aiStatusFilter.value === "organized" && !item.aiEnriched) return false;
+    if (aiStatusFilter.value === "not-organized" && item.aiEnriched) return false;
+    if (imageStatusFilter.value === "with-image" && !item.hasImage) return false;
+    if (imageStatusFilter.value === "without-image" && item.hasImage) return false;
     if (!query) return true;
     return [
       item.name,
@@ -288,12 +342,23 @@ const filteredEquipment = computed(() => {
     ].join(" ").toLocaleLowerCase().includes(query);
   });
 });
+const sortedEquipment = sortListItems(
+  filteredEquipment,
+  item => ({
+    name: item.name,
+    category: item.category || i18n.t("equipment.uncategorized"),
+    recipeCount: item.recipeCount,
+    aiStatus: item.aiEnriched ? 1 : 0,
+  })[equipmentSortBy.value],
+  equipmentSortDirection,
+  i18n.locale,
+);
 const {
   page: equipmentPage,
   itemsPerPage: equipmentPerPage,
   totalItems: equipmentTotal,
   paginatedItems: paginatedEquipment,
-} = useListPagination(filteredEquipment);
+} = useListPagination(sortedEquipment);
 
 const equipmentSections = computed(() => {
   const sections = new Map<string, Equipment[]>();
@@ -429,6 +494,13 @@ async function deleteEquipmentImage(item: Equipment) {
   grid-template-columns: minmax(220px, 1fr) minmax(180px, 260px) auto auto;
 }
 
+.equipment-filters {
+  align-items: start;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(160px, 0.8fr) minmax(160px, 0.8fr) minmax(280px, 1.6fr);
+}
+
 .equipment-grid {
   display: grid;
   gap: 14px;
@@ -468,6 +540,10 @@ async function deleteEquipmentImage(item: Equipment) {
 @media (max-width: 980px) {
   .equipment-toolbar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .equipment-filters {
+    grid-template-columns: 1fr;
   }
 }
 

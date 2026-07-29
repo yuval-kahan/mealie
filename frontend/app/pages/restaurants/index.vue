@@ -53,6 +53,48 @@
         {{ $t("restaurant.find-with-ai") }}
       </v-btn>
     </div>
+    <div class="restaurants-filters mb-6">
+      <v-select
+        v-model="recommendationFilter"
+        :items="recommendationFilterOptions"
+        item-title="text"
+        item-value="value"
+        :label="$t('restaurant.recommendation')"
+        density="compact"
+        clearable
+        hide-details
+      />
+      <v-select
+        v-model="visitFilter"
+        :items="visitFilterOptions"
+        item-title="text"
+        item-value="value"
+        :label="$t('restaurant.visit-status')"
+        density="compact"
+        clearable
+        hide-details
+      />
+      <v-select
+        v-model="cuisineFilter"
+        :items="cuisineOptions"
+        :label="$t('restaurant.cuisine-types')"
+        density="compact"
+        clearable
+        hide-details
+      />
+      <v-checkbox
+        v-model="michelinOnly"
+        :label="$t('restaurant.michelin-only')"
+        density="compact"
+        hide-details
+      />
+    </div>
+    <BaseListSortControls
+      v-model:sort-by="restaurantSortBy"
+      v-model:sort-direction="restaurantSortDirection"
+      :options="restaurantSortOptions"
+      class="mb-6"
+    />
 
     <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
     <template v-else-if="filteredRestaurants.length">
@@ -272,9 +314,14 @@ import { alert } from "~/composables/use-toast";
 
 const i18n = useI18n();
 const api = useUserApi();
+const route = useRoute();
 const restaurants = ref<Restaurant[]>([]);
 const loading = ref(true);
-const search = ref("");
+const search = ref(typeof route.query.search === "string" ? route.query.search : "");
+const recommendationFilter = ref<RestaurantRecommendationStatus | null>(null);
+const visitFilter = ref<RestaurantVisitStatus | null>(null);
+const cuisineFilter = ref<string | null>(null);
+const michelinOnly = ref(false);
 const dialogOpen = ref(false);
 const discoverDialogOpen = ref(false);
 const deleteDialogOpen = ref(false);
@@ -297,29 +344,102 @@ const visitOptions = computed<{ text: string; value: RestaurantVisitStatus }[]>(
   { text: i18n.t("restaurant.tried"), value: "tried" },
 ]);
 
+const recommendationFilterOptions = computed(() => [
+  { text: i18n.t("catalog.all"), value: null },
+  ...recommendationOptions.value,
+]);
+
+const visitFilterOptions = computed(() => [
+  { text: i18n.t("catalog.all"), value: null },
+  ...visitOptions.value,
+]);
+
+const cuisineOptions = computed(() => [...new Set(restaurants.value.flatMap(item => item.cuisineTypes))]
+  .sort((left, right) => left.localeCompare(right, i18n.locale.value, { sensitivity: "base" })));
+
+const RESTAURANT_SORT_KEYS = [
+  "name",
+  "recommendation",
+  "googleRating",
+  "ourRating",
+  "michelin",
+  "created",
+] as const;
+type RestaurantSortKey = typeof RESTAURANT_SORT_KEYS[number];
+const {
+  sortBy: restaurantSortBy,
+  sortDirection: restaurantSortDirection,
+} = usePersistedListSort(RESTAURANT_SORT_KEYS, "name", "asc", "restaurants");
+const restaurantSortOptions = computed<{ title: string; value: RestaurantSortKey }[]>(() => [
+  { title: i18n.t("general.name"), value: "name" },
+  { title: i18n.t("restaurant.recommendation"), value: "recommendation" },
+  { title: i18n.t("restaurant.google-rating"), value: "googleRating" },
+  { title: i18n.t("restaurant.our-rating"), value: "ourRating" },
+  { title: i18n.t("restaurant.michelin-info"), value: "michelin" },
+  { title: i18n.t("catalog.created-at"), value: "created" },
+]);
+const recommendationWeights: Record<RestaurantRecommendationStatus, number> = {
+  strongly_recommended: 5,
+  recommended: 4,
+  neutral: 3,
+  not_recommended: 2,
+  strongly_not_recommended: 1,
+};
+
 const filteredRestaurants = computed(() => {
   const query = search.value.trim().toLocaleLowerCase();
-  if (!query) return restaurants.value;
-  return restaurants.value.filter(restaurant => [
-    restaurant.name,
-    restaurant.websiteUrl || "",
-    restaurant.description || "",
-    restaurant.notes || "",
-    restaurant.michelinInfo || "",
-    ...restaurant.chefNames,
-    ...restaurant.bookTitles,
-    ...restaurant.cuisineTypes,
-    ...restaurant.addresses,
-  ].join(" ").toLocaleLowerCase().includes(query));
+  return restaurants.value.filter((restaurant) => {
+    if (
+      recommendationFilter.value
+      && restaurant.recommendationStatus !== recommendationFilter.value
+    ) return false;
+    if (visitFilter.value && restaurant.visitStatus !== visitFilter.value) return false;
+    if (cuisineFilter.value && !restaurant.cuisineTypes.includes(cuisineFilter.value)) return false;
+    if (
+      michelinOnly.value
+      && !restaurant.isMichelinListed
+      && restaurant.michelinStarCount <= 0
+    ) return false;
+    if (!query) return true;
+    return [
+      restaurant.name,
+      restaurant.websiteUrl || "",
+      restaurant.description || "",
+      restaurant.notes || "",
+      restaurant.michelinInfo || "",
+      ...restaurant.chefNames,
+      ...restaurant.bookTitles,
+      ...restaurant.cuisineTypes,
+      ...restaurant.addresses,
+    ].join(" ").toLocaleLowerCase().includes(query);
+  });
 });
+const sortedRestaurants = sortListItems(
+  filteredRestaurants,
+  restaurant => ({
+    name: restaurant.name,
+    recommendation: recommendationWeights[restaurant.recommendationStatus],
+    googleRating: restaurant.googleRating,
+    ourRating: restaurant.ourRating,
+    michelin: restaurant.michelinStarCount,
+    created: restaurant.createdAt,
+  })[restaurantSortBy.value],
+  restaurantSortDirection,
+  i18n.locale,
+);
 const {
   page: restaurantPage,
   itemsPerPage: restaurantsPerPage,
   totalItems: restaurantTotal,
   paginatedItems: paginatedRestaurants,
-} = useListPagination(filteredRestaurants);
+} = useListPagination(sortedRestaurants);
 
-const restaurantSections = computed(() => recommendationOptions.value
+const orderedRecommendationOptions = computed(() => (
+  restaurantSortBy.value === "recommendation" && restaurantSortDirection.value === "asc"
+    ? [...recommendationOptions.value].reverse()
+    : recommendationOptions.value
+));
+const restaurantSections = computed(() => orderedRecommendationOptions.value
   .map(option => ({
     status: option.value,
     title: option.text,
@@ -442,6 +562,13 @@ async function deleteRestaurant() {
   grid-template-columns: minmax(220px, 1fr) auto auto;
 }
 
+.restaurants-filters {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(160px, 1fr)) auto;
+}
+
 .restaurants-grid {
   display: grid;
   gap: 12px;
@@ -507,6 +634,7 @@ async function deleteRestaurant() {
 
 @media (max-width: 700px) {
   .restaurants-toolbar,
+  .restaurants-filters,
   .restaurant-card-actions {
     grid-template-columns: 1fr;
   }

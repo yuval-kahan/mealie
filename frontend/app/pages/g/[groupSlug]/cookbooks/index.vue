@@ -725,6 +725,12 @@
             :label="$t('cookbook.categories-and-tags')"
           />
         </div>
+        <BaseListSortControls
+          v-model:sort-by="uploadedBookSortBy"
+          v-model:sort-direction="uploadedBookSortDirection"
+          :options="uploadedBookSortOptions"
+          class="mb-6"
+        />
 
         <BaseListPagination
           v-if="filteredUploadedBooks.length"
@@ -1038,6 +1044,19 @@ const uploadedBooksLoading = ref(false);
 const bookSearch = ref("");
 const bookTypeFilter = ref("all");
 const bookMetadataFilters = ref<string[]>([]);
+const UPLOADED_BOOK_SORT_KEYS = ["name", "created", "size", "readingProgress", "type"] as const;
+type UploadedBookSortKey = typeof UPLOADED_BOOK_SORT_KEYS[number];
+const {
+  sortBy: uploadedBookSortBy,
+  sortDirection: uploadedBookSortDirection,
+} = usePersistedListSort(UPLOADED_BOOK_SORT_KEYS, "name", "asc", "uploaded-books");
+const uploadedBookSortOptions = computed<{ title: string; value: UploadedBookSortKey }[]>(() => [
+  { title: i18n.t("general.name"), value: "name" },
+  { title: i18n.t("catalog.created-at"), value: "created" },
+  { title: i18n.t("catalog.book-size"), value: "size" },
+  { title: i18n.t("catalog.reading-progress"), value: "readingProgress" },
+  { title: i18n.t("cookbook.book-type"), value: "type" },
+]);
 const aiBookDialog = ref(route.query.generate === "true");
 const aiBookCreating = ref(false);
 const aiBookMode = ref<"preset" | "prompt">("preset");
@@ -1228,12 +1247,24 @@ const filteredUploadedBooks = computed(() => {
       .includes(query);
   });
 });
+const sortedUploadedBooks = sortListItems(
+  filteredUploadedBooks,
+  book => ({
+    name: book.name,
+    created: book.createdAt,
+    size: book.size,
+    readingProgress: bookReadingState(book)?.readingPercent,
+    type: bookTypeLabel(book),
+  })[uploadedBookSortBy.value],
+  uploadedBookSortDirection,
+  i18n.locale,
+);
 const {
   page: uploadedBookPage,
   itemsPerPage: uploadedBooksPerPage,
   totalItems: uploadedBookTotal,
   paginatedItems: paginatedUploadedBooks,
-} = useListPagination(filteredUploadedBooks);
+} = useListPagination(sortedUploadedBooks);
 
 async function loadUploadedBooks() {
   uploadedBooksLoading.value = true;

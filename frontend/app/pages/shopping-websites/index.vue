@@ -224,6 +224,31 @@
         {{ $t("shopping-website.find-with-ai") }}
       </v-btn>
     </div>
+    <div class="shopping-websites-filters mb-6">
+      <v-select
+        v-model="websiteTypeFilter"
+        :items="websiteTypeFilterOptions"
+        item-title="title"
+        item-value="value"
+        :label="$t('catalog.type')"
+        density="compact"
+        hide-details
+      />
+      <v-select
+        v-model="websiteLinkFilter"
+        :items="websiteLinkFilterOptions"
+        item-title="title"
+        item-value="value"
+        :label="$t('catalog.link-status')"
+        density="compact"
+        hide-details
+      />
+      <BaseListSortControls
+        v-model:sort-by="websiteSortBy"
+        v-model:sort-direction="websiteSortDirection"
+        :options="websiteSortOptions"
+      />
+    </div>
 
     <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
     <template v-else-if="filteredWebsites.length">
@@ -339,10 +364,13 @@ import { alert } from "~/composables/use-toast";
 const i18n = useI18n();
 const { $globals } = useNuxtApp();
 const api = useUserApi();
+const route = useRoute();
 const websites = ref<ShoppingWebsite[]>([]);
 const loading = ref(true);
 const saving = ref(false);
-const search = ref("");
+const search = ref(typeof route.query.search === "string" ? route.query.search : "");
+const websiteTypeFilter = ref<"all" | "recipe" | "shopping" | "both">("all");
+const websiteLinkFilter = ref<"all" | "linked" | "unlinked">("all");
 const dialogOpen = ref(false);
 const discoverDialogOpen = ref(false);
 const deleteDialogOpen = ref(false);
@@ -383,6 +411,29 @@ const aiWebsiteTypeOptions = computed(() => [
   { title: i18n.t("shopping-website.shopping-site"), value: "shopping" },
   { title: i18n.t("shopping-website.recipe-and-shopping-site"), value: "both" },
 ]);
+const websiteTypeFilterOptions = computed(() => [
+  { title: i18n.t("catalog.all"), value: "all" },
+  { title: i18n.t("shopping-website.recipe-site"), value: "recipe" },
+  { title: i18n.t("shopping-website.shopping-site"), value: "shopping" },
+  { title: i18n.t("shopping-website.recipe-and-shopping-site"), value: "both" },
+]);
+const websiteLinkFilterOptions = computed(() => [
+  { title: i18n.t("catalog.all"), value: "all" },
+  { title: i18n.t("catalog.linked"), value: "linked" },
+  { title: i18n.t("catalog.unlinked"), value: "unlinked" },
+]);
+const WEBSITE_SORT_KEYS = ["name", "created", "foodCount", "linkedCount"] as const;
+type WebsiteSortKey = typeof WEBSITE_SORT_KEYS[number];
+const {
+  sortBy: websiteSortBy,
+  sortDirection: websiteSortDirection,
+} = usePersistedListSort(WEBSITE_SORT_KEYS, "name", "asc", "shopping-websites");
+const websiteSortOptions = computed<{ title: string; value: WebsiteSortKey }[]>(() => [
+  { title: i18n.t("general.name"), value: "name" },
+  { title: i18n.t("catalog.created-at"), value: "created" },
+  { title: i18n.t("catalog.food-count"), value: "foodCount" },
+  { title: i18n.t("catalog.linked-items"), value: "linkedCount" },
+]);
 const canSaveImage = computed(() => Boolean(
   imageWebsite.value
   && (imageMode.value === "auto"
@@ -391,20 +442,39 @@ const canSaveImage = computed(() => Boolean(
 ));
 const filteredWebsites = computed(() => {
   const query = search.value.trim().toLocaleLowerCase();
-  if (!query) return websites.value;
-  return websites.value.filter(website => [
-    website.name,
-    website.url,
-    website.pageFood || "",
-    ...website.offeredFoods,
-  ].join(" ").toLocaleLowerCase().includes(query));
+  return websites.value.filter((website) => {
+    if (websiteTypeFilter.value === "recipe" && (!website.isRecipeSite || website.isShoppingSite)) return false;
+    if (websiteTypeFilter.value === "shopping" && (!website.isShoppingSite || website.isRecipeSite)) return false;
+    if (websiteTypeFilter.value === "both" && (!website.isRecipeSite || !website.isShoppingSite)) return false;
+    const linkedCount = website.recipeIds.length + website.shoppingListIds.length;
+    if (websiteLinkFilter.value === "linked" && linkedCount === 0) return false;
+    if (websiteLinkFilter.value === "unlinked" && linkedCount > 0) return false;
+    if (!query) return true;
+    return [
+      website.name,
+      website.url,
+      website.pageFood || "",
+      ...website.offeredFoods,
+    ].join(" ").toLocaleLowerCase().includes(query);
+  });
 });
+const sortedWebsites = sortListItems(
+  filteredWebsites,
+  website => ({
+    name: website.name,
+    created: website.createdAt,
+    foodCount: website.offeredFoods.length + (website.pageFood ? 1 : 0),
+    linkedCount: website.recipeIds.length + website.shoppingListIds.length,
+  })[websiteSortBy.value],
+  websiteSortDirection,
+  i18n.locale,
+);
 const {
   page: websitePage,
   itemsPerPage: websitesPerPage,
   totalItems: websiteTotal,
   paginatedItems: paginatedWebsites,
-} = useListPagination(filteredWebsites);
+} = useListPagination(sortedWebsites);
 const websiteSections = computed(() => {
   if (!groupByType.value) {
     return [{
@@ -576,6 +646,13 @@ async function deleteWebsite() {
   grid-template-columns: minmax(220px, 1fr) auto auto;
 }
 
+.shopping-websites-filters {
+  align-items: start;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(160px, 0.8fr) minmax(160px, 0.8fr) minmax(280px, 1.6fr);
+}
+
 .shopping-websites-grid {
   display: grid;
   gap: 12px;
@@ -639,6 +716,10 @@ async function deleteWebsite() {
 
 @media (max-width: 600px) {
   .shopping-websites-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .shopping-websites-filters {
     grid-template-columns: 1fr;
   }
 }

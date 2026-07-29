@@ -234,6 +234,39 @@
         {{ $t("video-library.save-video") }}
       </v-btn>
     </div>
+    <div class="video-library-filters mb-6">
+      <v-select
+        v-model="statusFilter"
+        :items="statusFilterOptions"
+        item-title="title"
+        item-value="value"
+        :label="$t('catalog.processing-status')"
+        density="compact"
+        hide-details
+      />
+      <v-select
+        v-model="platformFilter"
+        :items="platformOptions"
+        :label="$t('catalog.platform')"
+        density="compact"
+        clearable
+        hide-details
+      />
+      <v-select
+        v-model="videoLinkFilter"
+        :items="videoLinkFilterOptions"
+        item-title="title"
+        item-value="value"
+        :label="$t('catalog.link-status')"
+        density="compact"
+        hide-details
+      />
+      <BaseListSortControls
+        v-model:sort-by="videoSortBy"
+        v-model:sort-direction="videoSortDirection"
+        :options="videoSortOptions"
+      />
+    </div>
 
     <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
     <template v-else-if="filteredVideos.length">
@@ -399,6 +432,9 @@ const loading = ref(true);
 const saving = ref(false);
 const savingSettings = ref(false);
 const search = ref("");
+const statusFilter = ref<string | null>(null);
+const platformFilter = ref<string | null>(null);
+const videoLinkFilter = ref<"all" | "linked" | "unlinked">("all");
 const createDialogOpen = ref(false);
 const settingsDialogOpen = ref(false);
 const editDialogOpen = ref(false);
@@ -466,6 +502,34 @@ const targetLanguages = computed(() => {
   ];
   return values.filter((item, index) => values.findIndex(candidate => candidate.value === item.value) === index);
 });
+const statusFilterOptions = computed(() => [
+  { title: i18n.t("catalog.all"), value: null },
+  ...[...new Set(videos.value.map(video => video.processingStatus))]
+    .sort()
+    .map(value => ({ title: statusText(value), value })),
+]);
+const platformOptions = computed(() => [...new Set(videos.value
+  .map(video => video.platform?.trim())
+  .filter((value): value is string => Boolean(value)))]
+  .sort((left, right) => left.localeCompare(right, i18n.locale.value, { sensitivity: "base" })));
+const videoLinkFilterOptions = computed(() => [
+  { title: i18n.t("catalog.all"), value: "all" },
+  { title: i18n.t("catalog.linked"), value: "linked" },
+  { title: i18n.t("catalog.unlinked"), value: "unlinked" },
+]);
+const VIDEO_SORT_KEYS = ["title", "created", "duration", "status", "platform"] as const;
+type VideoSortKey = typeof VIDEO_SORT_KEYS[number];
+const {
+  sortBy: videoSortBy,
+  sortDirection: videoSortDirection,
+} = usePersistedListSort(VIDEO_SORT_KEYS, "created", "desc", "videos");
+const videoSortOptions = computed<{ title: string; value: VideoSortKey }[]>(() => [
+  { title: i18n.t("video-library.title"), value: "title" },
+  { title: i18n.t("catalog.created-at"), value: "created" },
+  { title: i18n.t("catalog.duration"), value: "duration" },
+  { title: i18n.t("catalog.processing-status"), value: "status" },
+  { title: i18n.t("catalog.platform"), value: "platform" },
+]);
 
 const canCreate = computed(() => {
   const validUrl = /^https?:\/\//i.test(createForm.url.trim());
@@ -473,23 +537,42 @@ const canCreate = computed(() => {
 });
 const filteredVideos = computed(() => {
   const query = search.value.trim().toLocaleLowerCase();
-  if (!query) return videos.value;
-  return videos.value.filter(video => [
-    video.title,
-    video.url,
-    video.description || "",
-    video.creator || "",
-    video.platform || "",
-    ...video.categories,
-    ...video.tags,
-  ].join(" ").toLocaleLowerCase().includes(query));
+  return videos.value.filter((video) => {
+    if (statusFilter.value && video.processingStatus !== statusFilter.value) return false;
+    if (platformFilter.value && video.platform !== platformFilter.value) return false;
+    const linkedCount = video.recipeIds.length + video.shoppingListIds.length;
+    if (videoLinkFilter.value === "linked" && linkedCount === 0) return false;
+    if (videoLinkFilter.value === "unlinked" && linkedCount > 0) return false;
+    if (!query) return true;
+    return [
+      video.title,
+      video.url,
+      video.description || "",
+      video.creator || "",
+      video.platform || "",
+      ...video.categories,
+      ...video.tags,
+    ].join(" ").toLocaleLowerCase().includes(query);
+  });
 });
+const sortedVideos = sortListItems(
+  filteredVideos,
+  video => ({
+    title: video.title,
+    created: video.createdAt,
+    duration: video.durationSeconds,
+    status: video.processingStatus,
+    platform: video.platform,
+  })[videoSortBy.value],
+  videoSortDirection,
+  i18n.locale,
+);
 const {
   page: videoPage,
   itemsPerPage: videosPerPage,
   totalItems: videoTotal,
   paginatedItems: paginatedVideos,
-} = useListPagination(filteredVideos);
+} = useListPagination(sortedVideos);
 
 useSeoMeta({ title: i18n.t("video-library.videos") });
 
@@ -715,6 +798,13 @@ function formatFileSize(bytes: number) {
   grid-template-columns: minmax(220px, 1fr) auto auto;
 }
 
+.video-library-filters {
+  align-items: start;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(150px, 0.7fr)) minmax(280px, 1.5fr);
+}
+
 .video-library-grid {
   display: grid;
   gap: 16px;
@@ -807,6 +897,7 @@ function formatFileSize(bytes: number) {
 
 @media (max-width: 700px) {
   .video-library-toolbar,
+  .video-library-filters,
   .video-settings-grid {
     grid-template-columns: 1fr;
   }

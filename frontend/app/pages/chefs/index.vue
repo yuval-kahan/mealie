@@ -70,6 +70,12 @@
         {{ $t("chef.quick-add") }}
       </v-btn>
     </div>
+    <BaseListSortControls
+      v-model:sort-by="chefSortBy"
+      v-model:sort-direction="chefSortDirection"
+      :options="chefSortOptions"
+      class="mb-6"
+    />
 
     <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
     <template v-else-if="filteredChefs.length">
@@ -266,6 +272,11 @@ const deletingChef = ref<Chef | null>(null);
 const selectedChef = ref<Chef | null>(null);
 const profileDialogOpen = ref(false);
 const imageErrors = reactive(new Set<string>());
+const CHEF_SORT_KEYS = ["name", "rank", "michelin", "country", "created"] as const;
+const {
+  sortBy: chefSortBy,
+  sortDirection: chefSortDirection,
+} = usePersistedListSort(CHEF_SORT_KEYS, "name", "asc", "chefs");
 
 useSeoMeta({ title: i18n.t("chef.chefs") });
 
@@ -278,6 +289,13 @@ const rankOptions = computed<{ text: string; value: ChefRank }[]>(() => [
 ]);
 
 const rankFilterOptions = computed(() => rankOptions.value);
+const chefSortOptions = computed(() => [
+  { title: i18n.t("general.name"), value: "name" },
+  { title: i18n.t("chef.rank"), value: "rank" },
+  { title: i18n.t("chef.michelin-star-count"), value: "michelin" },
+  { title: i18n.t("chef.country"), value: "country" },
+  { title: i18n.t("general.created"), value: "created" },
+]);
 
 const cuisineOptions = computed(() => [...new Set(chefs.value.flatMap(chef => chef.cuisines))]
   .sort((left, right) => left.localeCompare(right, i18n.locale.value)));
@@ -304,20 +322,44 @@ const filteredChefs = computed(() => {
     ].join(" ").toLocaleLowerCase().includes(query);
   });
 });
+const rankWeights: Record<ChefRank, number> = {
+  world_class: 5,
+  excellent: 4,
+  good: 3,
+  medium: 2,
+  emerging: 1,
+};
+const sortedChefs = sortListItems(
+  filteredChefs,
+  chef => ({
+    name: chef.name,
+    rank: rankWeights[chef.rank],
+    michelin: chef.michelinStarCount,
+    country: chef.country,
+    created: chef.createdAt ? Date.parse(chef.createdAt) : null,
+  })[chefSortBy.value],
+  chefSortDirection,
+  i18n.locale,
+);
 const {
   page: chefPage,
   itemsPerPage: chefsPerPage,
   totalItems: chefTotal,
   paginatedItems: paginatedChefs,
-} = useListPagination(filteredChefs);
+} = useListPagination(sortedChefs);
 
-const chefSections = computed(() => rankOptions.value
-  .map(option => ({
-    rank: option.value,
-    title: option.text,
-    items: paginatedChefs.value.filter(chef => chef.rank === option.value),
-  }))
-  .filter(section => section.items.length));
+const chefSections = computed(() => {
+  const sections = rankOptions.value
+    .map(option => ({
+      rank: option.value,
+      title: option.text,
+      items: paginatedChefs.value.filter(chef => chef.rank === option.value),
+    }))
+    .filter(section => section.items.length);
+  return chefSortBy.value === "rank" && chefSortDirection.value === "asc"
+    ? [...sections].reverse()
+    : sections;
+});
 
 onMounted(loadChefs);
 

@@ -253,6 +253,12 @@
       />
       <BaseButton create @click="openCreate" />
     </div>
+    <BaseListSortControls
+      v-model:sort-by="productSortBy"
+      v-model:sort-direction="productSortDirection"
+      :options="productSortOptions"
+      class="mt-4"
+    />
 
     <BaseListPagination
       v-if="filteredItems.length"
@@ -393,6 +399,18 @@ const aiTopic = ref("");
 const search = ref("");
 const selectedCategories = ref<string[]>([]);
 const selectedTags = ref<string[]>([]);
+const PRODUCT_SORT_KEYS = ["title", "created", "updated", "categoryCount"] as const;
+type ProductSortKey = typeof PRODUCT_SORT_KEYS[number];
+const {
+  sortBy: productSortBy,
+  sortDirection: productSortDirection,
+} = usePersistedListSort(PRODUCT_SORT_KEYS, "title", "asc", "product-knowledge");
+const productSortOptions = computed<{ title: string; value: ProductSortKey }[]>(() => [
+  { title: i18n.t("product-knowledge.title"), value: "title" },
+  { title: i18n.t("catalog.created-at"), value: "created" },
+  { title: i18n.t("catalog.updated-at"), value: "updated" },
+  { title: i18n.t("catalog.category-count"), value: "categoryCount" },
+]);
 
 const form = reactive<ProductKnowledgeCreate>({
   title: "",
@@ -437,12 +455,23 @@ const filteredItems = computed(() => {
       && (!tags.size || itemTags.some(value => tags.has(value)));
   });
 });
+const sortedItems = sortListItems(
+  filteredItems,
+  item => ({
+    title: item.title,
+    created: item.createdAt,
+    updated: item.updatedAt,
+    categoryCount: item.categories.length,
+  })[productSortBy.value],
+  productSortDirection,
+  i18n.locale,
+);
 const {
   page: productPage,
   itemsPerPage: productsPerPage,
   totalItems: productTotal,
   paginatedItems: paginatedProducts,
-} = useListPagination(filteredItems);
+} = useListPagination(sortedItems);
 
 onMounted(refreshItems);
 

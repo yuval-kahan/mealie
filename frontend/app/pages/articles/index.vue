@@ -279,6 +279,12 @@
         {{ $t("general.reset") }}
       </v-btn>
     </div>
+    <BaseListSortControls
+      v-model:sort-by="articleSortBy"
+      v-model:sort-direction="articleSortDirection"
+      :options="articleSortOptions"
+      class="mt-4"
+    />
 
     <v-alert
       v-if="aiSearchActive && !visibleArticles.length"
@@ -399,6 +405,19 @@ const organizeExtractedShoppingListWithAI = ref(true);
 const includeExtractedAiTips = ref(true);
 const includeExtractedMiseEnPlace = ref(true);
 const includeExtractedItemImages = ref(true);
+const ARTICLE_SORT_KEYS = ["relevance", "title", "created", "updated", "author"] as const;
+type ArticleSortKey = typeof ARTICLE_SORT_KEYS[number];
+const {
+  sortBy: articleSortBy,
+  sortDirection: articleSortDirection,
+} = usePersistedListSort(ARTICLE_SORT_KEYS, "created", "desc", "articles");
+const articleSortOptions = computed<{ title: string; value: ArticleSortKey }[]>(() => [
+  { title: i18n.t("catalog.relevance"), value: "relevance" },
+  { title: i18n.t("article.title"), value: "title" },
+  { title: i18n.t("catalog.created-at"), value: "created" },
+  { title: i18n.t("catalog.updated-at"), value: "updated" },
+  { title: i18n.t("article.author"), value: "author" },
+]);
 
 const form = reactive<ArticleCreate>({
   title: "",
@@ -460,12 +479,27 @@ const visibleArticles = computed(() => {
   const byId = new Map(filteredArticles.value.map(article => [article.id, article]));
   return aiSearchIds.value.map(id => byId.get(id)).filter((article): article is Article => !!article);
 });
+const sortedVisibleArticles = sortListItems(
+  visibleArticles,
+  (article) => {
+    const relevanceIndex = aiSearchIds.value.indexOf(article.id);
+    return {
+      relevance: relevanceIndex >= 0 ? aiSearchIds.value.length - relevanceIndex : null,
+      title: article.title,
+      created: article.createdAt,
+      updated: article.updatedAt,
+      author: article.author,
+    }[articleSortBy.value];
+  },
+  articleSortDirection,
+  i18n.locale,
+);
 const {
   page: articlePage,
   itemsPerPage: articlesPerPage,
   totalItems: articleTotal,
   paginatedItems: paginatedArticles,
-} = useListPagination(visibleArticles);
+} = useListPagination(sortedVisibleArticles);
 
 onMounted(async () => {
   await refreshArticles();

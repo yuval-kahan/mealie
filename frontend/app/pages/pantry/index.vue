@@ -127,6 +127,21 @@
         {{ $t("pantry.add-item") }}
       </v-btn>
     </div>
+    <div class="pantry-filters mb-5">
+      <v-select
+        v-model="categoryFilter"
+        :items="pantryCategoryOptions"
+        :label="$t('category.category')"
+        density="compact"
+        clearable
+        hide-details
+      />
+      <BaseListSortControls
+        v-model:sort-by="pantrySortBy"
+        v-model:sort-direction="pantrySortDirection"
+        :options="pantrySortOptions"
+      />
+    </div>
 
     <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
     <template v-else-if="filteredItems.length">
@@ -307,6 +322,7 @@ const items = ref<PantryItem[]>([]);
 const loading = ref(false);
 const saving = ref(false);
 const search = ref("");
+const categoryFilter = ref<string | null>(null);
 const itemDialogOpen = ref(false);
 const editingItem = ref<PantryItem | null>(null);
 const deletingItem = ref<PantryItem | null>(null);
@@ -333,20 +349,48 @@ const RECENT_HISTORY_LIMIT = 6;
 let historySearchTimer: ReturnType<typeof setTimeout> | undefined;
 
 const recentHistory = computed(() => historyItems.value.slice(0, RECENT_HISTORY_LIMIT));
+const pantryCategoryOptions = computed(() => [...new Set(items.value
+  .map(item => item.category?.trim())
+  .filter((value): value is string => Boolean(value)))]
+  .sort((left, right) => left.localeCompare(right, i18n.locale.value, { sensitivity: "base" })));
+const PANTRY_SORT_KEYS = ["name", "category", "quantity", "created"] as const;
+type PantrySortKey = typeof PANTRY_SORT_KEYS[number];
+const {
+  sortBy: pantrySortBy,
+  sortDirection: pantrySortDirection,
+} = usePersistedListSort(PANTRY_SORT_KEYS, "name", "asc", "pantry");
+const pantrySortOptions = computed<{ title: string; value: PantrySortKey }[]>(() => [
+  { title: i18n.t("general.name"), value: "name" },
+  { title: i18n.t("category.category"), value: "category" },
+  { title: i18n.t("recipe.quantity"), value: "quantity" },
+  { title: i18n.t("catalog.created-at"), value: "created" },
+]);
 
 const filteredItems = computed(() => {
   const query = search.value.trim().toLocaleLowerCase();
-  if (!query) return items.value;
-  return items.value.filter(item =>
-    `${item.name} ${item.category || ""} ${item.note || ""}`.toLocaleLowerCase().includes(query),
-  );
+  return items.value.filter((item) => {
+    if (categoryFilter.value && item.category !== categoryFilter.value) return false;
+    if (!query) return true;
+    return `${item.name} ${item.category || ""} ${item.note || ""}`.toLocaleLowerCase().includes(query);
+  });
 });
+const sortedItems = sortListItems(
+  filteredItems,
+  item => ({
+    name: item.name,
+    category: item.category,
+    quantity: item.quantity,
+    created: item.createdAt,
+  })[pantrySortBy.value],
+  pantrySortDirection,
+  i18n.locale,
+);
 const {
   page: pantryPage,
   itemsPerPage: pantryItemsPerPage,
   totalItems: pantryTotal,
   paginatedItems: paginatedPantryItems,
-} = useListPagination(filteredItems);
+} = useListPagination(sortedItems);
 
 function recipeImageUrl(id: string) {
   return id ? `/api/media/recipes/${id}/images/original.webp` : "";
@@ -517,6 +561,13 @@ onMounted(async () => {
   align-items: center;
 }
 
+.pantry-filters {
+  align-items: start;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(180px, 0.7fr) minmax(280px, 1.3fr);
+}
+
 .pantry-items,
 .pantry-results {
   display: grid;
@@ -610,6 +661,10 @@ onMounted(async () => {
 
 @media (max-width: 600px) {
   .pantry-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .pantry-filters {
     grid-template-columns: 1fr;
   }
 
