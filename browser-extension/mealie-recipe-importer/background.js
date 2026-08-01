@@ -489,7 +489,7 @@ async function updateActionTitle() {
 async function findMealieLocale(mealieUrl) {
   let origin = "";
   try {
-    origin = new URL(normalizeBaseUrl(mealieUrl || "http://localhost:3000")).origin;
+    origin = new URL(normalizeBaseUrl(mealieUrl || "http://localhost:9925")).origin;
   }
   catch {
     return null;

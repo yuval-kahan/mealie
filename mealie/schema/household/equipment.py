@@ -16,6 +16,7 @@ class EquipmentOut(MealieModel):
     category: str | None = None
     description: str | None = None
     image_source_url: str | None = None
+    image_name: str | None = None
     ai_enriched: bool = False
     has_image: bool = False
     image_version: str | None = None

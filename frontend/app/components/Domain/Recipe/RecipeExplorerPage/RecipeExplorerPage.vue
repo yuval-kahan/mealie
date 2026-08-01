@@ -28,8 +28,10 @@
       <RecipeCardSection
         v-if="ready"
         class="mt-n5"
-        :icon="$globals.icons.silverwareForkKnife"
-        :title="$t('general.recipes')"
+        :icon="displayIcon"
+        :title="$t(titleKey)"
+        :section="section"
+        :group-by-book="groupByBook"
         :recipes="recipes"
         :query="searchQuery"
         disable-sort
@@ -57,6 +59,26 @@ import { useLoggedInState } from "~/composables/use-logged-in-state";
 import RecipeFinderPanel from "~/components/Domain/Recipe/RecipeFinderPanel.vue";
 import RecipeCardSection from "~/components/Domain/Recipe/RecipeCardSection.vue";
 import { useLazyRecipes } from "~/composables/recipes";
+
+interface Props {
+  section?: string;
+  titleKey?: string;
+  icon?: string | null;
+  groupByBook?: boolean;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  section: "recipes",
+  titleKey: "general.recipes",
+  icon: null,
+  groupByBook: false,
+});
+
+const { $globals } = useNuxtApp();
+const section = computed(() => props.section);
+const titleKey = computed(() => props.titleKey);
+const groupByBook = computed(() => props.groupByBook);
+const displayIcon = computed(() => props.icon || $globals.icons.silverwareForkKnife);
 
 const route = useRoute();
 

@@ -234,6 +234,7 @@ export interface Recipe {
   name?: string | null;
   slug?: string;
   image?: unknown;
+  recipeSection?: string;
   recipeServings?: number;
   recipeYieldQuantity?: number;
   recipeYield?: string | null;
@@ -320,6 +321,7 @@ export interface RecipeSummary {
   name?: string | null;
   slug?: string;
   image?: unknown;
+  recipeSection?: string;
   recipeServings?: number;
   recipeYieldQuantity?: number;
   recipeYield?: string | null;
@@ -342,6 +344,9 @@ export interface RecipeSummary {
   lastMade?: string | null;
   isMergeArchived?: boolean;
   isMergedRecipe?: boolean;
+  extras?: {
+    [k: string]: unknown;
+  } | null;
 }
 export interface RecipeCommentCreate {
   recipeId: string;

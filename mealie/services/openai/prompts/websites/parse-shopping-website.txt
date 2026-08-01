@@ -14,4 +14,6 @@ Rules:
 - In offered_foods, list other food categories or offerings that are visibly supported by the page, navigation, menu, or supplied text.
 - Keep offered_foods concise, useful for search, and free of duplicates.
 - Do not invent products that are not supported by the supplied page.
-- Preserve the language used by the supplied page unless the page itself provides a clear localized business name.
+- Keep the official public business or website name in its established form.
+- Write page_food and every offered_foods value in clear, natural Hebrew, even when the supplied page is in another
+  language. Transliterate a proper product name only when there is no useful Hebrew equivalent.

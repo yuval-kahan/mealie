@@ -11,6 +11,7 @@ export interface Equipment {
   category?: string | null;
   description?: string | null;
   imageSourceUrl?: string | null;
+  imageName?: string | null;
   aiEnriched: boolean;
   hasImage: boolean;
   imageVersion?: string | null;

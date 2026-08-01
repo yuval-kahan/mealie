@@ -724,6 +724,16 @@
             hide-details
             :label="$t('cookbook.categories-and-tags')"
           />
+          <v-select
+            v-model="uploadedBookGroupBy"
+            :items="uploadedBookGroupOptions"
+            item-title="title"
+            item-value="value"
+            variant="outlined"
+            density="comfortable"
+            hide-details
+            :label="$t('cookbook.group-books-by')"
+          />
         </div>
         <BaseListSortControls
           v-model:sort-by="uploadedBookSortBy"
@@ -743,236 +753,242 @@
           {{ $t("cookbook.no-library-books") }}
         </v-alert>
         <div v-else class="cookbook-library__grid">
-          <v-card
-            v-for="book in paginatedUploadedBooks"
-            :key="book.id"
-            variant="outlined"
-            class="cookbook-library__book"
-            :class="{ 'cookbook-library__book--complete': isBookCompleted(book) }"
-          >
+          <template v-for="(book, bookIndex) in paginatedUploadedBooks" :key="book.id">
             <div
-              class="cookbook-library__cover cookbook-library__cover--interactive"
-              role="button"
-              tabindex="0"
-              :title="$t('cookbook.open-book')"
-              :aria-label="`${$t('cookbook.open-book')}: ${book.name}`"
-              @click="openUploadedBook(book)"
-              @keydown.enter.prevent="openUploadedBook(book)"
-              @keydown.space.prevent="openUploadedBook(book)"
+              v-if="isFirstBookGroupItem(bookIndex)"
+              class="cookbook-library__group-divider"
             >
-              <v-img
-                v-if="book.bookMetadata?.cover_file_name"
-                :src="api.uploadedBooks.coverUrl(book.id, book.updatedAt)"
-                :alt="book.name"
-                cover
-                height="260"
-              >
-                <template #error>
-                  <div class="cookbook-library__cover-fallback">
-                    <v-icon :icon="bookIcon(book)" size="72" />
-                  </div>
-                </template>
-              </v-img>
-              <div v-else class="cookbook-library__cover-fallback">
-                <v-icon :icon="bookIcon(book)" size="72" />
-              </div>
-              <div class="cookbook-library__cover-action" aria-hidden="true">
-                <v-icon :icon="$globals.icons.openInNew" size="36" />
-              </div>
-              <div v-if="isBookCompleted(book)" class="cookbook-library__complete-mark" :title="$t('cookbook.book-completed')">
-                <v-icon :icon="$globals.icons.check" size="22" />
-              </div>
-              <v-btn
-                class="cookbook-library__cover-edit"
-                icon
-                size="small"
-                color="primary"
-                :title="$t('cookbook.change-book-cover')"
-                @click.stop="openBookCoverDialog(book)"
-                @keydown.enter.stop.prevent="openBookCoverDialog(book)"
-              >
-                <v-icon :icon="$globals.icons.fileImage" />
-              </v-btn>
-              <v-btn
-                class="cookbook-library__cover-delete"
-                icon
-                size="small"
-                color="error"
-                :title="$t('cookbook.delete-book')"
-                @click.stop="confirmUploadedBookDelete(book)"
-                @keydown.enter.stop.prevent="confirmUploadedBookDelete(book)"
-                @keydown.space.stop.prevent="confirmUploadedBookDelete(book)"
-              >
-                <v-icon :icon="$globals.icons.delete" />
-              </v-btn>
+              <span>{{ bookGroupLabel(book) }}</span>
             </div>
-            <v-card-item>
-              <template #prepend>
-                <v-avatar color="surface-variant" rounded="sm">
-                  <v-icon :icon="bookIcon(book)" />
-                </v-avatar>
-              </template>
-              <v-card-title class="text-subtitle-1 text-wrap">
-                {{ book.name }}
-              </v-card-title>
-              <v-card-subtitle>
-                {{ bookTypeLabel(book) }} · {{ book.extension.toUpperCase() }}
-              </v-card-subtitle>
-            </v-card-item>
-            <v-card-text class="pt-0">
-              <p v-if="bookClassification(book)?.summary" class="book-summary mb-3">
-                {{ bookClassification(book)?.summary }}
-              </p>
-              <div class="d-flex flex-wrap ga-1">
-                <v-chip
-                  v-for="label in bookLabels(book).slice(0, 8)"
-                  :key="label"
-                  size="x-small"
-                  variant="tonal"
-                >
-                  {{ label }}
-                </v-chip>
-              </div>
-              <v-progress-linear
-                v-if="book.classificationStatus === 'processing'"
-                indeterminate
-                color="primary"
-                class="mt-3"
-              />
-              <v-alert
-                v-else-if="book.classificationStatus === 'failed'"
-                density="compact"
-                type="warning"
-                variant="tonal"
-                class="mt-3"
-              >
-                {{ $t("cookbook.book-classification-failed") }}
-              </v-alert>
+            <v-card
+              variant="outlined"
+              class="cookbook-library__book"
+              :class="{ 'cookbook-library__book--complete': isBookCompleted(book) }"
+            >
               <div
-                v-if="book.isTranslatedBook && bookTranslationAudit(book)"
-                class="cookbook-library__translation mt-3"
+                class="cookbook-library__cover cookbook-library__cover--interactive"
+                role="button"
+                tabindex="0"
+                :title="$t('cookbook.open-book')"
+                :aria-label="`${$t('cookbook.open-book')}: ${book.name}`"
+                @click="openUploadedBook(book)"
+                @keydown.enter.prevent="openUploadedBook(book)"
+                @keydown.space.prevent="openUploadedBook(book)"
               >
-                <div class="cookbook-library__reading-row">
-                  <span>{{ $t("cookbook.translation-completeness") }}</span>
-                  <strong>{{ bookTranslationPercent(book) }}%</strong>
+                <v-img
+                  v-if="book.bookMetadata?.cover_file_name"
+                  :src="api.uploadedBooks.coverUrl(book.id, book.updatedAt)"
+                  :alt="book.name"
+                  cover
+                  height="260"
+                >
+                  <template #error>
+                    <div class="cookbook-library__cover-fallback">
+                      <v-icon :icon="bookIcon(book)" size="72" />
+                    </div>
+                  </template>
+                </v-img>
+                <div v-else class="cookbook-library__cover-fallback">
+                  <v-icon :icon="bookIcon(book)" size="72" />
                 </div>
-                <v-progress-linear
-                  :model-value="bookTranslationPercent(book)"
-                  :color="bookTranslationPercent(book) >= 100 ? 'success' : 'warning'"
-                  height="5"
-                  rounded
-                />
-                <div class="cookbook-library__translation-footer mt-1">
-                  <small>
-                    {{ $t("cookbook.translated-pages-count", {
-                      translated: bookTranslatedPageCount(book),
-                      total: bookTranslationAudit(book)?.source_pages || 0,
-                    }) }}
-                  </small>
-                  <v-btn
-                    v-if="bookTranslationPercent(book) < 100 && sourceBookForTranslation(book)"
-                    size="x-small"
-                    variant="text"
-                    color="warning"
-                    :prepend-icon="$globals.icons.translate"
-                    :disabled="sourceBookForTranslation(book)?.translationStatus === 'processing'
-                      || sourceBookForTranslation(book)?.translationStatus === 'retrying'"
-                    @click="finishBookTranslation(book)"
-                  >
-                    {{ $t("cookbook.finish-translation") }}
-                  </v-btn>
+                <div class="cookbook-library__cover-action" aria-hidden="true">
+                  <v-icon :icon="$globals.icons.openInNew" size="36" />
                 </div>
-              </div>
-              <div v-if="bookReadingState(book)" class="cookbook-library__reading mt-3">
-                <div class="cookbook-library__reading-row">
-                  <span>{{ $t("cookbook.current-reading-position") }}</span>
-                  <strong>{{ Math.round(bookReadingState(book)?.readingPercent || 0) }}%</strong>
+                <div v-if="isBookCompleted(book)" class="cookbook-library__complete-mark" :title="$t('cookbook.book-completed')">
+                  <v-icon :icon="$globals.icons.check" size="22" />
                 </div>
-                <v-progress-linear
-                  :model-value="bookReadingState(book)?.readingPercent || 0"
+                <v-btn
+                  class="cookbook-library__cover-edit"
+                  icon
+                  size="small"
                   color="primary"
-                  height="5"
-                  rounded
-                />
-                <div class="cookbook-library__reading-row mt-2">
-                  <span>{{ $t("cookbook.chapters-read") }}</span>
-                  <strong>{{ bookChapterPercent(book) }}%</strong>
+                  :title="$t('cookbook.change-book-cover')"
+                  @click.stop="openBookCoverDialog(book)"
+                  @keydown.enter.stop.prevent="openBookCoverDialog(book)"
+                >
+                  <v-icon :icon="$globals.icons.fileImage" />
+                </v-btn>
+                <v-btn
+                  class="cookbook-library__cover-delete"
+                  icon
+                  size="small"
+                  color="error"
+                  :title="$t('cookbook.delete-book')"
+                  @click.stop="confirmUploadedBookDelete(book)"
+                  @keydown.enter.stop.prevent="confirmUploadedBookDelete(book)"
+                  @keydown.space.stop.prevent="confirmUploadedBookDelete(book)"
+                >
+                  <v-icon :icon="$globals.icons.delete" />
+                </v-btn>
+              </div>
+              <v-card-item>
+                <template #prepend>
+                  <v-avatar color="surface-variant" rounded="sm">
+                    <v-icon :icon="bookIcon(book)" />
+                  </v-avatar>
+                </template>
+                <v-card-title class="text-subtitle-1 text-wrap">
+                  {{ book.name }}
+                </v-card-title>
+                <v-card-subtitle>
+                  {{ bookTypeLabel(book) }} · {{ book.extension.toUpperCase() }}
+                </v-card-subtitle>
+              </v-card-item>
+              <v-card-text class="pt-0">
+                <p v-if="bookClassification(book)?.summary" class="book-summary mb-3">
+                  {{ bookClassification(book)?.summary }}
+                </p>
+                <div class="d-flex flex-wrap ga-1">
+                  <v-chip
+                    v-for="label in bookLabels(book).slice(0, 8)"
+                    :key="label"
+                    size="x-small"
+                    variant="tonal"
+                  >
+                    {{ label }}
+                  </v-chip>
                 </div>
                 <v-progress-linear
-                  :model-value="bookChapterPercent(book)"
-                  color="success"
-                  height="5"
-                  rounded
+                  v-if="book.classificationStatus === 'processing'"
+                  indeterminate
+                  color="primary"
+                  class="mt-3"
                 />
-              </div>
-            </v-card-text>
-            <v-card-actions>
-              <v-btn variant="text" color="primary" :prepend-icon="$globals.icons.openInNew" @click="openUploadedBook(book)">
-                {{ $t("cookbook.open-book") }}
-              </v-btn>
-              <v-spacer />
-              <v-btn
-                v-if="isGeneratedBook(book)"
-                icon
-                variant="text"
-                :loading="refreshingBookIds.has(book.id)"
-                :title="$t('cookbook.refresh-ai-book')"
-                @click="refreshAIBook(book)"
-              >
-                <v-icon :icon="$globals.icons.refresh" />
-              </v-btn>
-              <v-btn
-                v-else
-                icon
-                variant="text"
-                :loading="book.classificationStatus === 'processing'"
-                :title="$t('cookbook.organize-book-with-ai')"
-                @click="classifyUploadedBook(book)"
-              >
-                <v-icon :icon="$globals.icons.robot" />
-              </v-btn>
-              <v-btn
-                v-if="!isGeneratedBook(book) && !book.isTranslatedBook"
-                icon
-                variant="text"
-                :disabled="book.translationStatus === 'processing' || book.translationStatus === 'retrying'"
-                :title="$t('cookbook.translate-book-with-ai')"
-                @click="openBookTranslationDialog(book)"
-              >
-                <v-icon :icon="$globals.icons.translate" />
-              </v-btn>
-              <v-btn
-                v-if="!isGeneratedBook(book)"
-                icon
-                variant="text"
-                :disabled="book.extractionStatus === 'processing' || book.extractionStatus === 'retrying'"
-                :title="$t('cookbook.extract-recipes-with-ai')"
-                @click="openBookExtractionDialog(book)"
-              >
-                <v-icon :icon="$globals.icons.potSteam" />
-              </v-btn>
-              <v-btn
-                v-if="!isGeneratedBook(book)"
-                icon
-                variant="text"
-                :disabled="bookRecipeSource(book)?.extractionStatus === 'processing' || bookRecipeSource(book)?.extractionStatus === 'retrying'"
-                :title="$t('cookbook.choose-recipes-from-book')"
-                @click="openBookRecipeCatalogDialog(book)"
-              >
-                <v-icon :icon="$globals.icons.formatListCheck" />
-              </v-btn>
-              <v-btn
-                v-if="bookRecipeSource(book)?.extractionRecipesCreated"
-                icon
-                variant="text"
-                color="warning"
-                :title="$t('cookbook.delete-book-recipes')"
-                @click="openBookRecipeDeleteDialog(book)"
-              >
-                <v-icon :icon="$globals.icons.broom" />
-              </v-btn>
-            </v-card-actions>
-          </v-card>
+                <v-alert
+                  v-else-if="book.classificationStatus === 'failed'"
+                  density="compact"
+                  type="warning"
+                  variant="tonal"
+                  class="mt-3"
+                >
+                  {{ $t("cookbook.book-classification-failed") }}
+                </v-alert>
+                <div
+                  v-if="book.isTranslatedBook && bookTranslationAudit(book)"
+                  class="cookbook-library__translation mt-3"
+                >
+                  <div class="cookbook-library__reading-row">
+                    <span>{{ $t("cookbook.translation-completeness") }}</span>
+                    <strong>{{ bookTranslationPercent(book) }}%</strong>
+                  </div>
+                  <v-progress-linear
+                    :model-value="bookTranslationPercent(book)"
+                    :color="bookTranslationPercent(book) >= 100 ? 'success' : 'warning'"
+                    height="5"
+                    rounded
+                  />
+                  <div class="cookbook-library__translation-footer mt-1">
+                    <small>
+                      {{ $t("cookbook.translated-pages-count", {
+                        translated: bookTranslatedPageCount(book),
+                        total: bookTranslationAudit(book)?.source_pages || 0,
+                      }) }}
+                    </small>
+                    <v-btn
+                      v-if="bookTranslationPercent(book) < 100 && sourceBookForTranslation(book)"
+                      size="x-small"
+                      variant="text"
+                      color="warning"
+                      :prepend-icon="$globals.icons.translate"
+                      :disabled="sourceBookForTranslation(book)?.translationStatus === 'processing'
+                        || sourceBookForTranslation(book)?.translationStatus === 'retrying'"
+                      @click="finishBookTranslation(book)"
+                    >
+                      {{ $t("cookbook.finish-translation") }}
+                    </v-btn>
+                  </div>
+                </div>
+                <div v-if="bookReadingState(book)" class="cookbook-library__reading mt-3">
+                  <div class="cookbook-library__reading-row">
+                    <span>{{ $t("cookbook.current-reading-position") }}</span>
+                    <strong>{{ Math.round(bookReadingState(book)?.readingPercent || 0) }}%</strong>
+                  </div>
+                  <v-progress-linear
+                    :model-value="bookReadingState(book)?.readingPercent || 0"
+                    color="primary"
+                    height="5"
+                    rounded
+                  />
+                  <div class="cookbook-library__reading-row mt-2">
+                    <span>{{ $t("cookbook.chapters-read") }}</span>
+                    <strong>{{ bookChapterPercent(book) }}%</strong>
+                  </div>
+                  <v-progress-linear
+                    :model-value="bookChapterPercent(book)"
+                    color="success"
+                    height="5"
+                    rounded
+                  />
+                </div>
+              </v-card-text>
+              <v-card-actions>
+                <v-btn variant="text" color="primary" :prepend-icon="$globals.icons.openInNew" @click="openUploadedBook(book)">
+                  {{ $t("cookbook.open-book") }}
+                </v-btn>
+                <v-spacer />
+                <v-btn
+                  v-if="isGeneratedBook(book)"
+                  icon
+                  variant="text"
+                  :loading="refreshingBookIds.has(book.id)"
+                  :title="$t('cookbook.refresh-ai-book')"
+                  @click="refreshAIBook(book)"
+                >
+                  <v-icon :icon="$globals.icons.refresh" />
+                </v-btn>
+                <v-btn
+                  v-else
+                  icon
+                  variant="text"
+                  :loading="book.classificationStatus === 'processing'"
+                  :title="$t('cookbook.organize-book-with-ai')"
+                  @click="classifyUploadedBook(book)"
+                >
+                  <v-icon :icon="$globals.icons.robot" />
+                </v-btn>
+                <v-btn
+                  v-if="!isGeneratedBook(book) && !book.isTranslatedBook"
+                  icon
+                  variant="text"
+                  :disabled="book.translationStatus === 'processing' || book.translationStatus === 'retrying'"
+                  :title="$t('cookbook.translate-book-with-ai')"
+                  @click="openBookTranslationDialog(book)"
+                >
+                  <v-icon :icon="$globals.icons.translate" />
+                </v-btn>
+                <v-btn
+                  v-if="!isGeneratedBook(book)"
+                  icon
+                  variant="text"
+                  :disabled="book.extractionStatus === 'processing' || book.extractionStatus === 'retrying'"
+                  :title="$t('cookbook.extract-recipes-with-ai')"
+                  @click="openBookExtractionDialog(book)"
+                >
+                  <v-icon :icon="$globals.icons.potSteam" />
+                </v-btn>
+                <v-btn
+                  v-if="!isGeneratedBook(book)"
+                  icon
+                  variant="text"
+                  :disabled="bookRecipeSource(book)?.extractionStatus === 'processing' || bookRecipeSource(book)?.extractionStatus === 'retrying'"
+                  :title="$t('cookbook.choose-recipes-from-book')"
+                  @click="openBookRecipeCatalogDialog(book)"
+                >
+                  <v-icon :icon="$globals.icons.formatListCheck" />
+                </v-btn>
+                <v-btn
+                  v-if="bookRecipeSource(book)?.extractionRecipesCreated"
+                  icon
+                  variant="text"
+                  color="warning"
+                  :title="$t('cookbook.delete-book-recipes')"
+                  @click="openBookRecipeDeleteDialog(book)"
+                >
+                  <v-icon :icon="$globals.icons.broom" />
+                </v-btn>
+              </v-card-actions>
+            </v-card>
+          </template>
         </div>
       </section>
     </v-container>
@@ -981,6 +997,7 @@
 
 <script setup lang="ts">
 import { VueDraggable } from "vue-draggable-plus";
+import { useLocalStorage } from "@vueuse/core";
 import { useCookbookStore } from "~/composables/store/use-cookbook-store";
 import { useHouseholdSelf } from "@/composables/use-households";
 import CookbookEditor from "~/components/Domain/Cookbook/CookbookEditor.vue";
@@ -1044,6 +1061,27 @@ const uploadedBooksLoading = ref(false);
 const bookSearch = ref("");
 const bookTypeFilter = ref("all");
 const bookMetadataFilters = ref<string[]>([]);
+const UPLOADED_BOOK_GROUP_KEYS = ["none", "difficulty", "michelin", "cuisine", "teaching", "type"] as const;
+type UploadedBookGroupKey = typeof UPLOADED_BOOK_GROUP_KEYS[number];
+const uploadedBookGroupPreferences = useLocalStorage<Record<string, UploadedBookGroupKey>>(
+  "mealie-uploaded-book-grouping",
+  {},
+  { deep: true },
+);
+const uploadedBookGroupPreferenceKey = computed(() => `${auth.user.value?.id || "anonymous"}:uploaded-books`);
+const uploadedBookGroupBy = computed<UploadedBookGroupKey>({
+  get() {
+    const stored = uploadedBookGroupPreferences.value[uploadedBookGroupPreferenceKey.value];
+    return stored && UPLOADED_BOOK_GROUP_KEYS.includes(stored) ? stored : "none";
+  },
+  set(value) {
+    if (!UPLOADED_BOOK_GROUP_KEYS.includes(value)) return;
+    uploadedBookGroupPreferences.value = {
+      ...uploadedBookGroupPreferences.value,
+      [uploadedBookGroupPreferenceKey.value]: value,
+    };
+  },
+});
 const UPLOADED_BOOK_SORT_KEYS = ["name", "created", "size", "readingProgress", "type"] as const;
 type UploadedBookSortKey = typeof UPLOADED_BOOK_SORT_KEYS[number];
 const {
@@ -1055,6 +1093,14 @@ const uploadedBookSortOptions = computed<{ title: string; value: UploadedBookSor
   { title: i18n.t("catalog.created-at"), value: "created" },
   { title: i18n.t("catalog.book-size"), value: "size" },
   { title: i18n.t("catalog.reading-progress"), value: "readingProgress" },
+  { title: i18n.t("cookbook.book-type"), value: "type" },
+]);
+const uploadedBookGroupOptions = computed<{ title: string; value: UploadedBookGroupKey }[]>(() => [
+  { title: i18n.t("cookbook.group-none"), value: "none" },
+  { title: i18n.t("cookbook.difficulty"), value: "difficulty" },
+  { title: i18n.t("cookbook.michelin-connection"), value: "michelin" },
+  { title: i18n.t("cookbook.cuisine"), value: "cuisine" },
+  { title: i18n.t("cookbook.teaching-level"), value: "teaching" },
   { title: i18n.t("cookbook.book-type"), value: "type" },
 ]);
 const aiBookDialog = ref(route.query.generate === "true");
@@ -1221,6 +1267,8 @@ function bookLabels(book: UploadedBook) {
     ...(classification?.tags || []),
     classification?.difficulty,
     classification?.teaching_level,
+    classification?.book_type,
+    classification?.michelin_related ? i18n.t("cookbook.michelin-related") : undefined,
   ].filter((value): value is string => Boolean(value && value !== "unspecified"))));
 }
 
@@ -1247,7 +1295,7 @@ const filteredUploadedBooks = computed(() => {
       .includes(query);
   });
 });
-const sortedUploadedBooks = sortListItems(
+const baseSortedUploadedBooks = sortListItems(
   filteredUploadedBooks,
   book => ({
     name: book.name,
@@ -1259,12 +1307,48 @@ const sortedUploadedBooks = sortListItems(
   uploadedBookSortDirection,
   i18n.locale,
 );
+function bookGroupLabel(book: UploadedBook) {
+  const classification = bookClassification(book);
+  switch (uploadedBookGroupBy.value) {
+    case "difficulty":
+      return classification?.difficulty || i18n.t("cookbook.unspecified");
+    case "michelin":
+      return classification?.michelin_related
+        ? i18n.t("cookbook.michelin-related")
+        : i18n.t("cookbook.not-michelin-related");
+    case "cuisine":
+      return classification?.cuisines?.[0] || i18n.t("cookbook.unspecified");
+    case "teaching":
+      return classification?.teaching_level || i18n.t("cookbook.unspecified");
+    case "type":
+      return bookTypeLabel(book);
+    default:
+      return "";
+  }
+}
+const sortedUploadedBooks = computed(() => {
+  if (uploadedBookGroupBy.value === "none") return baseSortedUploadedBooks.value;
+  return baseSortedUploadedBooks.value
+    .map((book, index) => ({ book, index, group: bookGroupLabel(book) }))
+    .sort((left, right) => left.group.localeCompare(right.group, i18n.locale.value, {
+      numeric: true,
+      sensitivity: "base",
+    }) || left.index - right.index)
+    .map(entry => entry.book);
+});
 const {
   page: uploadedBookPage,
   itemsPerPage: uploadedBooksPerPage,
   totalItems: uploadedBookTotal,
   paginatedItems: paginatedUploadedBooks,
 } = useListPagination(sortedUploadedBooks);
+
+function isFirstBookGroupItem(index: number) {
+  if (uploadedBookGroupBy.value === "none") return false;
+  const current = paginatedUploadedBooks.value[index];
+  const previous = paginatedUploadedBooks.value[index - 1];
+  return !previous || bookGroupLabel(previous) !== bookGroupLabel(current);
+}
 
 async function loadUploadedBooks() {
   uploadedBooksLoading.value = true;
@@ -1799,8 +1883,26 @@ onBeforeUnmount(() => {
 
 .cookbook-library__filters {
   display: grid;
-  grid-template-columns: minmax(240px, 1.4fr) minmax(180px, 0.7fr) minmax(260px, 1fr);
+  grid-template-columns: minmax(240px, 1.4fr) minmax(170px, 0.7fr) minmax(240px, 1fr) minmax(170px, 0.7fr);
   gap: 12px;
+}
+
+.cookbook-library__group-divider {
+  align-items: center;
+  color: rgb(var(--v-theme-primary));
+  display: flex;
+  font-size: 1rem;
+  font-weight: 700;
+  gap: 12px;
+  grid-column: 1 / -1;
+  margin-top: 8px;
+}
+
+.cookbook-library__group-divider::after {
+  background: rgba(var(--v-theme-primary), 0.28);
+  content: "";
+  flex: 1;
+  height: 1px;
 }
 
 .book-recipe-catalog__search {

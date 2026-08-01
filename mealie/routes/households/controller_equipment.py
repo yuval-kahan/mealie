@@ -23,7 +23,7 @@ from mealie.schema.openai.chef import OpenAIEquipment
 from mealie.schema.response.responses import ErrorResponse
 from mealie.services.entity_image_service import EntityImageService
 from mealie.services.equipment_service import normalize_equipment_name
-from mealie.services.item_image_service import ItemImageService
+from mealie.services.item_image_service import ItemImageRequest, ItemImageService
 from mealie.services.openai import OpenAIService
 
 router = APIRouter(prefix="/households/equipment", tags=["Households: Equipment"])
@@ -70,6 +70,7 @@ class EquipmentController(BaseUserController):
             category=tool.category,
             description=tool.description,
             image_source_url=tool.image_source_url,
+            image_name=tool.name,
             ai_enriched=tool.ai_enriched,
             has_image=bool(image_stat and image_stat.st_size > 0),
             image_version=str(image_stat.st_mtime_ns) if image_stat else None,
@@ -165,25 +166,24 @@ class EquipmentController(BaseUserController):
                 self.logger.warning("Could not find a public image for tool %s", tool.name)
 
     async def _save_best_image(self, tool: Tool, preferred_query: str | None = None) -> None:
-        base_query = (preferred_query or "").strip()
-        queries = [
-            base_query,
-            f"{base_query} isolated product photo white background" if base_query else "",
-            f"{tool.name} professional kitchen equipment product photo",
-        ]
-        last_error: Exception | None = None
-        for query in dict.fromkeys(value for value in queries if value):
-            try:
-                tool.image_source_url = await self.entity_image_service.search_and_save_public_image(
-                    self._image_path(tool),
-                    query,
-                )
-                self.session.add(tool)
-                self.session.commit()
-                return
-            except (ValueError, httpx.HTTPError) as error:
-                last_error = error
-        raise ValueError("No usable equipment image was found") from last_error
+        context = " ".join(
+            part
+            for part in (
+                tool.category,
+                tool.description,
+                ", ".join(recipe.name for recipe in tool.recipes[:12]),
+            )
+            if part
+        )
+        source_url = await self.item_image_service.find_and_replace(
+            ItemImageRequest("tool", tool.name, context or None),
+            preferred_query=preferred_query,
+        )
+        if not source_url:
+            raise ValueError("No usable equipment image was found")
+        tool.image_source_url = source_url
+        self.session.add(tool)
+        self.session.commit()
 
     @router.get("", response_model=list[EquipmentOut])
     def get_all(
@@ -296,14 +296,8 @@ class EquipmentController(BaseUserController):
     @router.post("/{tool_id}/image-auto", response_model=EquipmentOut)
     async def find_image(self, tool_id: UUID4) -> EquipmentOut:
         tool = self._get_or_404(tool_id)
-        response = await self._analyze(
-            EquipmentAICreateRequest(
-                name=tool.name,
-                prompt="Find a clear representative product image search phrase for this existing kitchen tool.",
-            )
-        )
         try:
-            await self._save_best_image(tool, response.image_search_query)
+            await self._save_best_image(tool)
         except (ValueError, httpx.HTTPError) as error:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ErrorResponse.respond(str(error))) from error
         return self._to_out(self._get_or_404(tool.id))

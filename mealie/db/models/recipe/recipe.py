@@ -104,6 +104,13 @@ class RecipeModel(SqlAlchemyBase, BaseMixins):
     created_by: FilterableColumn[str | None] = mapped_column(sa.String)
 
     image: FilterableColumn[str | None] = mapped_column(sa.String)
+    recipe_section: FilterableColumn[str] = mapped_column(
+        sa.String(64),
+        nullable=False,
+        default="recipes",
+        server_default="recipes",
+        index=True,
+    )
 
     # Time Related Properties
     total_time: FilterableColumn[str | None] = mapped_column(sa.String)

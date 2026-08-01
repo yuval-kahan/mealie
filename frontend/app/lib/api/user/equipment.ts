@@ -56,7 +56,8 @@ export class EquipmentAPI extends BaseAPI {
   }
 
   imageUrl(equipment: Equipment) {
-    const version = equipment.imageVersion ? `?v=${encodeURIComponent(equipment.imageVersion)}` : "";
-    return `${prefix}/${equipment.id}/image${version}`;
+    const imageName = equipment.imageName || equipment.name;
+    const version = equipment.imageVersion ? `&v=${encodeURIComponent(equipment.imageVersion)}` : "";
+    return `/api/media/item-images/${equipment.groupId}/tool/tiny-original.webp?name=${encodeURIComponent(imageName)}${version}`;
   }
 }

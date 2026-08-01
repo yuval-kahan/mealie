@@ -39,6 +39,8 @@
         @deleted="$emit('deleted', $event)"
         @image-updated="$emit('imageUpdated', $event)"
         @renamed="$emit('renamed', $event)"
+        @section-updated="$emit('sectionUpdated', $event)"
+        @made="$emit('made', $event)"
       />
     </v-menu>
   </div>
@@ -66,6 +68,8 @@ interface ContextMenuIncludes {
   share?: boolean;
   recipeActions?: boolean;
   shoppingWebsites?: boolean;
+  section?: boolean;
+  markDone?: boolean;
 }
 
 interface ContextMenuItem {
@@ -91,6 +95,8 @@ interface Props {
   rating?: number;
   recipeScale?: number;
   redirectOnDelete?: boolean;
+  recipeSection?: string;
+  lastMade?: string | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -113,6 +119,8 @@ const props = withDefaults(defineProps<Props>(), {
     share: true,
     recipeActions: true,
     shoppingWebsites: true,
+    section: true,
+    markDone: true,
   }),
   appendItems: () => [],
   leadingItems: () => [],
@@ -124,6 +132,8 @@ const props = withDefaults(defineProps<Props>(), {
   rating: 0,
   recipeScale: 1,
   redirectOnDelete: true,
+  recipeSection: "recipes",
+  lastMade: null,
 });
 
 defineEmits<{
@@ -132,6 +142,8 @@ defineEmits<{
   deleted: [slug: string];
   renamed: [{ slug: string; name: string; recipe?: Recipe }];
   imageUpdated: [{ slug: string; image: string }];
+  sectionUpdated: [{ slug: string; recipeSection: string }];
+  made: [{ slug: string; lastMade: string }];
 }>();
 
 const { $globals } = useNuxtApp();

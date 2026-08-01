@@ -217,7 +217,10 @@ class ShoppingWebsitesController(BaseUserController):
                 detail=ErrorResponse.respond("OpenAI services are not enabled"),
             )
         normalized_url = normalize_url(url)
-        message_parts = [f"Website URL: {normalized_url}"]
+        message_parts = [
+            f"Website URL: {normalized_url}",
+            "Required metadata language: Hebrew. Keep only the official site/business name in its established form.",
+        ]
         if page_title:
             message_parts.append(f"Page title: {page_title.strip()}")
         message_parts.extend(["", page_text[:MAX_PAGE_TEXT]])
@@ -326,7 +329,10 @@ class ShoppingWebsitesController(BaseUserController):
         openai_service = OpenAIService(self.repos)
         response = await openai_service.get_response(
             openai_service.get_prompt("websites.discover-shopping-websites"),
-            f"User request: {data.prompt.strip()}\nMaximum results: {data.limit}",
+            (
+                f"User request: {data.prompt.strip()}\nMaximum results: {data.limit}\n"
+                "Required metadata language: Hebrew. Keep official site/business names in their established form."
+            ),
             response_schema=OpenAIShoppingWebsiteSuggestions,
         )
         suggestions: list[ShoppingWebsiteCreate] = []

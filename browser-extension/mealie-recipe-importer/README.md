@@ -20,7 +20,7 @@ Why this exists:
 
 1. Open a recipe or article page in the browser.
 2. Click the Mealie AI extension button.
-3. Set the Mealie URL, usually `http://localhost:3000`.
+3. Set the Mealie URL, usually `http://localhost:9925` for this fork.
 4. Make sure you are logged in to Mealie in the same browser.
 5. Choose whether to auto-detect the page type, extract a recipe, or extract an article.
 6. Keep the interface language on **Automatic** to follow the Mealie site language, with the browser language as a fallback, or select one of Mealie's existing 42 locales.

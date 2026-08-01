@@ -193,6 +193,33 @@ class ItemImageService(BaseService):
 
         return result
 
+    async def find_and_replace(
+        self,
+        request: ItemImageRequest,
+        *,
+        preferred_query: str | None = None,
+    ) -> str | None:
+        """Find and cache a fresh image for one item, replacing an existing image only on success."""
+        if request.kind not in self.valid_kinds or not self.normalize_name(request.name):
+            return None
+
+        ai_query = re.sub(r"\s+", " ", preferred_query or "").strip() or None
+        if not ai_query:
+            ai_queries = await self._build_ai_search_queries([request])
+            ai_query = ai_queries.get(self._request_key(request))
+
+        limits = httpx.Limits(max_connections=2, max_keepalive_connections=1)
+        async with (
+            httpx.AsyncClient(timeout=8.0, follow_redirects=True, limits=limits) as search_client,
+            httpx.AsyncClient(
+                transport=safehttp.AsyncSafeTransport(impersonate="chrome"),
+                timeout=10.0,
+                follow_redirects=True,
+                limits=limits,
+            ) as download_client,
+        ):
+            return await self._find_and_download_one(request, ai_query, search_client, download_client)
+
     def _dedupe_requests(self, requests: Iterable[ItemImageRequest]) -> list[ItemImageRequest]:
         seen: set[tuple[str, str]] = set()
         deduped: list[ItemImageRequest] = []
@@ -259,32 +286,42 @@ class ItemImageService(BaseService):
         search_client: httpx.AsyncClient,
         download_client: httpx.AsyncClient,
     ) -> bool:
-        queries = self._search_queries(request, ai_query)
-        candidates: list[str] = []
-        for query in queries:
+        return bool(await self._find_and_download_one(request, ai_query, search_client, download_client))
+
+    async def _find_and_download_one(
+        self,
+        request: ItemImageRequest,
+        ai_query: str | None,
+        search_client: httpx.AsyncClient,
+        download_client: httpx.AsyncClient,
+    ) -> str | None:
+        seen_candidates: set[str] = set()
+        attempts = 0
+
+        for query in self._search_queries(request, ai_query):
             for candidate in await self._find_public_image_urls(query, search_client):
-                if candidate not in candidates:
-                    candidates.append(candidate)
-                if len(candidates) >= ITEM_IMAGE_MAX_CANDIDATES:
-                    break
-            if candidates:
-                break
+                if candidate in seen_candidates:
+                    continue
+                seen_candidates.add(candidate)
+                attempts += 1
+                try:
+                    if await self._download_image(request.kind, request.name, candidate, download_client):
+                        return candidate
+                except Exception:
+                    self.logger.exception("Failed to cache item image from %s", candidate)
+                if attempts >= ITEM_IMAGE_MAX_CANDIDATES:
+                    return None
 
-        for candidate in candidates:
-            try:
-                if await self._download_image(request.kind, request.name, candidate, download_client):
-                    return True
-            except Exception:
-                self.logger.exception("Failed to cache item image from %s", candidate)
-
-        return False
+        return None
 
     def _search_queries(self, request: ItemImageRequest, ai_query: str | None) -> list[str]:
         suffix = "ingredient isolated food photo" if request.kind == "food" else "kitchen tool equipment photo"
+        clean_name = self._clean_search_name(request.name)
+        generalized_ai_query = self._generalize_ai_query(ai_query)
         values = [
-            ai_query,
-            f"{request.context} {request.name} {suffix}" if request.context else None,
-            f"{request.name} {suffix}",
+            generalized_ai_query or ai_query,
+            f"{clean_name} {suffix}",
+            f"{request.context} {clean_name} {suffix}" if request.context else None,
         ]
         queries: list[str] = []
         for value in values:
@@ -292,6 +329,30 @@ class ItemImageService(BaseService):
             if query and query not in queries:
                 queries.append(query[:160])
         return queries
+
+    @staticmethod
+    def _clean_search_name(name: str) -> str:
+        cleaned = re.sub(r"^\s*\d+(?:[.,]\d+)?\s*[x×]?\s*", "", name)
+        return re.sub(r"\s+", " ", cleaned).strip() or name.strip()
+
+    @staticmethod
+    def _generalize_ai_query(query: str | None) -> str | None:
+        if not query:
+            return None
+
+        count_words = (
+            r"(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|"
+            r"single|double|triple)"
+        )
+        generalized = re.sub(
+            rf"\b(?:set|pack|pair|group|collection)\s+of\s+{count_words}\b",
+            "",
+            query,
+            flags=re.IGNORECASE,
+        )
+        generalized = re.sub(r"^\s*\d+(?:[.,]\d+)?\s*[x×]?\s*", "", generalized)
+        generalized = re.sub(r"\s+", " ", generalized).strip(" ,;-")
+        return generalized or None
 
     async def _find_public_image_urls(self, query: str, client: httpx.AsyncClient) -> list[str]:
         payload: dict = {}

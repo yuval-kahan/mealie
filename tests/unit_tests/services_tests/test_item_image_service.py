@@ -1,11 +1,12 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
-import mealie.services.item_image_service as item_image_module
 import pytest
+from PIL import Image
+
+import mealie.services.item_image_service as item_image_module
 from mealie.schema.openai.general import OpenAIImageSearchQueries, OpenAIImageSearchQuery
 from mealie.services.item_image_service import ItemImageRequest, ItemImageService
-from PIL import Image
 
 
 def _service_with_mock_minifier() -> ItemImageService:
@@ -34,6 +35,19 @@ def test_validate_and_minify_rejects_excessive_pixels(tmp_path, monkeypatch):
         service._validate_and_minify(image_path)
 
     service.minifier.minify.assert_not_called()
+
+
+def test_search_queries_remove_quantities_and_generalize_ai_phrase():
+    service = object.__new__(ItemImageService)
+
+    queries = service._search_queries(
+        ItemImageRequest("tool", "3 מחבתות", "כלי בישול"),
+        "set of three nonstick frying pans",
+    )
+
+    assert queries[0] == "nonstick frying pans"
+    assert "מחבתות kitchen tool equipment photo" in queries
+    assert all(not query.startswith("3 מחבתות") for query in queries)
 
 
 @pytest.mark.asyncio

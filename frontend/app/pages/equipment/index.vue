@@ -73,9 +73,14 @@
             variant="tonal"
             color="primary"
             :prepend-icon="$globals.icons.fileImage"
+            :loading="findingImageIds.has(editingEquipment.id)"
             @click="findEquipmentImage(editingEquipment)"
           >
-            {{ $t("equipment.find-image-with-ai") }}
+            {{
+              editingEquipment.hasImage
+                ? $t("equipment.replace-image-with-ai")
+                : $t("equipment.find-image-with-ai")
+            }}
           </v-btn>
           <v-btn
             v-if="editingEquipment.hasImage"
@@ -200,6 +205,19 @@
                   {{ $globals.icons.tools }}
                 </v-icon>
               </div>
+              <v-btn
+                v-if="!item.hasImage || imageErrors.has(item.id)"
+                class="equipment-image-ai-button"
+                icon
+                size="small"
+                color="primary"
+                variant="flat"
+                :title="$t('equipment.find-image-with-ai')"
+                :loading="findingImageIds.has(item.id)"
+                @click.stop="findEquipmentImage(item)"
+              >
+                <v-icon>{{ $globals.icons.robot }}</v-icon>
+              </v-btn>
             </div>
             <v-card-title class="equipment-title">
               <span>{{ item.name }}</span>
@@ -293,6 +311,7 @@ const editDescription = ref("");
 const editImage = ref<File | File[] | null>(null);
 const editImageUrl = ref("");
 const enrichingIds = reactive(new Set<string>());
+const findingImageIds = reactive(new Set<string>());
 const imageErrors = reactive(new Set<string>());
 
 useSeoMeta({ title: i18n.t("equipment.equipment") });
@@ -459,16 +478,48 @@ async function enrichMissing() {
 }
 
 async function findEquipmentImage(item: Equipment) {
-  saving.value = true;
-  const { data, error } = await api.equipment.findImage(item.id);
-  saving.value = false;
-  if (!data || error) {
-    alert.error(i18n.t("equipment.image-save-failed"));
-    return;
+  if (findingImageIds.has(item.id)) return;
+  const shouldReopenDialog = editDialogOpen.value && editingEquipment.value?.id === item.id;
+  findingImageIds.add(item.id);
+  try {
+    const { data, error } = await api.equipment.findImage(item.id);
+    if (!data || error) {
+      alert.error(i18n.t("equipment.image-save-failed"));
+      return;
+    }
+    await loadEquipment();
+    const refreshed = equipment.value.find(candidate => candidate.id === item.id) || data;
+    if (!await canLoadEquipmentImage(refreshed)) {
+      imageErrors.add(item.id);
+      alert.error(i18n.t("equipment.image-save-failed"));
+      return;
+    }
+    imageErrors.delete(item.id);
+    if (shouldReopenDialog) openEditDialog(refreshed);
+    alert.success(i18n.t("equipment.image-saved"));
   }
-  imageErrors.delete(item.id);
-  await loadEquipment();
-  openEditDialog(data);
+  finally {
+    findingImageIds.delete(item.id);
+  }
+}
+
+function canLoadEquipmentImage(item: Equipment) {
+  return new Promise<boolean>((resolve) => {
+    const image = new Image();
+    let settled = false;
+    const finish = (loaded: boolean) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      image.onload = null;
+      image.onerror = null;
+      resolve(loaded);
+    };
+    const timeout = window.setTimeout(() => finish(false), 10_000);
+    image.onload = () => finish(true);
+    image.onerror = () => finish(false);
+    image.src = api.equipment.imageUrl(item);
+  });
 }
 
 async function deleteEquipmentImage(item: Equipment) {
@@ -517,6 +568,13 @@ async function deleteEquipmentImage(item: Equipment) {
   background: rgb(var(--v-theme-surface-variant));
   height: 180px;
   overflow: hidden;
+  position: relative;
+}
+
+.equipment-image-ai-button {
+  inset-block-start: 8px;
+  inset-inline-end: 8px;
+  position: absolute;
 }
 
 .equipment-image-placeholder {

@@ -14,8 +14,33 @@
     @cancel="close"
   >
     <v-card-text class="pt-4">
+      <p class="text-label mb-2">
+        {{ $t("recipe.recipe-merge-mode") }}
+      </p>
+      <v-btn-toggle
+        v-model="mergeMode"
+        mandatory
+        divided
+        color="primary"
+        density="comfortable"
+        class="recipe-merge-mode mb-3"
+        :disabled="saving"
+      >
+        <v-btn value="standard" :prepend-icon="$globals.icons.merge">
+          {{ $t("recipe.recipe-merge-mode-standard") }}
+        </v-btn>
+        <v-btn value="ai" :prepend-icon="$globals.icons.robot">
+          {{ $t("recipe.recipe-merge-mode-ai") }}
+        </v-btn>
+      </v-btn-toggle>
       <p class="mb-4">
-        {{ $t("recipe.merge-recipes-description") }}
+        {{
+          $t(
+            mergeMode === "ai"
+              ? "recipe.recipe-merge-mode-ai-description"
+              : "recipe.merge-recipes-description",
+          )
+        }}
       </p>
       <v-autocomplete
         v-model="selectedSlugs"
@@ -39,7 +64,13 @@
         variant="outlined"
         clearable
         :label="$t('recipe.merged-recipe-name')"
-        :hint="$t('recipe.merged-recipe-name-hint')"
+        :hint="
+          $t(
+            mergeMode === 'ai'
+              ? 'recipe.merged-recipe-ai-name-hint'
+              : 'recipe.merged-recipe-name-hint',
+          )
+        "
         persistent-hint
         maxlength="255"
       />
@@ -124,6 +155,7 @@ const recipeOptions = ref<Recipe[]>([]);
 const mergedRecipes = ref<Recipe[]>([]);
 const mergedName = ref("");
 const keepOriginals = ref(true);
+const mergeMode = ref<"standard" | "ai">("standard");
 const loadingRecipes = ref(false);
 const saving = ref(false);
 const undoing = ref(false);
@@ -167,6 +199,7 @@ function reset() {
   recipeOptions.value = [];
   mergedName.value = "";
   keepOriginals.value = true;
+  mergeMode.value = "standard";
   undoTarget.value = null;
   undoDialog.value = false;
 }
@@ -217,15 +250,23 @@ async function mergeRecipes() {
       sourceSlugs: selectedSlugs.value,
       name: mergedName.value.trim() || null,
       keepOriginals: keepOriginals.value,
+      useAi: mergeMode.value === "ai",
     });
     if (error || !data?.recipe) {
-      alert.error(i18n.t("recipe.recipe-merge-failed"));
+      alert.error(
+        i18n.t(
+          mergeMode.value === "ai"
+            ? "recipe.ai-recipe-merge-failed"
+            : "recipe.recipe-merge-failed",
+        ),
+      );
       return;
     }
     alert.success(i18n.t("recipe.recipe-merge-complete"));
     selectedSlugs.value = [];
     mergedName.value = "";
     keepOriginals.value = true;
+    mergeMode.value = "standard";
     await Promise.all([loadRecipes(), loadMerges()]);
     emit("updated");
   }
@@ -265,5 +306,13 @@ async function undoMerge() {
   border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   max-height: 220px;
   overflow-y: auto;
+}
+
+.recipe-merge-mode {
+  max-width: 100%;
+}
+
+.recipe-merge-mode :deep(.v-btn) {
+  min-width: 0;
 }
 </style>

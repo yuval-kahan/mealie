@@ -93,6 +93,24 @@
     </v-card-text>
   </BaseDialog>
   <BaseDialog
+    v-model="recipeSectionDialog"
+    :title="$t('recipe.move-to-section')"
+    :icon="$globals.icons.folderOutline"
+    :submit-text="$t('general.save')"
+    :submit-icon="$globals.icons.save"
+    :loading="recipeSectionLoading"
+    can-submit
+    @submit="moveRecipeToSection()"
+  >
+    <v-card-text>
+      <v-radio-group v-model="selectedRecipeSection" hide-details>
+        <v-radio :label="$t('recipe.section-recipes')" value="recipes" />
+        <v-radio :label="$t('recipe.section-book')" value="book" />
+        <v-radio :label="$t('recipe.section-sauce')" value="sauce" />
+      </v-radio-group>
+    </v-card-text>
+  </BaseDialog>
+  <BaseDialog
     v-model="aiEditDialog"
     :title="$t('recipe.ai-edit')"
     :icon="$globals.icons.robot"
@@ -325,6 +343,8 @@ export interface ContextMenuIncludes {
   share: boolean;
   recipeActions: boolean;
   shoppingWebsites?: boolean;
+  section?: boolean;
+  markDone?: boolean;
 }
 
 export interface ContextMenuItem {
@@ -350,6 +370,8 @@ interface Props {
   rating?: number;
   recipeScale?: number;
   redirectOnDelete?: boolean;
+  recipeSection?: string;
+  lastMade?: string | null;
 }
 const props = withDefaults(defineProps<Props>(), {
   useItems: () => ({
@@ -371,6 +393,8 @@ const props = withDefaults(defineProps<Props>(), {
     share: true,
     recipeActions: true,
     shoppingWebsites: true,
+    section: true,
+    markDone: true,
   }),
   appendItems: () => [],
   leadingItems: () => [],
@@ -382,6 +406,8 @@ const props = withDefaults(defineProps<Props>(), {
   rating: 0,
   recipeScale: 1,
   redirectOnDelete: true,
+  recipeSection: "recipes",
+  lastMade: null,
 });
 
 const emit = defineEmits<{
@@ -389,6 +415,8 @@ const emit = defineEmits<{
   deleted: [slug: string];
   renamed: [{ slug: string; name: string; recipe?: Recipe }];
   imageUpdated: [{ slug: string; image: string }];
+  sectionUpdated: [{ slug: string; recipeSection: string }];
+  made: [{ slug: string; lastMade: string }];
   print: [];
 }>();
 
@@ -407,6 +435,9 @@ const shoppingListDialog = ref(false);
 const shoppingWebsiteLinksDialog = ref(false);
 const recipeDuplicateDialog = ref(false);
 const recipeRenameDialog = ref(false);
+const recipeSectionDialog = ref(false);
+const selectedRecipeSection = ref(props.recipeSection || "recipes");
+const recipeSectionLoading = ref(false);
 const aiEditDialog = ref(false);
 const aiEditInstruction = ref("");
 const aiEditDraft = ref<Recipe | null>(null);
@@ -587,6 +618,20 @@ const defaultItems: { [key: string]: ContextMenuItem } = {
     icon: $globals.icons.web,
     color: undefined,
     event: "shoppingWebsites",
+    isPublic: false,
+  },
+  section: {
+    title: i18n.t("recipe.move-to-section"),
+    icon: $globals.icons.folderOutline,
+    color: undefined,
+    event: "section",
+    isPublic: false,
+  },
+  markDone: {
+    title: i18n.t("recipe.mark-as-done"),
+    icon: $globals.icons.checkBold,
+    color: "success",
+    event: "markDone",
     isPublic: false,
   },
 };
@@ -770,6 +815,48 @@ async function renameRecipe() {
   recipeRenameName.value = data.name || name;
   alert.success(i18n.t("events.updated"));
   emit("renamed", { slug: props.slug, name: data.name || name, recipe: data });
+}
+
+async function moveRecipeToSection() {
+  if (recipeSectionLoading.value) return;
+  recipeSectionLoading.value = true;
+  try {
+    if (!recipeRef.value) await refreshRecipe();
+    if (!recipeRef.value) {
+      alert.error(i18n.t("events.something-went-wrong"));
+      return;
+    }
+
+    const { data, error } = await api.recipes.updateOne(props.slug, {
+      ...recipeRef.value,
+      recipeSection: selectedRecipeSection.value,
+    });
+    if (error || !data) {
+      alert.error(i18n.t("events.something-went-wrong"));
+      return;
+    }
+
+    recipeRef.value = data;
+    recipeSectionDialog.value = false;
+    alert.success(i18n.t("recipe.recipe-moved"));
+    emit("sectionUpdated", { slug: props.slug, recipeSection: selectedRecipeSection.value });
+    window.dispatchEvent(new CustomEvent("mealie:recipes-updated"));
+  }
+  finally {
+    recipeSectionLoading.value = false;
+  }
+}
+
+async function markRecipeDone() {
+  const timestamp = new Date().toISOString();
+  const { data, error } = await api.recipes.updateLastMade(props.slug, timestamp);
+  if (error || !data) {
+    alert.error(i18n.t("events.something-went-wrong"));
+    return;
+  }
+
+  alert.success(i18n.t("recipe.marked-as-done"));
+  emit("made", { slug: props.slug, lastMade: data.lastMade || timestamp });
 }
 
 async function copyRecipe() {
@@ -1064,6 +1151,11 @@ const eventHandlers: { [key: string]: () => void | Promise<any> } = {
     resetImageUpload();
     imageUploadDialog.value = true;
   },
+  section: () => {
+    selectedRecipeSection.value = recipeRef.value?.recipeSection || props.recipeSection || "recipes";
+    recipeSectionDialog.value = true;
+  },
+  markDone: markRecipeDone,
   aiEdit: () => {
     resetAIEdit();
     aiEditDialog.value = true;

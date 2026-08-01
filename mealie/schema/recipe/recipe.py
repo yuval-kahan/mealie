@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 from numbers import Number
 from pathlib import Path
-from typing import Annotated, Any, ClassVar
+from typing import Annotated, Any, ClassVar, Literal
 from uuid import uuid4
 
 from pydantic import UUID4, BaseModel, ConfigDict, Field, field_validator
@@ -124,6 +124,7 @@ class RecipeSummary(MealieModel):
     name: str | None = None
     slug: Annotated[str, Field(validate_default=True)] = ""
     image: Any | None = None
+    recipe_section: Literal["recipes", "book", "sauce"] = "recipes"
     recipe_servings: float = 0
     recipe_yield_quantity: float = 0
     recipe_yield: str | None = None
@@ -150,6 +151,7 @@ class RecipeSummary(MealieModel):
     last_made: datetime.datetime | None = None
     is_merge_archived: bool = False
     is_merged_recipe: bool = False
+    extras: dict | None = Field(default_factory=dict)
     model_config = ConfigDict(from_attributes=True)
 
     @field_validator("recipe_servings", "recipe_yield_quantity", mode="before")
@@ -165,6 +167,13 @@ class RecipeSummary(MealieModel):
 
         return val
 
+    @field_validator("extras", mode="before")
+    def convert_extras_to_dict(cls, value):
+        if isinstance(value, dict):
+            return value
+
+        return {item.key_name: item.value for item in value} if value else {}
+
     @property
     def recipe_yield_display(self) -> str:
         return f"{self.recipe_yield_quantity} {self.recipe_yield}".strip()
@@ -176,6 +185,7 @@ class RecipeSummary(MealieModel):
             joinedload(RecipeModel.tags),
             joinedload(RecipeModel.tools),
             joinedload(RecipeModel.user).load_only(User.household_id),
+            selectinload(RecipeModel.extras),
         ]
 
 
@@ -192,7 +202,6 @@ class Recipe(RecipeSummary):
     settings: RecipeSettings | None = None
     assets: list[RecipeAsset] | None = []
     notes: list[RecipeNote] | None = []
-    extras: dict | None = {}
 
     comments: list[RecipeCommentOut] | None = []
 
@@ -288,13 +297,6 @@ class Recipe(RecipeSummary):
         if isinstance(user_id, int):
             return uuid4()
         return user_id
-
-    @field_validator("extras", mode="before")
-    def convert_extras_to_dict(cls, v):
-        if isinstance(v, dict):
-            return v
-
-        return {x.key_name: x.value for x in v} if v else {}
 
     @field_validator("nutrition", mode="before")
     def validate_nutrition(cls, v):

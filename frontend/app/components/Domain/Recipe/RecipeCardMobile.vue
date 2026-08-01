@@ -25,7 +25,7 @@
         :to="$attrs.selected ? undefined : recipeRoute"
         @click="$emit('selected')"
       >
-        <v-img v-if="vertical" class="rounded-sm" cover>
+        <v-img v-if="vertical" class="rounded-sm recipe-mobile-card-image" cover>
           <RecipeCardImage
             tiny
             :icon-size="100"
@@ -35,6 +35,18 @@
             :height="height"
             @image-status="handleImageStatus"
           />
+          <v-chip
+            v-if="localLastMade"
+            class="recipe-mobile-card-done-badge"
+            color="success"
+            size="x-small"
+            variant="flat"
+          >
+            <v-icon start size="x-small">
+              {{ $globals.icons.checkBold }}
+            </v-icon>
+            DONE
+          </v-chip>
         </v-img>
         <v-list-item
           lines="three"
@@ -45,18 +57,32 @@
           density="compact"
         >
           <template #prepend>
-            <slot v-if="!vertical" name="avatar">
-              <RecipeCardImage
-                tiny
-                :icon-size="100"
-                :slug="slug"
-                :recipe-id="recipeId"
-                :image-version="localImageVersion"
-                width="125"
-                :height="height"
-                @image-status="handleImageStatus"
-              />
-            </slot>
+            <div v-if="!vertical" class="recipe-mobile-card-horizontal-image">
+              <slot name="avatar">
+                <RecipeCardImage
+                  tiny
+                  :icon-size="100"
+                  :slug="slug"
+                  :recipe-id="recipeId"
+                  :image-version="localImageVersion"
+                  width="125"
+                  :height="height"
+                  @image-status="handleImageStatus"
+                />
+              </slot>
+              <v-chip
+                v-if="localLastMade"
+                class="recipe-mobile-card-done-badge"
+                color="success"
+                size="x-small"
+                variant="flat"
+              >
+                <v-icon start size="x-small">
+                  {{ $globals.icons.checkBold }}
+                </v-icon>
+                DONE
+              </v-chip>
+            </div>
           </template>
           <div class="pl-4 d-flex flex-column justify-space-between align-stretch pr-2">
             <v-list-item-title class="recipe-mobile-card-title mt-3 mb-1 text-top w-100">
@@ -230,6 +256,8 @@
                 :name="displayName"
                 :recipe-id="recipeId"
                 :rating="rating"
+                :last-made="localLastMade"
+                :recipe-section="recipeSection"
                 :redirect-on-delete="false"
                 :use-items="{
                   edit: false,
@@ -247,11 +275,15 @@
                   printPreferences: false,
                   share: true,
                   shoppingWebsites: true,
+                  section: true,
+                  markDone: true,
                   delete: true,
                 }"
                 @deleted="$emit('delete', slug)"
                 @image-updated="handleImageUpdated"
                 @renamed="handleRenamed"
+                @made="handleMade"
+                @section-updated="handleSectionUpdated"
               />
             </v-card-actions>
           </slot>
@@ -339,6 +371,8 @@ interface Props {
   height?: number;
   disableHighlight?: boolean;
   extras?: Record<string, unknown> | null;
+  lastMade?: string | null;
+  recipeSection?: string;
 }
 const props = withDefaults(defineProps<Props>(), {
   rating: 0,
@@ -350,12 +384,15 @@ const props = withDefaults(defineProps<Props>(), {
   height: 150,
   disableHighlight: false,
   extras: null,
+  lastMade: null,
+  recipeSection: "recipes",
 });
 
 const emit = defineEmits<{
   selected: [];
   delete: [slug: string];
   renamed: [{ slug: string; name: string; recipe?: any }];
+  sectionUpdated: [{ slug: string; recipeSection: string }];
 }>();
 
 const api = useUserApi();
@@ -366,6 +403,7 @@ const i18n = useI18n();
 const { isOwnGroup, groupSlug } = useLoggedInState();
 const { ensureAvailability, hasAllGroceriesForRecipe } = useShoppingListAvailability();
 const displayName = ref(props.name);
+const localLastMade = ref<string | null>(props.lastMade ?? null);
 const copyLoading = ref(false);
 const copyShoppingListLoading = ref(false);
 const aiImageLoading = ref(false);
@@ -397,6 +435,13 @@ watch(
   (image) => {
     localImageVersion.value = image ?? null;
     imageLoadFailed.value = false;
+  },
+);
+
+watch(
+  () => props.lastMade,
+  (lastMade) => {
+    localLastMade.value = lastMade ?? null;
   },
 );
 
@@ -453,6 +498,14 @@ function handleImageStatus(hasImage: boolean) {
 function handleImageUpdated(payload: { slug: string; image: string }) {
   localImageVersion.value = payload.image;
   imageLoadFailed.value = false;
+}
+
+function handleMade(payload: { slug: string; lastMade: string }) {
+  localLastMade.value = payload.lastMade;
+}
+
+function handleSectionUpdated(payload: { slug: string; recipeSection: string }) {
+  emit("sectionUpdated", payload);
 }
 
 function hasShoppingListStatus(extras: Record<string, unknown> | null | undefined) {
@@ -591,6 +644,26 @@ async function openShoppingListFromCard() {
   overflow: hidden;
   line-height: 1.25;
   max-height: 3.75em;
+}
+
+.recipe-mobile-card-image {
+  position: relative;
+}
+
+.recipe-mobile-card-horizontal-image {
+  height: 100%;
+  position: relative;
+  width: 125px;
+}
+
+.recipe-mobile-card-done-badge {
+  bottom: 8px;
+  box-shadow: 0 2px 7px rgb(0 0 0 / 25%);
+  left: 50%;
+  pointer-events: none;
+  position: absolute;
+  transform: translateX(-50%) rotate(-4deg);
+  z-index: 4;
 }
 
 .recipe-mobile-card-quick-actions {

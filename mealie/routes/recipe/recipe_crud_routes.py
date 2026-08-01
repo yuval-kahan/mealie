@@ -168,6 +168,7 @@ class RecipeMergeRequest(MealieModel):
     source_slugs: list[str] = Field(..., min_length=2, max_length=50)
     name: str | None = Field(None, max_length=255)
     keep_originals: bool = True
+    use_ai: bool = False
 
 
 class RecipeMergeResponse(MealieModel):
@@ -1612,8 +1613,21 @@ class RecipeController(BaseRecipeController):
         )
         return [RecipeSummary.model_validate(recipe) for recipe in recipes]
 
+    @staticmethod
+    def _validate_merge_sources(sources: list[Recipe]) -> None:
+        if any(source.is_merge_archived for source in sources):
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("Archived merge sources cannot be merged again"),
+            )
+        if any(source.is_merged_recipe for source in sources):
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("Undo an existing merge before merging it again"),
+            )
+
     @router.post("/merge", status_code=201, response_model=RecipeMergeResponse)
-    def merge_recipes(self, data: RecipeMergeRequest) -> RecipeMergeResponse:
+    async def merge_recipes(self, data: RecipeMergeRequest) -> RecipeMergeResponse:
         """Create one reversible recipe from two or more existing recipes."""
 
         source_slugs = list(dict.fromkeys(slug.strip() for slug in data.source_slugs if slug.strip()))
@@ -1634,113 +1648,147 @@ class RecipeController(BaseRecipeController):
             self.handle_exceptions(exc)
             raise
 
-        if any(source.is_merge_archived for source in sources):
-            raise HTTPException(
-                status_code=400,
-                detail=ErrorResponse.respond("Archived merge sources cannot be merged again"),
-            )
-        if any(source.is_merged_recipe for source in sources):
-            raise HTTPException(
-                status_code=400,
-                detail=ErrorResponse.respond("Undo an existing merge before merging it again"),
-            )
+        self._validate_merge_sources(sources)
 
-        requested_name = (data.name or "").strip()
+        provided_name = (data.name or "").strip()[:255].strip()
+        ai_recipe: Recipe | None = None
+        if data.use_ai:
+            try:
+                ai_recipe = await OpenAIRecipeService(
+                    self.repos,
+                    self.user,
+                    self.household,
+                    self.translator,
+                ).build_merged_recipe(sources, provided_name or None)
+            except Exception as exc:
+                self.logger.exception("Failed to merge recipes with AI")
+                raise HTTPException(
+                    status_code=400,
+                    detail=ErrorResponse.respond(str(exc) or "AI recipe merge failed"),
+                ) from exc
+
+        requested_name = provided_name
         if not requested_name:
-            requested_name = " + ".join(str(source.name or "").strip() for source in sources)
+            requested_name = (
+                str(ai_recipe.name or "").strip()
+                if ai_recipe
+                else " + ".join(str(source.name or "").strip() for source in sources)
+            )
         requested_name = requested_name[:255].strip()
 
         merged: Recipe | None = None
         try:
             merged = self.service.duplicate_one(sources[0].slug, RecipeDuplicate(name=requested_name))
-
-            merged_ingredients: list[RecipeIngredient] = []
-            merged_steps: list[RecipeStep] = []
-            merged_notes: list[RecipeNote] = []
-            for source in sources:
-                ingredient_reference_map = {}
-                source_ingredients = source.recipe_ingredient or []
-                if source_ingredients:
-                    merged_ingredients.append(RecipeIngredient(title=source.name or ""))
-                for ingredient in source_ingredients:
-                    new_reference_id = uuid4()
-                    ingredient_reference_map[ingredient.reference_id] = new_reference_id
-                    merged_ingredients.append(
-                        ingredient.model_copy(
-                            deep=True,
-                            update={
-                                "reference_id": new_reference_id,
-                                "display": "",
-                            },
-                        )
-                    )
-
-                for step_index, step in enumerate(source.recipe_instructions or []):
-                    step_title = (step.title or "").strip()
-                    if step_index == 0:
-                        step_title = (
-                            f"{source.name} - {step_title}"
-                            if step_title
-                            else str(source.name or "")
-                        )
-                    merged_steps.append(
-                        step.model_copy(
-                            deep=True,
-                            update={
-                                "id": uuid4(),
-                                "title": step_title,
-                                "ingredient_references": [
-                                    IngredientReferences(
-                                        reference_id=ingredient_reference_map.get(
-                                            reference.reference_id,
-                                            reference.reference_id,
-                                        )
-                                    )
-                                    for reference in (step.ingredient_references or [])
-                                ],
-                            },
-                        )
-                    )
-
-                for note in source.notes or []:
-                    note_title = str(note.title or "").strip()
-                    merged_notes.append(
-                        RecipeNote(
-                            title=(
-                                f"{source.name} - {note_title}"
-                                if note_title
-                                else str(source.name or "")
-                            ),
-                            text=note.text,
-                        )
-                    )
-
-            def unique_organizers(attribute: str):
-                result = []
-                seen = set()
-                for source in sources:
-                    for item in getattr(source, attribute) or []:
-                        key = item.slug
-                        if key in seen:
-                            continue
-                        seen.add(key)
-                        result.append(item.model_copy(deep=True))
-                return result
-
             source_names = [str(source.name or source.slug) for source in sources]
-            source_description = ", ".join(source_names)
-            merged.name = requested_name
-            merged.description = (
-                f"{merged.description.strip()}\n\n"
-                if merged.description and merged.description.strip()
-                else ""
-            ) + f"Merged from: {source_description}"
-            merged.recipe_ingredient = merged_ingredients
-            merged.recipe_instructions = merged_steps
-            merged.notes = merged_notes
-            merged.recipe_category = unique_organizers("recipe_category")
-            merged.tags = unique_organizers("tags")
-            merged.tools = unique_organizers("tools")
+
+            if ai_recipe:
+                editable_fields = (
+                    "description",
+                    "recipe_yield",
+                    "total_time",
+                    "prep_time",
+                    "perform_time",
+                    "recipe_ingredient",
+                    "recipe_instructions",
+                    "recipe_category",
+                    "tags",
+                    "tools",
+                    "notes",
+                )
+                for field_name in editable_fields:
+                    setattr(merged, field_name, getattr(ai_recipe, field_name))
+                merged.name = requested_name
+                merged.source = ai_recipe.source or merged.source
+                merged.created_by = ai_recipe.created_by or merged.created_by
+                merged.extras = {**(merged.extras or {}), **(ai_recipe.extras or {})}
+            else:
+                merged_ingredients: list[RecipeIngredient] = []
+                merged_steps: list[RecipeStep] = []
+                merged_notes: list[RecipeNote] = []
+                for source in sources:
+                    ingredient_reference_map = {}
+                    source_ingredients = source.recipe_ingredient or []
+                    if source_ingredients:
+                        merged_ingredients.append(RecipeIngredient(title=source.name or ""))
+                    for ingredient in source_ingredients:
+                        new_reference_id = uuid4()
+                        ingredient_reference_map[ingredient.reference_id] = new_reference_id
+                        merged_ingredients.append(
+                            ingredient.model_copy(
+                                deep=True,
+                                update={
+                                    "reference_id": new_reference_id,
+                                    "display": "",
+                                },
+                            )
+                        )
+
+                    for step_index, step in enumerate(source.recipe_instructions or []):
+                        step_title = (step.title or "").strip()
+                        if step_index == 0:
+                            step_title = (
+                                f"{source.name} - {step_title}"
+                                if step_title
+                                else str(source.name or "")
+                            )
+                        merged_steps.append(
+                            step.model_copy(
+                                deep=True,
+                                update={
+                                    "id": uuid4(),
+                                    "title": step_title,
+                                    "ingredient_references": [
+                                        IngredientReferences(
+                                            reference_id=ingredient_reference_map.get(
+                                                reference.reference_id,
+                                                reference.reference_id,
+                                            )
+                                        )
+                                        for reference in (step.ingredient_references or [])
+                                    ],
+                                },
+                            )
+                        )
+
+                    for note in source.notes or []:
+                        note_title = str(note.title or "").strip()
+                        merged_notes.append(
+                            RecipeNote(
+                                title=(
+                                    f"{source.name} - {note_title}"
+                                    if note_title
+                                    else str(source.name or "")
+                                ),
+                                text=note.text,
+                            )
+                        )
+
+                def unique_organizers(attribute: str):
+                    result = []
+                    seen = set()
+                    for source in sources:
+                        for item in getattr(source, attribute) or []:
+                            key = item.slug
+                            if key in seen:
+                                continue
+                            seen.add(key)
+                            result.append(item.model_copy(deep=True))
+                    return result
+
+                source_description = ", ".join(source_names)
+                merged.name = requested_name
+                merged.description = (
+                    f"{merged.description.strip()}\n\n"
+                    if merged.description and merged.description.strip()
+                    else ""
+                ) + f"Merged from: {source_description}"
+                merged.recipe_ingredient = merged_ingredients
+                merged.recipe_instructions = merged_steps
+                merged.notes = merged_notes
+                merged.recipe_category = unique_organizers("recipe_category")
+                merged.tags = unique_organizers("tags")
+                merged.tools = unique_organizers("tools")
+
             merged.is_merged_recipe = True
             merged.is_merge_archived = False
             merged.extras = {
@@ -1751,6 +1799,7 @@ class RecipeController(BaseRecipeController):
                     "sourceIds": [str(source.id) for source in sources],
                     "sourceSlugs": [source.slug for source in sources],
                     "sourceNames": source_names,
+                    "mode": "ai" if data.use_ai else "standard",
                 },
             }
             merged = self.service.update_one(merged.slug, merged)

@@ -22,8 +22,10 @@ const STORAGE_KEYS = {
   videoFallbackQuality: "videoFallbackQuality",
 };
 
+const LEGACY_DEFAULT_MEALIE_URL = "http://localhost:3000";
+
 const DEFAULT_SETTINGS = {
-  mealieUrl: "http://localhost:3000",
+  mealieUrl: "http://localhost:9925",
   extractMode: "auto",
   interfaceLanguage: "auto",
   translateLanguage: "he-IL",
@@ -160,10 +162,17 @@ async function init() {
 
 async function loadSettings() {
   const stored = await chrome.storage.sync.get(Object.values(STORAGE_KEYS));
-  return {
+  const settings = {
     ...DEFAULT_SETTINGS,
     ...stored,
   };
+
+  if (normalizeBaseUrl(settings.mealieUrl) === LEGACY_DEFAULT_MEALIE_URL) {
+    settings.mealieUrl = DEFAULT_SETTINGS.mealieUrl;
+    await chrome.storage.sync.set({ mealieUrl: settings.mealieUrl });
+  }
+
+  return settings;
 }
 
 function populateLanguageOptions() {

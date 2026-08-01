@@ -36,6 +36,18 @@
           :image-version="localImageVersion"
           @image-status="handleImageStatus"
         >
+          <v-chip
+            v-if="localLastMade"
+            class="recipe-card-done-badge"
+            color="success"
+            variant="flat"
+            size="small"
+          >
+            <v-icon start size="small">
+              {{ $globals.icons.checkBold }}
+            </v-icon>
+            DONE
+          </v-chip>
           <v-expand-transition v-if="description">
             <div
               v-if="isHovering"
@@ -243,6 +255,8 @@
               :name="displayName"
               :recipe-id="recipeId"
               :rating="rating"
+              :last-made="localLastMade"
+              :recipe-section="recipeSection"
               :redirect-on-delete="false"
               :use-items="{
                 edit: false,
@@ -261,10 +275,14 @@
                 share: true,
                 shoppingWebsites: true,
                 delete: true,
+                section: true,
+                markDone: true,
               }"
               @deleted="$emit('delete', slug)"
               @image-updated="handleImageUpdated"
               @renamed="handleRenamed"
+              @made="handleMade"
+              @section-updated="handleSectionUpdated"
             />
           </v-card-actions>
         </slot>
@@ -304,6 +322,8 @@ interface Props {
   recipeId: string;
   imageHeight?: number;
   extras?: Record<string, unknown> | null;
+  lastMade?: string | null;
+  recipeSection?: string;
 }
 const props = withDefaults(defineProps<Props>(), {
   description: null,
@@ -314,12 +334,15 @@ const props = withDefaults(defineProps<Props>(), {
   categories: () => [],
   imageHeight: 200,
   extras: null,
+  lastMade: null,
+  recipeSection: "recipes",
 });
 
 const emit = defineEmits<{
   click: [];
   delete: [slug: string];
   renamed: [{ slug: string; name: string; recipe?: any }];
+  sectionUpdated: [{ slug: string; recipeSection: string }];
 }>();
 
 const api = useUserApi();
@@ -339,6 +362,7 @@ const shoppingListStatusKnown = ref(hasShoppingListStatus(props.extras));
 const hasLinkedShoppingList = ref(Boolean(props.extras?.shoppingListLinked));
 const imageLoadFailed = ref(false);
 const localImageVersion = ref<string | null>(props.image ?? null);
+const localLastMade = ref<string | null>(props.lastMade ?? null);
 const shoppingListQuickDialog = ref(false);
 const shoppingListOverlayLoading = ref(false);
 const aiCookbooksDialog = ref(false);
@@ -362,6 +386,11 @@ watch(
     localImageVersion.value = image ?? null;
     imageLoadFailed.value = false;
   },
+);
+
+watch(
+  () => props.lastMade,
+  value => localLastMade.value = value ?? null,
 );
 
 watch(
@@ -417,6 +446,14 @@ function handleImageStatus(hasImage: boolean) {
 function handleImageUpdated(payload: { slug: string; image: string }) {
   localImageVersion.value = payload.image;
   imageLoadFailed.value = false;
+}
+
+function handleMade(payload: { slug: string; lastMade: string }) {
+  localLastMade.value = payload.lastMade;
+}
+
+function handleSectionUpdated(payload: { slug: string; recipeSection: string }) {
+  emit("sectionUpdated", payload);
 }
 
 function hasShoppingListStatus(extras: Record<string, unknown> | null | undefined) {
@@ -552,6 +589,18 @@ async function openShoppingListFromCard() {
 }
 .recipe-card {
   position: relative;
+}
+
+.recipe-card-done-badge {
+  bottom: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+  font-weight: 800;
+  left: 50%;
+  letter-spacing: 0;
+  pointer-events: none;
+  position: absolute;
+  transform: translateX(-50%) rotate(-2deg);
+  z-index: 6;
 }
 .recipe-card-ai-image-btn {
   position: absolute !important;

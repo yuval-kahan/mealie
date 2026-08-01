@@ -95,6 +95,7 @@ export interface RecipeMergeRequest {
   sourceSlugs: string[];
   name?: string | null;
   keepOriginals: boolean;
+  useAi: boolean;
 }
 
 export interface RecipeMergeResponse {

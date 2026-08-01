@@ -188,8 +188,11 @@
                     :categories="recipe.recipeCategory!"
                     :recipe-id="recipe.id!"
                     :extras="recipe.extras"
+                    :last-made="recipe.lastMade"
+                    :recipe-section="recipe.recipeSection"
                     @delete="$emit('delete', $event)"
                     @renamed="$emit('renamed', $event)"
+                    @section-updated="loadRecipePage"
                   />
                 </v-col>
               </v-row>
@@ -216,8 +219,11 @@
                     :categories="recipe.recipeCategory!"
                     :recipe-id="recipe.id!"
                     :extras="recipe.extras"
+                    :last-made="recipe.lastMade"
+                    :recipe-section="recipe.recipeSection"
                     @delete="$emit('delete', $event)"
                     @renamed="$emit('renamed', $event)"
+                    @section-updated="loadRecipePage"
                   />
                 </v-col>
               </v-row>
@@ -265,6 +271,8 @@ interface Props {
   singleColumn?: boolean;
   recipes?: Recipe[];
   query?: RecipeSearchQuery | null;
+  section?: string;
+  groupByBook?: boolean;
 }
 const props = withDefaults(defineProps<Props>(), {
   disableToolbar: false,
@@ -274,6 +282,8 @@ const props = withDefaults(defineProps<Props>(), {
   singleColumn: false,
   recipes: () => [],
   query: null,
+  section: "recipes",
+  groupByBook: false,
 });
 
 const emit = defineEmits<{
@@ -330,6 +340,10 @@ interface RecipeBookGroup {
 }
 
 const recipeGroups = computed<RecipeBookGroup[]>(() => {
+  if (!props.groupByBook) {
+    return [{ key: "all", bookId: null, title: props.title || "", recipes: props.recipes }];
+  }
+
   const bookNames = new Map(uploadedBooks.value.map(book => [book.id, book.name]));
   const groups = new Map<string, RecipeBookGroup>();
   const unlinked: Recipe[] = [];
@@ -367,7 +381,7 @@ const recipeGroups = computed<RecipeBookGroup[]>(() => {
   }
   return result;
 });
-const showBookGroups = computed(() => recipeGroups.value.some(group => Boolean(group.bookId)));
+const showBookGroups = computed(() => props.groupByBook && recipeGroups.value.length > 0);
 
 watch(
   () => recipeGroups.value.map(group => group.key),
@@ -389,7 +403,10 @@ const { fetchPage, getRandom } = useLazyRecipes(isOwnGroup.value ? null : groupS
 const router = useRouter();
 
 const queryFilter = computed(() => {
-  return props.query?.queryFilter || null;
+  const baseFilter = props.query?.queryFilter?.trim();
+  const safeSection = props.section.replaceAll("\"", "");
+  const sectionFilter = `recipe_section = "${safeSection}"`;
+  return baseFilter ? `(${baseFilter}) AND (${sectionFilter})` : sectionFilter;
 
   // TODO: allow user to filter out null values when ordering by a value that may be null (such as lastMade)
 
@@ -426,7 +443,7 @@ async function fetchRecipes() {
 }
 
 onMounted(async () => {
-  if (isOwnGroup.value) {
+  if (isOwnGroup.value && props.groupByBook) {
     void loadUploadedBooks();
   }
   loading.value = true;

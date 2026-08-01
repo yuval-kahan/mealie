@@ -2454,6 +2454,18 @@ const topLinks = computed<SideBarLink[]>(() => [
     restricted: false,
   },
   {
+    icon: $globals.icons.book,
+    to: `/g/${groupSlug.value}/recipes/books`,
+    title: i18n.t("recipe.book-recipes"),
+    restricted: false,
+  },
+  {
+    icon: $globals.icons.potSteam,
+    to: `/g/${groupSlug.value}/recipes/sauces`,
+    title: i18n.t("recipe.sauces"),
+    restricted: false,
+  },
+  {
     icon: $globals.icons.calendarMultiselect,
     title: i18n.t("meal-plan.meal-planner"),
     to: "/household/mealplan/planner/view",

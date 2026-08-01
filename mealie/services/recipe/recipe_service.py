@@ -2322,6 +2322,115 @@ class OpenAIRecipeService(RecipeServiceBase):
         has_instructions = any(instruction.text.strip() for instruction in openai_recipe.instructions)
         return has_name and has_ingredients and has_instructions
 
+    @staticmethod
+    def _merge_recipe_payload(recipe: Recipe) -> dict[str, Any]:
+        def organizer_names(items: Sequence[Any] | None) -> list[str]:
+            return [
+                str(item.name).strip()
+                for item in (items or [])
+                if getattr(item, "name", None) and str(item.name).strip()
+            ]
+
+        ingredients: list[dict[str, str]] = []
+        for ingredient in recipe.recipe_ingredient or []:
+            text = str(ingredient.display or ingredient.note or "").strip()
+            if not text:
+                parts: list[str] = []
+                if ingredient.quantity:
+                    parts.append(str(ingredient.quantity))
+                if ingredient.unit and ingredient.unit.name:
+                    parts.append(ingredient.unit.name)
+                if ingredient.food and ingredient.food.name:
+                    parts.append(ingredient.food.name)
+                text = " ".join(parts).strip()
+            if text or ingredient.title:
+                ingredients.append(
+                    {
+                        "section": str(ingredient.title or "").strip(),
+                        "text": text,
+                        "recommended_variety": str(ingredient.recommended_variety or "").strip(),
+                    }
+                )
+
+        instructions = [
+            {
+                "section": str(instruction.title or "").strip(),
+                "text": str(instruction.text or instruction.summary or "").strip(),
+            }
+            for instruction in (recipe.recipe_instructions or [])
+            if instruction.title or instruction.text or instruction.summary
+        ]
+        notes = [
+            {
+                "title": str(note.title or "").strip(),
+                "text": str(note.text or "").strip(),
+            }
+            for note in (recipe.notes or [])
+            if note.title or note.text
+        ]
+
+        return {
+            "name": str(recipe.name or "").strip(),
+            "description": str(recipe.description or "").strip(),
+            "source": str(recipe.source or "").strip(),
+            "created_by": str(recipe.created_by or "").strip(),
+            "yield": str(recipe.recipe_yield or "").strip(),
+            "total_time": str(recipe.total_time or "").strip(),
+            "prep_time": str(recipe.prep_time or "").strip(),
+            "perform_time": str(recipe.perform_time or "").strip(),
+            "ingredients": ingredients,
+            "instructions": instructions,
+            "notes": notes,
+            "categories": organizer_names(recipe.recipe_category),
+            "tags": organizer_names(recipe.tags),
+            "tools": organizer_names(recipe.tools),
+            "mise_en_place_food": str((recipe.extras or {}).get("miseEnPlaceFood", "")).strip(),
+            "mise_en_place_tools": str((recipe.extras or {}).get("miseEnPlaceTools", "")).strip(),
+        }
+
+    async def build_merged_recipe(
+        self,
+        recipes: Sequence[Recipe],
+        requested_name: str | None = None,
+    ) -> Recipe:
+        """Use the configured AI provider to turn source recipes into one coherent recipe."""
+
+        if len(recipes) < 2:
+            raise ValueError("At least two recipes are required for an AI merge")
+
+        openai_service = OpenAIService(self.repos)
+        if not (openai_service.provider_settings and openai_service.provider_settings.ai_enabled):
+            raise ValueError("AI services are not available")
+
+        payload = {
+            "requested_name": (requested_name or "").strip() or None,
+            "recipes": [self._merge_recipe_payload(recipe) for recipe in recipes],
+        }
+        payload_json = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        if len(payload_json) > 350_000:
+            raise ValueError("The selected recipes contain too much text for one AI merge")
+
+        message = (
+            "Create one complete merged recipe from the structured source recipes below. "
+            "Return the full final recipe, not a patch or an explanation.\n\n"
+            f"Source recipe JSON:\n{payload_json}"
+        )
+        try:
+            response = await openai_service.get_response(
+                openai_service.get_prompt("recipes.merge-recipes"),
+                message,
+                response_schema=OpenAIRecipe,
+            )
+            if not response or not self._has_minimum_recipe_data(response):
+                raise ValueError("The AI response did not contain a complete merged recipe")
+            if requested_name and requested_name.strip():
+                response.name = requested_name.strip()[:255]
+            return self._convert_recipe(response)
+        except Exception as error:
+            if isinstance(error, ValueError):
+                raise
+            raise ValueError("AI recipe merge failed") from error
+
     async def build_recipe_from_images(
         self,
         images: list[Path],
