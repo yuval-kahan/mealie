@@ -23,7 +23,7 @@
           :color="fab ? 'info' : 'secondary'"
           :fab="fab"
           v-bind="activatorProps"
-          @click.prevent
+          @click.stop.prevent
         >
           <v-icon :size="!fab ? undefined : 'x-large'" :color="fab ? 'white' : 'secondary'">
             {{ icon }}
@@ -37,6 +37,7 @@
         v-bind="contentProps"
         @print="$emit('print')"
         @deleted="$emit('deleted', $event)"
+        @delete-requested="$emit('deleteRequested', $event)"
         @image-updated="$emit('imageUpdated', $event)"
         @renamed="$emit('renamed', $event)"
         @section-updated="$emit('sectionUpdated', $event)"
@@ -96,7 +97,11 @@ interface Props {
   recipeScale?: number;
   redirectOnDelete?: boolean;
   recipeSection?: string;
+  showInRecipes?: boolean;
+  showInBook?: boolean;
+  showInSauce?: boolean;
   lastMade?: string | null;
+  bulkDelete?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -133,17 +138,22 @@ const props = withDefaults(defineProps<Props>(), {
   recipeScale: 1,
   redirectOnDelete: true,
   recipeSection: "recipes",
+  showInRecipes: undefined,
+  showInBook: undefined,
+  showInSauce: undefined,
   lastMade: null,
+  bulkDelete: false,
 });
 
 defineEmits<{
   [key: string]: any;
   print: [];
   deleted: [slug: string];
+  deleteRequested: [slug: string];
   renamed: [{ slug: string; name: string; recipe?: Recipe }];
   imageUpdated: [{ slug: string; image: string }];
   sectionUpdated: [{ slug: string; recipeSection: string }];
-  made: [{ slug: string; lastMade: string }];
+  made: [{ slug: string; lastMade: string | null }];
 }>();
 
 const { $globals } = useNuxtApp();

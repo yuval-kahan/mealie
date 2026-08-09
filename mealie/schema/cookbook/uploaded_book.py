@@ -69,12 +69,26 @@ class UploadedBookOut(MealieModel):
             return {}
 
 
+class UploadedBookUpdate(MealieModel):
+    name: str = Field(..., min_length=1, max_length=255)
+
+    @model_validator(mode="after")
+    def normalize_name(self):
+        self.name = self.name.strip()
+        if not self.name:
+            raise ValueError("Book name cannot be empty")
+        return self
+
+
 class UploadedBookReaderPreferences(MealieModel):
     font_size: int = Field(18, ge=12, le=36)
     font_family: str = Field("serif", pattern="^(serif|sans-serif|dyslexic)$")
     line_height: float = Field(1.75, ge=1.2, le=2.6)
     word_spacing: float = Field(0, ge=0, le=12)
     page_width: int = Field(980, ge=600, le=1500)
+    enable_ask_ai: bool = True
+    ai_answer_length: Literal["short", "medium", "long"] = "short"
+    show_ai_hover: bool = True
 
 
 class UploadedBookReaderNote(MealieModel):
@@ -96,6 +110,8 @@ class UploadedBookReaderHighlight(MealieModel):
     start: int = Field(..., ge=0, le=2000000)
     end: int = Field(..., ge=0, le=2000000)
     created_at: str | None = Field(None, max_length=80)
+    ai_question: str | None = Field(None, max_length=1000)
+    ai_answer: str | None = Field(None, max_length=6000)
 
     @model_validator(mode="after")
     def validate_offsets(self):
@@ -121,6 +137,18 @@ class UploadedBookReadingStateOut(UploadedBookReadingStateUpdate):
     book_id: UUID4
     user_id: UUID4
     updated_at: datetime | None = UpdatedAtField(default=None)
+
+
+class UploadedBookReaderAskAIRequest(MealieModel):
+    selected_text: str = Field(..., min_length=1, max_length=4000)
+    question: str = Field("Explain this text", min_length=1, max_length=1000)
+    answer_length: Literal["short", "medium", "long"] = "short"
+    target_language: str = Field("English", min_length=2, max_length=80)
+    page: int = Field(0, ge=0, le=100000)
+
+
+class UploadedBookReaderAskAIResponse(MealieModel):
+    answer: str = Field(..., min_length=1, max_length=6000)
 
 
 class UploadedBookExtractRequest(MealieModel):

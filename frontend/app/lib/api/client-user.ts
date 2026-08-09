@@ -36,6 +36,7 @@ import { ProductKnowledgeAPI } from "./user/product-knowledge";
 import { ChefsAPI } from "./user/chefs";
 import { EquipmentAPI } from "./user/equipment";
 import { WantedBooksAPI } from "./user/wanted-books";
+import { NotebooksAPI } from "./user/notebooks";
 import type { ApiRequestInstance } from "~/lib/api/types/non-generated";
 
 export class UserApiClient {
@@ -77,6 +78,7 @@ export class UserApiClient {
   public chefs: ChefsAPI;
   public equipment: EquipmentAPI;
   public wantedBooks: WantedBooksAPI;
+  public notebooks: NotebooksAPI;
 
   constructor(requests: ApiRequestInstance) {
     // Recipes
@@ -116,6 +118,7 @@ export class UserApiClient {
     this.chefs = new ChefsAPI(requests);
     this.equipment = new EquipmentAPI(requests);
     this.wantedBooks = new WantedBooksAPI(requests);
+    this.notebooks = new NotebooksAPI(requests);
 
     // Admin
     this.backups = new BackupAPI(requests);

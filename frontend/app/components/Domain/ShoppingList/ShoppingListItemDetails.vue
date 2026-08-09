@@ -51,6 +51,19 @@
     />
     <v-spacer />
   </div>
+  <div class="d-flex align-center flex-wrap ga-2">
+    <span class="text-body-2 text-medium-emphasis">{{ $t("shopping-list.quality-rating") }}</span>
+    <v-rating
+      v-model="listItem.qualityRating"
+      :length="5"
+      color="warning"
+      active-color="warning"
+      density="compact"
+      size="small"
+      clearable
+      hover
+    />
+  </div>
 </template>
 
 <script setup lang="ts">

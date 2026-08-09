@@ -41,12 +41,15 @@ class BackupV2(BaseService):
     def _postgres(self) -> None:
         pass
 
-    def backup(self) -> Path:
+    def backup(self, name_prefix: str | None = None) -> Path:
         # sourcery skip: merge-nested-ifs, reintroduce-else, remove-redundant-continue
         timestamp = datetime.datetime.now(datetime.UTC).strftime("%Y.%m.%d.%H.%M.%S")
         short_hash = self.settings.GIT_COMMIT_HASH[:7]
 
-        if APP_VERSION == "develop":
+        if name_prefix:
+            safe_prefix = re.sub(r"[^a-zA-Z0-9_-]+", "-", name_prefix).strip("-") or "backup"
+            backup_name = f"{safe_prefix}_{timestamp}.zip"
+        elif APP_VERSION == "develop":
             backup_name = f"mealie_dev-{short_hash}_{timestamp}.zip"
         elif APP_VERSION == "nightly":
             backup_name = f"mealie_nightly-{short_hash}_{timestamp}.zip"

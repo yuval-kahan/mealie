@@ -16,15 +16,16 @@ from slugify import slugify
 from mealie.pkgs import img, safehttp
 from mealie.repos.repository_factory import AllRepositories
 from mealie.schema.household.group_shopping_list import ShoppingListItemOut, ShoppingListOut
-from mealie.schema.openai.general import OpenAIImageSearchQueries
+from mealie.schema.openai.general import OpenAIImageSearchQueries, OpenAIImageSuitability
 from mealie.schema.recipe.recipe import Recipe
 from mealie.services._base_service import BaseService
-from mealie.services.openai import OpenAIService
+from mealie.services.openai import OpenAILocalImage, OpenAIService
 
 ITEM_IMAGE_MAX_BYTES = 8 * 1024 * 1024
 ITEM_IMAGE_MAX_PIXELS = 25_000_000
 ITEM_IMAGE_SEARCH_URL = "https://api.openverse.org/v1/images/"
 ITEM_IMAGE_MAX_CANDIDATES = 8
+ITEM_IMAGE_VISUAL_CHECK_MAX_CANDIDATES = 4
 ITEM_IMAGE_CONCURRENCY = 4
 ITEM_IMAGE_BATCH_SIZE = 40
 
@@ -198,6 +199,7 @@ class ItemImageService(BaseService):
         request: ItemImageRequest,
         *,
         preferred_query: str | None = None,
+        verify_with_ai: bool = False,
     ) -> str | None:
         """Find and cache a fresh image for one item, replacing an existing image only on success."""
         if request.kind not in self.valid_kinds or not self.normalize_name(request.name):
@@ -218,7 +220,13 @@ class ItemImageService(BaseService):
                 limits=limits,
             ) as download_client,
         ):
-            return await self._find_and_download_one(request, ai_query, search_client, download_client)
+            return await self._find_and_download_one(
+                request,
+                ai_query,
+                search_client,
+                download_client,
+                verify_with_ai=verify_with_ai,
+            )
 
     def _dedupe_requests(self, requests: Iterable[ItemImageRequest]) -> list[ItemImageRequest]:
         seen: set[tuple[str, str]] = set()
@@ -294,6 +302,8 @@ class ItemImageService(BaseService):
         ai_query: str | None,
         search_client: httpx.AsyncClient,
         download_client: httpx.AsyncClient,
+        *,
+        verify_with_ai: bool = False,
     ) -> str | None:
         seen_candidates: set[str] = set()
         attempts = 0
@@ -305,11 +315,21 @@ class ItemImageService(BaseService):
                 seen_candidates.add(candidate)
                 attempts += 1
                 try:
-                    if await self._download_image(request.kind, request.name, candidate, download_client):
+                    if await self._download_image(
+                        request.kind,
+                        request.name,
+                        candidate,
+                        download_client,
+                        request=request,
+                        verify_with_ai=verify_with_ai,
+                    ):
                         return candidate
                 except Exception:
                     self.logger.exception("Failed to cache item image from %s", candidate)
-                if attempts >= ITEM_IMAGE_MAX_CANDIDATES:
+                max_candidates = (
+                    ITEM_IMAGE_VISUAL_CHECK_MAX_CANDIDATES if verify_with_ai else ITEM_IMAGE_MAX_CANDIDATES
+                )
+                if attempts >= max_candidates:
                     return None
 
         return None
@@ -438,6 +458,9 @@ class ItemImageService(BaseService):
         name: str,
         url: str,
         client: httpx.AsyncClient,
+        *,
+        request: ItemImageRequest | None = None,
+        verify_with_ai: bool = False,
     ) -> bool:
         image_dir = self.image_dir(self.root_dir, kind, name)
         image_dir.mkdir(parents=True, exist_ok=True)
@@ -466,16 +489,62 @@ class ItemImageService(BaseService):
                             return False
                         temp_file.write(chunk)
 
-            await asyncio.to_thread(self._validate_and_minify, temp_path)
+            await asyncio.to_thread(self._validate_image, temp_path)
+            if verify_with_ai and request and not await self._candidate_matches_request(request, temp_path):
+                return False
+
+            await asyncio.to_thread(self.minifier.minify, temp_path)
             return self.get_image_path(kind, name, "tiny-original.webp").exists()
         finally:
             if temp_path:
                 temp_path.unlink(missing_ok=True)
 
-    def _validate_and_minify(self, image_path: Path) -> None:
+    async def _candidate_matches_request(self, request: ItemImageRequest, image_path: Path) -> bool:
+        if not self.repos:
+            return True
+
+        openai_service = OpenAIService(self.repos)
+        if not (openai_service.provider_settings and openai_service.provider_settings.ai_enabled):
+            return True
+
+        attachment_name = image_path.stem
+        generated_attachment = image_path.parent.joinpath(f"{attachment_name}-min-original.jpg")
+        prompt = (
+            "Decide whether the attached image is a clear, useful photograph of the requested kitchen tool. "
+            "Reject unrelated objects, food-only photos, ingredients, recipes, text pages, logos, collages, and "
+            "images where the requested tool is not the obvious main subject. Accept normal visual variants of "
+            "the same tool."
+        )
+        message = "\n".join(
+            part
+            for part in (
+                f"Requested tool: {request.name}",
+                f"Context: {request.context}" if request.context else "",
+            )
+            if part
+        )
+        try:
+            response = await openai_service.get_response(
+                prompt,
+                message,
+                response_schema=OpenAIImageSuitability,
+                attachments=[OpenAILocalImage(filename=attachment_name, path=image_path)],
+            )
+            return response.suitable if response else True
+        except Exception as error:
+            self.logger.warning("Could not visually verify item image; using search result: %s", error)
+            return True
+        finally:
+            generated_attachment.unlink(missing_ok=True)
+
+    @staticmethod
+    def _validate_image(image_path: Path) -> None:
         with Image.open(image_path) as image:
             if image.width * image.height > ITEM_IMAGE_MAX_PIXELS:
                 raise ValueError("Item image exceeds the pixel limit")
             image.verify()
 
+    def _validate_and_minify(self, image_path: Path) -> None:
+        """Keep the existing validation helper available for callers and focused tests."""
+        self._validate_image(image_path)
         self.minifier.minify(image_path)

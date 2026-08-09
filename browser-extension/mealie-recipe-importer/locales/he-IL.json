@@ -46,6 +46,7 @@
   "mode": {
     "auto": "זיהוי אוטומטי",
     "recipe": "חלץ מתכון",
+    "sauce": "חלץ רוטב בלבד",
     "article": "חלץ מאמר"
   },
   "options": {
@@ -59,6 +60,7 @@
     "extract-only": "חלץ בלבד",
     "send-auto": "זהה ושלח ל-AI",
     "send-recipe": "שלח מתכון ל-AI",
+    "send-sauce": "שלח רוטב ל-AI",
     "send-article": "שלח מאמר ל-AI",
     "save-website": "שמור אתר",
     "save-restaurant": "שמור מסעדה",
@@ -110,6 +112,7 @@
     "extracting-and-sending": "מחלץ תוכן ושולח אותו ל-Mealie...",
     "processing-article": "מחלץ את המאמר ושולח אותו ל-Mealie...",
     "processing-recipe": "מחלץ את המתכון ושולח אותו ל-Mealie...",
+    "processing-sauce": "מחלץ רק את הרוטב ושולח אותו ל-Mealie...",
     "processing-auto": "מחלץ את הדף, מזהה את סוג התוכן שלו ושולח אותו ל-Mealie...",
     "article-created": "מאמר נוצר: {title}",
     "recipe-created": "מתכון נוצר: {name}",

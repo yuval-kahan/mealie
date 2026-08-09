@@ -521,8 +521,10 @@ export interface ShoppingListAddRecipeParamsBulk {
   recipeIngredients?: RecipeIngredient[] | null;
   recipeId: string;
 }
+export type ShoppingListKind = "shopping" | "products" | "tools";
 export interface ShoppingListCreate {
   name?: string | null;
+  listKind?: ShoppingListKind;
   extras?: {
     [k: string]: unknown;
   } | null;
@@ -540,6 +542,7 @@ export interface ShoppingListItemBase {
   shoppingListId: string;
   checked?: boolean;
   position?: number;
+  qualityRating?: number | null;
   foodId?: string | null;
   labelId?: string | null;
   unitId?: string | null;
@@ -558,6 +561,7 @@ export interface ShoppingListItemCreate {
   shoppingListId: string;
   checked?: boolean;
   position?: number;
+  qualityRating?: number | null;
   foodId?: string | null;
   labelId?: string | null;
   unitId?: string | null;
@@ -584,6 +588,7 @@ export interface ShoppingListItemOut {
   shoppingListId: string;
   checked?: boolean;
   position?: number;
+  qualityRating?: number | null;
   foodId?: string | null;
   labelId?: string | null;
   unitId?: string | null;
@@ -625,6 +630,7 @@ export interface ShoppingListItemUpdate {
   shoppingListId: string;
   checked?: boolean;
   position?: number;
+  qualityRating?: number | null;
   foodId?: string | null;
   labelId?: string | null;
   unitId?: string | null;
@@ -644,6 +650,7 @@ export interface ShoppingListItemUpdateBulk {
   shoppingListId: string;
   checked?: boolean;
   position?: number;
+  qualityRating?: number | null;
   foodId?: string | null;
   labelId?: string | null;
   unitId?: string | null;
@@ -678,6 +685,7 @@ export interface ShoppingListMultiPurposeLabelUpdate {
 }
 export interface ShoppingListOut {
   name?: string | null;
+  listKind?: ShoppingListKind;
   extras?: {
     [k: string]: unknown;
   } | null;
@@ -731,6 +739,7 @@ export interface ShoppingListRemoveRecipeParams {
 }
 export interface ShoppingListSave {
   name?: string | null;
+  listKind?: ShoppingListKind;
   extras?: {
     [k: string]: unknown;
   } | null;
@@ -741,6 +750,7 @@ export interface ShoppingListSave {
 }
 export interface ShoppingListSummary {
   name?: string | null;
+  listKind?: ShoppingListKind;
   extras?: {
     [k: string]: unknown;
   } | null;
@@ -756,6 +766,7 @@ export interface ShoppingListSummary {
 }
 export interface ShoppingListUpdate {
   name?: string | null;
+  listKind?: ShoppingListKind;
   extras?: {
     [k: string]: unknown;
   } | null;

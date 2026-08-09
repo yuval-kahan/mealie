@@ -32,6 +32,7 @@ async def create_from_html(
     on_progress: Callable[[str], Awaitable[None]] | None = None,
     use_openai: bool = False,
     target_language: str | None = None,
+    recipe_section: str = "recipes",
 ) -> tuple[Recipe, ScrapedExtras | None]:
     """Main entry point for generating a recipe from a URL. Pass in a URL and
     a Recipe object will be returned if successful. Optionally pass in the HTML to skip fetching it.
@@ -49,6 +50,7 @@ async def create_from_html(
         translator,
         scrapers=[RecipeScraperOpenAITranscription, RecipeScraperOpenAI] if use_openai else None,
         target_language=target_language,
+        recipe_section=recipe_section,
     )
 
     if not html:

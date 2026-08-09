@@ -36,6 +36,16 @@
                 :show-image="showImage"
                 :image-url="itemImage(listItem.groupId, 'food', itemImageName)"
               />
+              <v-rating
+                v-if="listItem.qualityRating"
+                :model-value="listItem.qualityRating"
+                :length="5"
+                color="warning"
+                active-color="warning"
+                density="compact"
+                size="x-small"
+                readonly
+              />
             </div>
           </div>
         </v-col>

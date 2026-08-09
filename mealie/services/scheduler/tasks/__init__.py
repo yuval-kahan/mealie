@@ -1,3 +1,4 @@
+from .automatic_backups import create_automatic_backup
 from .create_timeline_events import create_mealplan_timeline_events
 from .delete_old_checked_shopping_list_items import delete_old_checked_list_items
 from .post_webhooks import post_group_webhooks
@@ -9,6 +10,7 @@ from .resume_uploaded_book_ai_jobs import resume_uploaded_book_ai_jobs
 from .reset_locked_users import locked_user_reset
 
 __all__ = [
+    "create_automatic_backup",
     "create_mealplan_timeline_events",
     "delete_old_checked_list_items",
     "post_group_webhooks",

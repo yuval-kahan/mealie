@@ -2478,6 +2478,12 @@ const topLinks = computed<SideBarLink[]>(() => [
     restricted: true,
   },
   {
+    icon: $globals.icons.notebook,
+    title: i18n.t("notebook.notebooks"),
+    to: "/notebooks",
+    restricted: true,
+  },
+  {
     icon: $globals.icons.foods,
     title: i18n.t("pantry.food-i-have"),
     to: "/pantry",

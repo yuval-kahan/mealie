@@ -13,7 +13,7 @@ from html import unescape
 from pathlib import Path
 from shutil import copytree, rmtree
 from textwrap import dedent
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urljoin, urlparse
 from uuid import UUID, uuid4
 from zipfile import ZipFile
@@ -192,6 +192,17 @@ class RecipeServiceBase(BaseService):
 
 
 class RecipeService(RecipeServiceBase):
+    @staticmethod
+    def _apply_primary_library_membership(recipe: Recipe, section: str | None = None) -> Recipe:
+        """Keep legacy ``recipe_section`` creation paths in sync with library memberships."""
+
+        primary_section = section or recipe.recipe_section or "recipes"
+        recipe.recipe_section = primary_section
+        recipe.show_in_recipes = primary_section == "recipes"
+        recipe.show_in_book = primary_section == "book"
+        recipe.show_in_sauce = primary_section == "sauce"
+        return recipe
+
     def apply_source_metadata(
         self,
         recipe: Recipe,
@@ -593,6 +604,7 @@ class RecipeService(RecipeServiceBase):
         include_ai_tips: bool = True,
         notes: str | None = None,
         include_mise_en_place: bool = True,
+        recipe_section: Literal["recipes", "sauce"] = "recipes",
     ) -> Recipe:
         openai_recipe_service = OpenAIRecipeService(self.repos, self.user, self.household, self.translator)
         with get_temporary_path() as temp_path:
@@ -610,8 +622,10 @@ class RecipeService(RecipeServiceBase):
                 include_ai_tips=include_ai_tips,
                 notes=notes,
                 include_mise_en_place=include_mise_en_place,
+                recipe_section=recipe_section,
             )
 
+            recipe_data = self._apply_primary_library_membership(recipe_data, recipe_section)
             recipe = self.create_one(self.apply_ai_recipe_attribution(recipe_data))
 
             # Prefer a representative recipe photo discovered from the parsed
@@ -650,6 +664,7 @@ class RecipeService(RecipeServiceBase):
         include_ai_tips: bool = True,
         include_mise_en_place: bool = True,
         auto_image: bool = True,
+        recipe_section: Literal["recipes", "sauce"] = "recipes",
     ) -> Recipe:
         openai_recipe_service = OpenAIRecipeService(self.repos, self.user, self.household, self.translator)
         recipe_data = await openai_recipe_service.build_recipe_from_text(
@@ -657,7 +672,9 @@ class RecipeService(RecipeServiceBase):
             translate_language,
             include_ai_tips,
             include_mise_en_place,
+            recipe_section,
         )
+        recipe_data = self._apply_primary_library_membership(recipe_data, recipe_section)
         recipe = self.create_one(self.apply_ai_recipe_attribution(recipe_data))
         if auto_image:
             await self.attach_best_effort_image(recipe, search_query=recipe.name)
@@ -1332,7 +1349,7 @@ class RecipeService(RecipeServiceBase):
         self.check_assets(new_data, recipe.slug)
         return new_data
 
-    def update_last_made(self, slug_or_id: str | UUID, timestamp: datetime) -> Recipe:
+    def update_last_made(self, slug_or_id: str | UUID, timestamp: datetime | None) -> Recipe:
         # we bypass the pre update check since any user can update a recipe's last made date, even if it's locked,
         # or if the user belongs to a different household
 
@@ -1394,6 +1411,19 @@ class OpenAIRecipeService(RecipeServiceBase):
             "Do not return English or the source language for those fields unless a URL, a proper name, a brand, "
             "or a literal product name should remain unchanged. Apply this requirement even when the source page "
             "is already written in the requested language."
+        )
+
+    @staticmethod
+    def _recipe_section_instruction(recipe_section: Literal["recipes", "sauce"]) -> str:
+        if recipe_section != "sauce":
+            return ""
+
+        return (
+            " EXTRACTION SCOPE (mandatory): Extract only the sauce, dressing, glaze, marinade, dip, gravy, "
+            "or other liquid accompaniment from the source. Return it as a standalone recipe with only the "
+            "ingredients and instructions needed for that sauce. Exclude unrelated main-dish, side-dish, garnish, "
+            "and plating ingredients and steps. If the source contains no usable sauce component, report that it "
+            "is not a usable recipe instead of inventing one."
         )
 
     @staticmethod
@@ -2438,6 +2468,7 @@ class OpenAIRecipeService(RecipeServiceBase):
         include_ai_tips: bool = True,
         notes: str | None = None,
         include_mise_en_place: bool = True,
+        recipe_section: Literal["recipes", "sauce"] = "recipes",
     ) -> tuple[Recipe, bool]:
         openai_service = OpenAIService(self.repos)
         if not (
@@ -2456,6 +2487,7 @@ class OpenAIRecipeService(RecipeServiceBase):
         )
 
         message += self._target_language_instruction(translate_language)
+        message += self._recipe_section_instruction(recipe_section)
         if include_ai_tips:
             message += " Add concise AI cooking tips and practical recommended ingredient varieties when useful."
         if include_mise_en_place:
@@ -2507,6 +2539,7 @@ class OpenAIRecipeService(RecipeServiceBase):
         translate_language: str | None = None,
         include_ai_tips: bool = True,
         include_mise_en_place: bool = True,
+        recipe_section: Literal["recipes", "sauce"] = "recipes",
     ) -> Recipe:
         openai_service = OpenAIService(self.repos)
         if not (openai_service.provider_settings and openai_service.provider_settings.ai_enabled):
@@ -2516,6 +2549,7 @@ class OpenAIRecipeService(RecipeServiceBase):
         message = "Please analyze the pasted text below and create a recipe only if it contains usable recipe data."
 
         message += self._target_language_instruction(translate_language)
+        message += self._recipe_section_instruction(recipe_section)
         if include_ai_tips:
             message += (
                 " The user wants AI tips: add concise practical cooking notes and recommended ingredient varieties "

@@ -123,6 +123,16 @@ def test_user_update_last_made(api_client: TestClient, user_tuple: list[TestUser
     recipe = response.json()
     assert recipe["lastMade"] == last_made_json["timestamp"]
 
+    # The same action is a toggle: clearing the timestamp removes the done state.
+    response = api_client.patch(
+        api_routes.recipes_slug_last_made(recipe_name), json={"timestamp": None}, headers=usr_2.token
+    )
+    assert response.status_code == 200
+
+    response = api_client.get(api_routes.recipes + f"/{recipe_name}", headers=usr_1.token)
+    assert response.status_code == 200
+    assert response.json()["lastMade"] is None
+
 
 def test_other_user_cant_lock_recipe(api_client: TestClient, user_tuple: list[TestUser]) -> None:
     usr_1, usr_2 = user_tuple

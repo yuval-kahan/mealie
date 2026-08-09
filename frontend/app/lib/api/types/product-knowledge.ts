@@ -12,6 +12,7 @@ export interface ProductKnowledge {
   imageVersion?: string | null;
   categories: string[];
   tags: string[];
+  qualityRating?: number | null;
   createdAt?: string | null;
   updatedAt?: string | null;
 }
@@ -23,6 +24,7 @@ export interface ProductKnowledgeCreate {
   source?: string | null;
   categories: string[];
   tags: string[];
+  qualityRating?: number | null;
 }
 
 export type ProductKnowledgeUpdate = ProductKnowledgeCreate;

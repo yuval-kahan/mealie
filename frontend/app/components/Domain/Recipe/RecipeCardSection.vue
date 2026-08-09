@@ -5,6 +5,58 @@
       v-model="recipeMergeDialog"
       @updated="loadRecipePage"
     />
+    <UploadedBookRenameDialog
+      v-model="bookRenameDialog"
+      :book="bookRenameTarget"
+      @renamed="handleBookRenamed"
+    />
+    <UploadedBookRecipeDeleteDialog
+      v-model="bookRecipeDeleteDialog"
+      :book="bookRecipeDeleteTarget"
+      @deleted="handleBookRecipesDeleted"
+    />
+    <BaseDialog
+      v-model="bulkDeleteDialog"
+      :title="$t('recipe.delete-selected-recipes', { count: selectedRecipeSlugs.size })"
+      color="error"
+      :icon="$globals.icons.delete"
+      :loading="bulkDeleteLoading"
+      :submit-disabled="selectedRecipeSlugs.size === 0"
+      :submit-text="$t('recipe.delete-selected-recipes', { count: selectedRecipeSlugs.size })"
+      :submit-icon="$globals.icons.delete"
+      can-submit
+      @submit="deleteSelectedRecipes"
+    >
+      <v-card-text>
+        <p class="mb-3">
+          {{ $t("recipe.bulk-delete-confirmation", { count: selectedRecipeSlugs.size }) }}
+        </p>
+        <v-checkbox
+          v-model="bulkDeleteShoppingLists"
+          color="error"
+          density="compact"
+          hide-details
+          :label="$t('recipe.bulk-delete-linked-shopping-lists')"
+        />
+        <v-list
+          class="recipe-bulk-delete-preview mt-3"
+          density="compact"
+          border
+        >
+          <v-list-item
+            v-for="entry in selectedRecipeEntries"
+            :key="entry.slug"
+            :title="entry.name"
+          >
+            <template #prepend>
+              <v-icon color="error">
+                {{ $globals.icons.delete }}
+              </v-icon>
+            </template>
+          </v-list-item>
+        </v-list>
+      </v-card-text>
+    </BaseDialog>
     <v-row
       v-if="!disableToolbar"
       class="align-center pb-2"
@@ -147,26 +199,100 @@
         @toggle-dense-view="toggleMobileCards()"
       />
     </v-row>
+    <v-sheet
+      v-if="bulkDeleteMode"
+      class="recipe-bulk-selection-bar d-flex align-center flex-wrap ga-2 pa-2 mb-3"
+      border
+      rounded
+    >
+      <v-icon color="error">
+        {{ $globals.icons.delete }}
+      </v-icon>
+      <strong>{{ $t("recipe.recipes-selected", { count: selectedRecipeSlugs.size }) }}</strong>
+      <v-spacer />
+      <v-btn
+        size="small"
+        variant="text"
+        :disabled="allVisibleRecipesSelected"
+        @click="selectAllVisibleRecipes"
+      >
+        {{ $t("recipe.select-all-visible-recipes") }}
+      </v-btn>
+      <v-btn
+        size="small"
+        variant="text"
+        :disabled="selectedRecipeSlugs.size === 0"
+        @click="clearBulkSelection"
+      >
+        {{ $t("general.clear-selection") }}
+      </v-btn>
+      <v-btn
+        size="small"
+        variant="text"
+        @click="cancelBulkDelete"
+      >
+        {{ $t("general.cancel") }}
+      </v-btn>
+      <v-btn
+        size="small"
+        color="error"
+        variant="flat"
+        :disabled="selectedRecipeSlugs.size === 0"
+        @click="openBulkDeleteDialog"
+      >
+        <v-icon start>
+          {{ $globals.icons.delete }}
+        </v-icon>
+        {{ $t("recipe.delete-selected-recipes", { count: selectedRecipeSlugs.size }) }}
+      </v-btn>
+    </v-sheet>
     <div v-if="recipes && ready">
       <div class="mt-2">
         <template
           v-for="group in recipeGroups"
           :key="group.key"
         >
-          <button
+          <div
             v-if="showBookGroups"
-            type="button"
-            class="recipe-book-group"
-            :aria-expanded="isBookGroupExpanded(group.key)"
-            @click="toggleBookGroup(group.key)"
+            class="recipe-book-group-row"
           >
-            <v-icon>
-              {{ isBookGroupExpanded(group.key) ? $globals.icons.chevronDown : $globals.icons.chevronRight }}
-            </v-icon>
-            <v-icon>{{ group.bookId ? $globals.icons.book : $globals.icons.silverwareForkKnife }}</v-icon>
-            <strong>{{ group.title }}</strong>
-            <span>{{ group.recipes.length }}</span>
-          </button>
+            <button
+              type="button"
+              class="recipe-book-group"
+              :aria-expanded="isBookGroupExpanded(group.key)"
+              @click="toggleBookGroup(group.key)"
+            >
+              <v-icon>
+                {{ isBookGroupExpanded(group.key) ? $globals.icons.chevronDown : $globals.icons.chevronRight }}
+              </v-icon>
+              <v-icon>{{ group.bookId ? $globals.icons.book : $globals.icons.silverwareForkKnife }}</v-icon>
+              <strong>{{ group.title }}</strong>
+              <span>{{ group.recipes.length }}</span>
+            </button>
+            <div v-if="group.bookId" class="recipe-book-group-actions">
+              <v-btn
+                icon
+                size="small"
+                variant="text"
+                :title="$t('cookbook.rename-book')"
+                :aria-label="$t('cookbook.rename-book')"
+                @click="openBookRenameDialog(group.bookId)"
+              >
+                <v-icon>{{ $globals.icons.edit }}</v-icon>
+              </v-btn>
+              <v-btn
+                icon
+                size="small"
+                variant="text"
+                color="warning"
+                :title="$t('cookbook.delete-book-recipes')"
+                :aria-label="$t('cookbook.delete-book-recipes')"
+                @click="openBookRecipeDeleteDialog(group.bookId)"
+              >
+                <v-icon>{{ $globals.icons.broom }}</v-icon>
+              </v-btn>
+            </div>
+          </div>
           <v-expand-transition>
             <div v-show="!showBookGroups || isBookGroupExpanded(group.key)">
               <v-row v-if="!useMobileCards">
@@ -190,7 +316,14 @@
                     :extras="recipe.extras"
                     :last-made="recipe.lastMade"
                     :recipe-section="recipe.recipeSection"
+                    :show-in-recipes="recipe.showInRecipes"
+                    :show-in-book="recipe.showInBook"
+                    :show-in-sauce="recipe.showInSauce"
+                    :bulk-selection-mode="bulkDeleteMode"
+                    :bulk-selected="selectedRecipeSlugs.has(recipe.slug!)"
                     @delete="$emit('delete', $event)"
+                    @bulk-delete-requested="startBulkDelete"
+                    @toggle-bulk-selected="toggleBulkSelected"
                     @renamed="$emit('renamed', $event)"
                     @section-updated="loadRecipePage"
                   />
@@ -221,7 +354,14 @@
                     :extras="recipe.extras"
                     :last-made="recipe.lastMade"
                     :recipe-section="recipe.recipeSection"
+                    :show-in-recipes="recipe.showInRecipes"
+                    :show-in-book="recipe.showInBook"
+                    :show-in-sauce="recipe.showInSauce"
+                    :bulk-selection-mode="bulkDeleteMode"
+                    :bulk-selected="selectedRecipeSlugs.has(recipe.slug!)"
                     @delete="$emit('delete', $event)"
+                    @bulk-delete-requested="startBulkDelete"
+                    @toggle-bulk-selected="toggleBulkSelected"
                     @renamed="$emit('renamed', $event)"
                     @section-updated="loadRecipePage"
                   />
@@ -260,6 +400,7 @@ import type { RecipeSearchQuery } from "~/lib/api/user/recipes/recipe";
 import { useUserApi } from "~/composables/api/api-client";
 import type { UploadedBook } from "~/lib/api/types/uploaded-book";
 import { usePersistedListPageSize } from "~/composables/use-list-pagination";
+import { alert } from "~/composables/use-toast";
 
 const REPLACE_RECIPES_EVENT = "replaceRecipes";
 
@@ -323,6 +464,16 @@ const displayTitleIcon = computed(() => {
 
 const sortLoading = ref(false);
 const recipeMergeDialog = ref(false);
+const bookRenameDialog = ref(false);
+const bookRenameTarget = ref<UploadedBook | null>(null);
+const bookRecipeDeleteDialog = ref(false);
+const bookRecipeDeleteTarget = ref<UploadedBook | null>(null);
+const bulkDeleteMode = ref(false);
+const bulkDeleteDialog = ref(false);
+const bulkDeleteLoading = ref(false);
+const bulkDeleteShoppingLists = ref(true);
+const selectedRecipeSlugs = ref<Set<string>>(new Set());
+const selectedRecipeNames = ref<Map<string, string>>(new Map());
 const randomSeed = ref(Date.now().toString());
 
 const page = ref(1);
@@ -382,6 +533,15 @@ const recipeGroups = computed<RecipeBookGroup[]>(() => {
   return result;
 });
 const showBookGroups = computed(() => props.groupByBook && recipeGroups.value.length > 0);
+const allVisibleRecipesSelected = computed(() => {
+  return props.recipes.length > 0 && props.recipes.every(recipe => Boolean(recipe.slug) && selectedRecipeSlugs.value.has(recipe.slug!));
+});
+const selectedRecipeEntries = computed(() => {
+  return [...selectedRecipeSlugs.value].map(slug => ({
+    slug,
+    name: selectedRecipeNames.value.get(slug) || slug,
+  }));
+});
 
 watch(
   () => recipeGroups.value.map(group => group.key),
@@ -404,8 +564,12 @@ const router = useRouter();
 
 const queryFilter = computed(() => {
   const baseFilter = props.query?.queryFilter?.trim();
-  const safeSection = props.section.replaceAll("\"", "");
-  const sectionFilter = `recipe_section = "${safeSection}"`;
+  const membershipField = props.section === "book"
+    ? "show_in_book"
+    : props.section === "sauce"
+      ? "show_in_sauce"
+      : "show_in_recipes";
+  const sectionFilter = `${membershipField} = true`;
   return baseFilter ? `(${baseFilter}) AND (${sectionFilter})` : sectionFilter;
 
   // TODO: allow user to filter out null values when ordering by a value that may be null (such as lastMade)
@@ -482,6 +646,116 @@ function toggleBookGroup(key: string) {
   expandedBookGroups.value = next;
 }
 
+function uploadedBookById(bookId: string) {
+  return uploadedBooks.value.find(book => book.id === bookId) || null;
+}
+
+function openBookRenameDialog(bookId: string) {
+  bookRenameTarget.value = uploadedBookById(bookId);
+  bookRenameDialog.value = Boolean(bookRenameTarget.value);
+}
+
+function openBookRecipeDeleteDialog(bookId: string) {
+  bookRecipeDeleteTarget.value = uploadedBookById(bookId);
+  bookRecipeDeleteDialog.value = Boolean(bookRecipeDeleteTarget.value);
+}
+
+function handleBookRenamed(book: UploadedBook) {
+  const index = uploadedBooks.value.findIndex(item => item.id === book.id);
+  if (index >= 0) uploadedBooks.value[index] = book;
+  bookRenameTarget.value = null;
+}
+
+async function handleBookRecipesDeleted(bookId: string, _deletedCount: number, remainingCount: number) {
+  const book = uploadedBookById(bookId);
+  if (book) book.extractionRecipesCreated = remainingCount;
+  bookRecipeDeleteTarget.value = null;
+  window.dispatchEvent(new CustomEvent("mealie:organizers-updated"));
+  await loadRecipePage();
+}
+
+function setBulkSelected(slug: string, selected: boolean) {
+  const nextSlugs = new Set(selectedRecipeSlugs.value);
+  const nextNames = new Map(selectedRecipeNames.value);
+  if (selected) {
+    nextSlugs.add(slug);
+    const recipe = props.recipes.find(item => item.slug === slug);
+    nextNames.set(slug, recipe?.name || slug);
+  }
+  else {
+    nextSlugs.delete(slug);
+    nextNames.delete(slug);
+  }
+  selectedRecipeSlugs.value = nextSlugs;
+  selectedRecipeNames.value = nextNames;
+}
+
+function startBulkDelete(slug: string) {
+  bulkDeleteMode.value = true;
+  setBulkSelected(slug, true);
+}
+
+function toggleBulkSelected(slug: string) {
+  setBulkSelected(slug, !selectedRecipeSlugs.value.has(slug));
+}
+
+function selectAllVisibleRecipes() {
+  const nextSlugs = new Set(selectedRecipeSlugs.value);
+  const nextNames = new Map(selectedRecipeNames.value);
+  for (const recipe of props.recipes) {
+    if (!recipe.slug) continue;
+    nextSlugs.add(recipe.slug);
+    nextNames.set(recipe.slug, recipe.name || recipe.slug);
+  }
+  selectedRecipeSlugs.value = nextSlugs;
+  selectedRecipeNames.value = nextNames;
+}
+
+function clearBulkSelection() {
+  selectedRecipeSlugs.value = new Set();
+  selectedRecipeNames.value = new Map();
+}
+
+function cancelBulkDelete() {
+  bulkDeleteDialog.value = false;
+  bulkDeleteMode.value = false;
+  bulkDeleteShoppingLists.value = true;
+  clearBulkSelection();
+}
+
+function openBulkDeleteDialog() {
+  if (!selectedRecipeSlugs.value.size) return;
+  bulkDeleteShoppingLists.value = true;
+  bulkDeleteDialog.value = true;
+}
+
+async function deleteSelectedRecipes() {
+  if (!selectedRecipeSlugs.value.size || bulkDeleteLoading.value) return;
+
+  bulkDeleteLoading.value = true;
+  const slugs = [...selectedRecipeSlugs.value];
+  try {
+    const { error } = await api.bulk.bulkDelete({
+      recipes: slugs,
+      deleteShoppingLists: bulkDeleteShoppingLists.value,
+    });
+    if (error) {
+      alert.error(i18n.t("recipe.bulk-delete-failed"));
+      return;
+    }
+
+    const remainingCount = Math.max(0, totalRecipes.value - slugs.length);
+    page.value = Math.min(page.value, Math.max(1, Math.ceil(remainingCount / perPage.value)));
+    cancelBulkDelete();
+    window.dispatchEvent(new CustomEvent("mealie:organizers-updated"));
+    await loadRecipePage();
+    alert.success(i18n.t("recipe.bulk-delete-success", { count: slugs.length }));
+  }
+  finally {
+    bulkDeleteLoading.value = false;
+  }
+}
+
 let lastQuery: string | undefined = JSON.stringify(props.query);
 watch(
   () => props.query,
@@ -505,6 +779,7 @@ watch(
 );
 
 async function initRecipes() {
+  cancelBulkDelete();
   if (preferences.value.orderBy === "random") {
     randomSeed.value = Date.now().toString();
   }
@@ -638,20 +913,29 @@ function toggleMobileCards() {
   opacity: 1;
 }
 
-.recipe-book-group {
+.recipe-book-group-row {
   align-items: center;
   background: rgb(var(--v-theme-surface));
-  border: 0;
   border-block: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  display: flex;
+  margin: 12px 0 4px;
+  min-height: 44px;
+  width: 100%;
+}
+
+.recipe-book-group {
+  align-items: center;
+  background: transparent;
+  border: 0;
   color: inherit;
   cursor: pointer;
   display: flex;
+  flex: 1 1 auto;
   gap: 8px;
-  margin: 12px 0 4px;
   min-height: 44px;
   padding: 8px 4px;
   text-align: start;
-  width: 100%;
+  width: auto;
 }
 
 .recipe-book-group:hover,
@@ -662,5 +946,23 @@ function toggleMobileCards() {
 .recipe-book-group span {
   color: rgb(var(--v-theme-on-surface-variant));
   margin-inline-start: auto;
+}
+
+.recipe-book-group-actions {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  padding-inline: 2px;
+}
+
+.recipe-bulk-selection-bar {
+  position: sticky;
+  top: 8px;
+  z-index: 9;
+}
+
+.recipe-bulk-delete-preview {
+  max-height: min(320px, 45vh);
+  overflow-y: auto;
 }
 </style>

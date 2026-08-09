@@ -125,6 +125,9 @@ class RecipeSummary(MealieModel):
     slug: Annotated[str, Field(validate_default=True)] = ""
     image: Any | None = None
     recipe_section: Literal["recipes", "book", "sauce"] = "recipes"
+    show_in_recipes: bool = True
+    show_in_book: bool = False
+    show_in_sauce: bool = False
     recipe_servings: float = 0
     recipe_yield_quantity: float = 0
     recipe_yield: str | None = None
@@ -400,7 +403,7 @@ class Recipe(RecipeSummary):
 
 
 class RecipeLastMade(BaseModel):
-    timestamp: datetime.datetime
+    timestamp: datetime.datetime | None
 
 
 from mealie.schema.recipe.recipe_ingredient import RecipeIngredient  # noqa: E402

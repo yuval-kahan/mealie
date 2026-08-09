@@ -25,6 +25,7 @@
   "mode": {
     "auto": "Automatic detection",
     "recipe": "Extract recipe",
+    "sauce": "Extract sauce only",
     "article": "Extract article"
   },
   "options": {
@@ -38,6 +39,7 @@
     "extract-only": "Extract only",
     "send-auto": "Detect and send to AI",
     "send-recipe": "Send recipe to AI",
+    "send-sauce": "Send sauce to AI",
     "send-article": "Send article to AI",
     "save-website": "Save website",
     "save-restaurant": "Save restaurant",
@@ -89,6 +91,7 @@
     "extracting-and-sending": "Extracting content and sending it to Mealie...",
     "processing-article": "Extracting the article and sending it to Mealie...",
     "processing-recipe": "Extracting the recipe and sending it to Mealie...",
+    "processing-sauce": "Extracting only the sauce and sending it to Mealie...",
     "processing-auto": "Extracting the page, detecting its content type, and sending it to Mealie...",
     "article-created": "Article created: {title}",
     "recipe-created": "Recipe created: {name}",

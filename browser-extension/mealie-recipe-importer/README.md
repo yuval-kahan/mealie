@@ -22,7 +22,7 @@ Why this exists:
 2. Click the Mealie AI extension button.
 3. Set the Mealie URL, usually `http://localhost:9925` for this fork.
 4. Make sure you are logged in to Mealie in the same browser.
-5. Choose whether to auto-detect the page type, extract a recipe, or extract an article.
+5. Choose whether to auto-detect the page type, extract a full recipe, extract only a sauce, or extract an article.
 6. Keep the interface language on **Automatic** to follow the Mealie site language, with the browser language as a fallback, or select one of Mealie's existing 42 locales.
 7. Choose a target translation language from the same locales supported by Mealie.
 8. Choose whether to create a shopping list, organize it with AI, and add AI tips / ingredient-variety notes.
@@ -66,7 +66,7 @@ or, for restaurant pages:
 
 `POST /api/households/restaurants/browser-page`
 
-The recipe endpoint creates a recipe from extracted page text and can optionally create an AI-organized shopping list.
+The recipe endpoint creates a recipe from extracted page text and can optionally create an AI-organized shopping list. In **Sauce only** mode, the same endpoint extracts only a sauce, dressing, glaze, marinade, dip, gravy, or liquid accompaniment and saves it directly in the independent sauces library.
 
 The article endpoint creates an article from extracted page text, translates it when needed, adds categories/tags, and can also create a recipe and AI-organized shopping list when the article includes a complete recipe. When a page is only a recipe, the article endpoint can create only the recipe instead of saving a fake article. The auto-detect mode uses this article endpoint so the AI can classify the page.
 

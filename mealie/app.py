@@ -141,6 +141,7 @@ async def start_scheduler():
     )
 
     SchedulerRegistry.register_hourly(
+        tasks.create_automatic_backup,
         tasks.locked_user_reset,
     )
 

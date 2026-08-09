@@ -165,7 +165,13 @@ class EquipmentController(BaseUserController):
             except (ValueError, httpx.HTTPError):
                 self.logger.warning("Could not find a public image for tool %s", tool.name)
 
-    async def _save_best_image(self, tool: Tool, preferred_query: str | None = None) -> None:
+    async def _save_best_image(
+        self,
+        tool: Tool,
+        preferred_query: str | None = None,
+        *,
+        verify_with_ai: bool = False,
+    ) -> None:
         context = " ".join(
             part
             for part in (
@@ -178,6 +184,7 @@ class EquipmentController(BaseUserController):
         source_url = await self.item_image_service.find_and_replace(
             ItemImageRequest("tool", tool.name, context or None),
             preferred_query=preferred_query,
+            verify_with_ai=verify_with_ai,
         )
         if not source_url:
             raise ValueError("No usable equipment image was found")
@@ -297,7 +304,7 @@ class EquipmentController(BaseUserController):
     async def find_image(self, tool_id: UUID4) -> EquipmentOut:
         tool = self._get_or_404(tool_id)
         try:
-            await self._save_best_image(tool)
+            await self._save_best_image(tool, verify_with_ai=True)
         except (ValueError, httpx.HTTPError) as error:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ErrorResponse.respond(str(error))) from error
         return self._to_out(self._get_or_404(tool.id))

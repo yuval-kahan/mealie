@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import ForeignKey, String, Text, orm
+from sqlalchemy import ForeignKey, Integer, String, Text, orm
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .._model_base import BaseMixins, FilterableColumn, SqlAlchemyBase
@@ -46,6 +46,7 @@ class ProductKnowledge(SqlAlchemyBase, BaseMixins):
     image_source_url: FilterableColumn[str | None] = mapped_column(String(2000), nullable=True)
     categories_json: FilterableColumn[str] = mapped_column(Text, nullable=False, default="[]")
     tags_json: FilterableColumn[str] = mapped_column(Text, nullable=False, default="[]")
+    quality_rating: FilterableColumn[int | None] = mapped_column(Integer, nullable=True)
 
     @auto_init()
     def __init__(self, **_) -> None:

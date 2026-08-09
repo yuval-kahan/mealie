@@ -94,7 +94,7 @@
   </BaseDialog>
   <BaseDialog
     v-model="recipeSectionDialog"
-    :title="$t('recipe.move-to-section')"
+    :title="$t('recipe.show-in-sections')"
     :icon="$globals.icons.folderOutline"
     :submit-text="$t('general.save')"
     :submit-icon="$globals.icons.save"
@@ -103,11 +103,39 @@
     @submit="moveRecipeToSection()"
   >
     <v-card-text>
-      <v-radio-group v-model="selectedRecipeSection" hide-details>
-        <v-radio :label="$t('recipe.section-recipes')" value="recipes" />
-        <v-radio :label="$t('recipe.section-book')" value="book" />
-        <v-radio :label="$t('recipe.section-sauce')" value="sauce" />
-      </v-radio-group>
+      <p class="mb-2 text-medium-emphasis">
+        {{ $t("recipe.show-in-sections-description") }}
+      </p>
+      <v-checkbox
+        v-model="selectedRecipeSections"
+        :label="$t('recipe.section-recipes')"
+        value="recipes"
+        density="compact"
+        hide-details
+      />
+      <v-checkbox
+        v-model="selectedRecipeSections"
+        :label="$t('recipe.section-book')"
+        value="book"
+        density="compact"
+        hide-details
+      />
+      <v-checkbox
+        v-model="selectedRecipeSections"
+        :label="$t('recipe.section-sauce')"
+        value="sauce"
+        density="compact"
+        hide-details
+      />
+      <v-alert
+        v-if="!selectedRecipeSections.length"
+        type="warning"
+        variant="tonal"
+        density="compact"
+        class="mt-3"
+      >
+        {{ $t("recipe.select-at-least-one-section") }}
+      </v-alert>
     </v-card-text>
   </BaseDialog>
   <BaseDialog
@@ -267,7 +295,7 @@
     density="compact"
     class="recipe-context-menu-list"
   >
-    <v-list-item v-for="(item, index) in menuItems" :key="index" @click="contextMenuEventHandler(item.event)">
+    <v-list-item v-for="(item, index) in menuItems" :key="index" @click.stop="contextMenuEventHandler(item.event)">
       <template #prepend>
         <v-icon :color="item.color">
           {{ item.icon }}
@@ -277,7 +305,7 @@
     </v-list-item>
     <div v-if="useItems.recipeActions && recipeActions && recipeActions.length">
       <v-divider />
-      <v-list-item v-for="(action, index) in recipeActions" :key="index" @click="executeRecipeAction(action)">
+      <v-list-item v-for="(action, index) in recipeActions" :key="index" @click.stop="executeRecipeAction(action)">
         <template #prepend>
           <v-icon color="undefined">
             {{ $globals.icons.linkVariantPlus }}
@@ -371,7 +399,11 @@ interface Props {
   recipeScale?: number;
   redirectOnDelete?: boolean;
   recipeSection?: string;
+  showInRecipes?: boolean;
+  showInBook?: boolean;
+  showInSauce?: boolean;
   lastMade?: string | null;
+  bulkDelete?: boolean;
 }
 const props = withDefaults(defineProps<Props>(), {
   useItems: () => ({
@@ -407,16 +439,21 @@ const props = withDefaults(defineProps<Props>(), {
   recipeScale: 1,
   redirectOnDelete: true,
   recipeSection: "recipes",
+  showInRecipes: undefined,
+  showInBook: undefined,
+  showInSauce: undefined,
   lastMade: null,
+  bulkDelete: false,
 });
 
 const emit = defineEmits<{
   [key: string]: any;
   deleted: [slug: string];
+  deleteRequested: [slug: string];
   renamed: [{ slug: string; name: string; recipe?: Recipe }];
   imageUpdated: [{ slug: string; image: string }];
   sectionUpdated: [{ slug: string; recipeSection: string }];
-  made: [{ slug: string; lastMade: string }];
+  made: [{ slug: string; lastMade: string | null }];
   print: [];
 }>();
 
@@ -436,7 +473,7 @@ const shoppingWebsiteLinksDialog = ref(false);
 const recipeDuplicateDialog = ref(false);
 const recipeRenameDialog = ref(false);
 const recipeSectionDialog = ref(false);
-const selectedRecipeSection = ref(props.recipeSection || "recipes");
+const selectedRecipeSections = ref<Array<"recipes" | "book" | "sauce">>([]);
 const recipeSectionLoading = ref(false);
 const aiEditDialog = ref(false);
 const aiEditInstruction = ref("");
@@ -458,6 +495,7 @@ const recipeRenameName = ref(props.name);
 const ratingModel = ref(props.rating ?? 0);
 const loading = ref(false);
 const menuItems = ref<ContextMenuItem[]>([]);
+const menuLastMade = ref<string | null>(props.lastMade ?? props.recipe?.lastMade ?? null);
 const newMealdate = ref(new Date());
 const newMealType = ref<PlanEntryType>("dinner");
 
@@ -628,9 +666,9 @@ const defaultItems: { [key: string]: ContextMenuItem } = {
     isPublic: false,
   },
   markDone: {
-    title: i18n.t("recipe.mark-as-done"),
-    icon: $globals.icons.checkBold,
-    color: "success",
+    title: i18n.t(menuLastMade.value ? "recipe.mark-as-not-done" : "recipe.mark-as-done"),
+    icon: menuLastMade.value ? $globals.icons.undo : $globals.icons.checkBold,
+    color: menuLastMade.value ? undefined : "success",
     event: "markDone",
     isPublic: false,
   },
@@ -684,6 +722,23 @@ for (const [key, value] of Object.entries(props.useItems)) {
     menuItems.value.push(item);
   }
 }
+
+function syncMarkDoneMenuItem() {
+  const item = menuItems.value.find(menuItem => menuItem.event === "markDone");
+  if (!item) return;
+
+  item.title = i18n.t(menuLastMade.value ? "recipe.mark-as-not-done" : "recipe.mark-as-done");
+  item.icon = menuLastMade.value ? $globals.icons.undo : $globals.icons.checkBold;
+  item.color = menuLastMade.value ? undefined : "success";
+}
+
+watch(
+  () => props.lastMade,
+  (lastMade) => {
+    menuLastMade.value = lastMade ?? null;
+    syncMarkDoneMenuItem();
+  },
+);
 
 async function getShoppingLists() {
   const { data } = await api.shopping.lists.getAll(1, -1, { orderBy: "name", orderDirection: "asc" });
@@ -818,7 +873,7 @@ async function renameRecipe() {
 }
 
 async function moveRecipeToSection() {
-  if (recipeSectionLoading.value) return;
+  if (recipeSectionLoading.value || !selectedRecipeSections.value.length) return;
   recipeSectionLoading.value = true;
   try {
     if (!recipeRef.value) await refreshRecipe();
@@ -827,9 +882,16 @@ async function moveRecipeToSection() {
       return;
     }
 
+    const currentPrimary = recipeRef.value.recipeSection || props.recipeSection || "recipes";
+    const primarySection = selectedRecipeSections.value.includes(currentPrimary as "recipes" | "book" | "sauce")
+      ? currentPrimary
+      : selectedRecipeSections.value[0];
     const { data, error } = await api.recipes.updateOne(props.slug, {
       ...recipeRef.value,
-      recipeSection: selectedRecipeSection.value,
+      recipeSection: primarySection,
+      showInRecipes: selectedRecipeSections.value.includes("recipes"),
+      showInBook: selectedRecipeSections.value.includes("book"),
+      showInSauce: selectedRecipeSections.value.includes("sauce"),
     });
     if (error || !data) {
       alert.error(i18n.t("events.something-went-wrong"));
@@ -839,7 +901,7 @@ async function moveRecipeToSection() {
     recipeRef.value = data;
     recipeSectionDialog.value = false;
     alert.success(i18n.t("recipe.recipe-moved"));
-    emit("sectionUpdated", { slug: props.slug, recipeSection: selectedRecipeSection.value });
+    emit("sectionUpdated", { slug: props.slug, recipeSection: primarySection });
     window.dispatchEvent(new CustomEvent("mealie:recipes-updated"));
   }
   finally {
@@ -848,15 +910,20 @@ async function moveRecipeToSection() {
 }
 
 async function markRecipeDone() {
-  const timestamp = new Date().toISOString();
+  const timestamp = menuLastMade.value ? null : new Date().toISOString();
   const { data, error } = await api.recipes.updateLastMade(props.slug, timestamp);
   if (error || !data) {
     alert.error(i18n.t("events.something-went-wrong"));
     return;
   }
 
-  alert.success(i18n.t("recipe.marked-as-done"));
-  emit("made", { slug: props.slug, lastMade: data.lastMade || timestamp });
+  menuLastMade.value = timestamp;
+  if (recipeRef.value) {
+    recipeRef.value.lastMade = timestamp;
+  }
+  syncMarkDoneMenuItem();
+  alert.success(i18n.t(timestamp ? "recipe.marked-as-done" : "recipe.marked-as-not-done"));
+  emit("made", { slug: props.slug, lastMade: timestamp });
 }
 
 async function copyRecipe() {
@@ -1122,6 +1189,10 @@ async function saveAIEdit() {
 // eslint-disable-next-line @typescript-eslint/no-invalid-void-type
 const eventHandlers: { [key: string]: () => void | Promise<any> } = {
   delete: () => {
+    if (props.bulkDelete) {
+      emit("deleteRequested", props.slug);
+      return;
+    }
     void openDeleteDialog();
   },
   edit: () => router.push(`/g/${groupSlug.value}/r/${props.slug}` + "?edit=true"),
@@ -1152,7 +1223,20 @@ const eventHandlers: { [key: string]: () => void | Promise<any> } = {
     imageUploadDialog.value = true;
   },
   section: () => {
-    selectedRecipeSection.value = recipeRef.value?.recipeSection || props.recipeSection || "recipes";
+    const recipe = recipeRef.value;
+    const hasExplicitMembership = recipe?.showInRecipes !== undefined
+      || recipe?.showInBook !== undefined
+      || recipe?.showInSauce !== undefined
+      || props.showInRecipes !== undefined
+      || props.showInBook !== undefined
+      || props.showInSauce !== undefined;
+    selectedRecipeSections.value = hasExplicitMembership
+      ? [
+          ...((recipe?.showInRecipes ?? props.showInRecipes) ? ["recipes" as const] : []),
+          ...((recipe?.showInBook ?? props.showInBook) ? ["book" as const] : []),
+          ...((recipe?.showInSauce ?? props.showInSauce) ? ["sauce" as const] : []),
+        ]
+      : [(recipe?.recipeSection || props.recipeSection || "recipes") as "recipes" | "book" | "sauce"];
     recipeSectionDialog.value = true;
   },
   markDone: markRecipeDone,

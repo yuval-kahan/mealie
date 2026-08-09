@@ -83,6 +83,7 @@ class ProductKnowledgeController(BaseUserController):
             image_version=str(image_stat.st_mtime_ns) if image_stat else None,
             categories=json.loads(item.categories_json or "[]"),
             tags=json.loads(item.tags_json or "[]"),
+            quality_rating=item.quality_rating,
             created_at=item.created_at,
             updated_at=item.updated_at,
         )
@@ -113,6 +114,7 @@ class ProductKnowledgeController(BaseUserController):
         item.source = (data.source or "").strip() or None
         item.categories_json = json.dumps(normalize_terms(data.categories), ensure_ascii=False)
         item.tags_json = json.dumps(normalize_terms(data.tags), ensure_ascii=False)
+        item.quality_rating = data.quality_rating
 
     def _create(self, data: ProductKnowledgeCreate) -> ProductKnowledgeOut:
         item = ProductKnowledge(
@@ -199,6 +201,7 @@ class ProductKnowledgeController(BaseUserController):
                 source=response.source or None,
                 categories=response.categories,
                 tags=response.tags,
+                quality_rating=None,
             )
         )
         if response.image_search_query.strip():

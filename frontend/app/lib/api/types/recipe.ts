@@ -116,6 +116,7 @@ export interface CreateRecipeByUrlBulk {
 }
 export interface DeleteRecipes {
   recipes: string[];
+  deleteShoppingLists?: boolean;
 }
 export interface ExportBase {
   recipes: string[];
@@ -235,6 +236,9 @@ export interface Recipe {
   slug?: string;
   image?: unknown;
   recipeSection?: string;
+  showInRecipes?: boolean;
+  showInBook?: boolean;
+  showInSauce?: boolean;
   recipeServings?: number;
   recipeYieldQuantity?: number;
   recipeYield?: string | null;
@@ -322,6 +326,9 @@ export interface RecipeSummary {
   slug?: string;
   image?: unknown;
   recipeSection?: string;
+  showInRecipes?: boolean;
+  showInBook?: boolean;
+  showInSauce?: boolean;
   recipeServings?: number;
   recipeYieldQuantity?: number;
   recipeYield?: string | null;
@@ -374,7 +381,7 @@ export interface RecipeIngredientBase {
   display?: string;
 }
 export interface RecipeLastMade {
-  timestamp: string;
+  timestamp: string | null;
 }
 export interface RecipeShareToken {
   recipeId: string;

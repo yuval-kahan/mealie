@@ -27,6 +27,15 @@
           :label="$t('shopping-list.new-list')"
           :placeholder="selectedCreateRecipe?.name || $t('shopping-list.new-list')"
         />
+        <v-select
+          v-model="state.createKind"
+          :items="shoppingListKindOptions"
+          item-title="title"
+          item-value="value"
+          :label="$t('shopping-list.list-kind')"
+          variant="outlined"
+          density="comfortable"
+        />
         <v-autocomplete
           v-model="state.createRecipeSlug"
           v-model:search="state.createRecipeSearch"
@@ -129,6 +138,15 @@
           autofocus
           :label="$t('shopping-list.list-name')"
           @keyup.enter="renameOne"
+        />
+        <v-select
+          v-model="state.renameKind"
+          :items="shoppingListKindOptions"
+          item-title="title"
+          item-value="value"
+          :label="$t('shopping-list.list-kind')"
+          variant="outlined"
+          density="comfortable"
         />
       </v-card-text>
     </BaseDialog>
@@ -262,6 +280,16 @@
         clearable
         :label="$t('shopping-list.search-shopping-lists')"
         :prepend-inner-icon="$globals.icons.search"
+      />
+      <v-select
+        v-model="shoppingListKindFilter"
+        class="shopping-list-kind-filter"
+        :items="shoppingListKindFilterOptions"
+        item-title="title"
+        item-value="value"
+        :label="$t('shopping-list.list-kind')"
+        density="compact"
+        hide-details
       />
       <v-menu :close-on-content-click="false">
         <template #activator="{ props: menuProps }">
@@ -414,6 +442,14 @@
                 class="shopping-list-merged-chip"
               >
                 {{ $t("shopping-list.merged-list") }}
+              </v-chip>
+              <v-chip
+                size="small"
+                color="secondary"
+                variant="tonal"
+                :prepend-icon="shoppingListKindIcon(list.listKind)"
+              >
+                {{ shoppingListKindLabel(list.listKind) }}
               </v-chip>
               <v-chip
                 v-if="isShoppingListGroceriesReady(list)"
@@ -704,7 +740,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ShoppingListItemOut, ShoppingListOut } from "~/lib/api/types/household";
+import type { ShoppingListItemOut, ShoppingListKind, ShoppingListOut } from "~/lib/api/types/household";
 import type { Recipe } from "~/lib/api/types/recipe";
 import ItemImageThumb from "~/components/Domain/ItemImages/ItemImageThumb.vue";
 import { useStaticRoutes } from "~/composables/api";
@@ -724,6 +760,7 @@ import LinkedResourcesButton from "~/components/Domain/LinkedResources/LinkedRes
 
 const auth = useMealieAuth();
 const i18n = useI18n();
+const { $globals } = useNuxtApp();
 const ready = ref(false);
 const userApi = useUserApi();
 const route = useRoute();
@@ -741,6 +778,7 @@ const updatingInlineShoppingListItemIds = ref<Set<string>>(new Set());
 const inlineShoppingListItemDrafts = ref<Record<string, string>>({});
 const expandedShoppingLists = ref<Record<string, ShoppingListOut>>({});
 const shoppingListSearch = ref("");
+const shoppingListKindFilter = ref<"all" | ShoppingListKind>("all");
 const mergeListSearch = ref("");
 const bulkDeleteListSearch = ref("");
 const shoppingWebsiteLinksDialog = ref(false);
@@ -775,6 +813,25 @@ const shoppingListSortOptions = computed(() => [
   { title: i18n.t("general.name"), value: "name" },
   { title: i18n.t("shopping-list.item-count"), value: "itemCount" },
 ]);
+const shoppingListKindOptions = computed<{ title: string; value: ShoppingListKind }[]>(() => [
+  { title: i18n.t("shopping-list.kind-shopping"), value: "shopping" },
+  { title: i18n.t("shopping-list.kind-products"), value: "products" },
+  { title: i18n.t("shopping-list.kind-tools"), value: "tools" },
+]);
+const shoppingListKindFilterOptions = computed(() => [
+  { title: i18n.t("shopping-list.all-list-kinds"), value: "all" as const },
+  ...shoppingListKindOptions.value,
+]);
+
+function shoppingListKindLabel(kind?: ShoppingListKind) {
+  return i18n.t(`shopping-list.kind-${kind || "shopping"}`);
+}
+
+function shoppingListKindIcon(kind?: ShoppingListKind) {
+  if (kind === "tools") return $globals.icons.tools;
+  if (kind === "products") return $globals.icons.foods;
+  return $globals.icons.cartCheck;
+}
 const mergedPlacementOptions = computed(() => [
   { title: i18n.t("shopping-list.merged-sort-normal"), value: "normal" },
   { title: i18n.t("shopping-list.merged-sort-first"), value: "first" },
@@ -787,6 +844,7 @@ const mergedPriorityOptions = computed(() => [
 
 const state = reactive({
   createName: "",
+  createKind: "shopping" as ShoppingListKind,
   createRecipeSlug: null as string | null,
   createRecipeSearch: "",
   createRecipeSearching: false,
@@ -796,6 +854,7 @@ const state = reactive({
   deleteTarget: "",
   renameDialog: false,
   renameName: "",
+  renameKind: "shopping" as ShoppingListKind,
   renameTarget: null as ShoppingListOut | null,
   mergeDialog: false,
   mergeLoading: false,
@@ -868,6 +927,9 @@ const shoppingListChoices = computed(() => {
   const search = shoppingListSearch.value.trim().toLocaleLowerCase();
   const matches = availableShoppingLists.value.filter((list) => {
     if (mergedSourceIds.value.has(list.id)) {
+      return false;
+    }
+    if (shoppingListKindFilter.value !== "all" && (list.listKind || "shopping") !== shoppingListKindFilter.value) {
       return false;
     }
     if (!search) {
@@ -1643,6 +1705,7 @@ function resetCreateShoppingListDialog() {
   }
   createRecipeSearchRequest += 1;
   state.createName = "";
+  state.createKind = "shopping";
   state.createRecipeSlug = null;
   state.createRecipeSearch = "";
   state.createRecipeSearching = false;
@@ -1746,7 +1809,7 @@ async function createOne() {
       return;
     }
 
-    const { data } = await userApi.shopping.lists.createOne({ name });
+    const { data } = await userApi.shopping.lists.createOne({ name, listKind: state.createKind });
 
     if (data) {
       if (recipeSlug) {
@@ -1766,6 +1829,7 @@ async function createOne() {
 function openRename(list: ShoppingListOut) {
   state.renameTarget = list;
   state.renameName = list.name || "";
+  state.renameKind = list.listKind || "shopping";
   state.renameDialog = true;
 }
 
@@ -1776,7 +1840,7 @@ async function renameOne() {
     return;
   }
 
-  if ((target.name || "").trim() === name) {
+  if ((target.name || "").trim() === name && (target.listKind || "shopping") === state.renameKind) {
     state.renameDialog = false;
     return;
   }
@@ -1795,7 +1859,11 @@ async function renameOne() {
     return;
   }
 
-  const { data } = await userApi.shopping.lists.updateOne(target.id, { ...fullList, name });
+  const { data } = await userApi.shopping.lists.updateOne(target.id, {
+    ...fullList,
+    name,
+    listKind: state.renameKind,
+  });
   if (!data) {
     alert.error(i18n.t("shopping-list.rename-shopping-list-failed"));
     return;
@@ -1804,6 +1872,7 @@ async function renameOne() {
   state.renameDialog = false;
   state.renameTarget = null;
   state.renameName = "";
+  state.renameKind = "shopping";
   updateAvailabilityForListName(target.name, false);
   updateAvailabilityForListName(data.name, isShoppingListGroceriesReady(data));
   window.dispatchEvent(new CustomEvent("mealie:organizers-updated"));
@@ -1906,6 +1975,11 @@ async function deleteOne() {
   margin-inline-end: auto;
   max-width: 420px;
   min-width: 220px;
+}
+
+.shopping-list-kind-filter {
+  flex: 0 1 220px;
+  min-width: 190px;
 }
 
 .shopping-list-sort-menu {

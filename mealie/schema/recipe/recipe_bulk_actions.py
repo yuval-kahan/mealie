@@ -30,4 +30,4 @@ class AssignSettings(ExportBase):
 
 
 class DeleteRecipes(ExportBase):
-    pass
+    delete_shopping_lists: bool = False

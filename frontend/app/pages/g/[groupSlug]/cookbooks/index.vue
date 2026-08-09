@@ -214,6 +214,12 @@
       @deleted="handleBookRecipesDeleted"
     />
 
+    <UploadedBookRenameDialog
+      v-model="bookRenameDialog"
+      :book="bookRenameTarget"
+      @renamed="handleBookRenamed"
+    />
+
     <BaseDialog
       v-model="bookExtractionDialog"
       :title="$t('cookbook.extract-recipes-with-ai')"
@@ -927,6 +933,14 @@
                 </v-btn>
                 <v-spacer />
                 <v-btn
+                  icon
+                  variant="text"
+                  :title="$t('cookbook.rename-book')"
+                  @click="openBookRenameDialog(book)"
+                >
+                  <v-icon :icon="$globals.icons.edit" />
+                </v-btn>
+                <v-btn
                   v-if="isGeneratedBook(book)"
                   icon
                   variant="text"
@@ -1127,6 +1141,8 @@ const uploadedBookDeleteRecipes = ref(false);
 const uploadedBookDeleteShoppingLists = ref(false);
 const bookRecipeDeleteDialog = ref(false);
 const bookRecipeDeleteTarget = ref<UploadedBook | null>(null);
+const bookRenameDialog = ref(false);
+const bookRenameTarget = ref<UploadedBook | null>(null);
 const bookExtractionDialog = ref(false);
 const bookExtractionTarget = ref<UploadedBook | null>(null);
 const bookExtractionStarting = ref(false);
@@ -1551,6 +1567,17 @@ async function confirmUploadedBookDelete(book: UploadedBook) {
 function openBookRecipeDeleteDialog(book: UploadedBook) {
   bookRecipeDeleteTarget.value = bookRecipeSource(book) || book;
   bookRecipeDeleteDialog.value = true;
+}
+
+function openBookRenameDialog(book: UploadedBook) {
+  bookRenameTarget.value = book;
+  bookRenameDialog.value = true;
+}
+
+function handleBookRenamed(book: UploadedBook) {
+  const index = uploadedBooks.value.findIndex(item => item.id === book.id);
+  if (index >= 0) uploadedBooks.value[index] = book;
+  bookRenameTarget.value = null;
 }
 
 function openBookExtractionDialog(book: UploadedBook) {

@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path as FileSystemPath
 from shutil import copyfileobj, rmtree
 from tempfile import mkdtemp
+from typing import Literal
 from uuid import UUID, uuid4
 
 import orjson
@@ -140,6 +141,7 @@ class CreateRecipeFromText(MealieModel):
     include_mise_en_place: bool = True
     auto_image: bool = True
     include_item_images: bool = True
+    recipe_section: Literal["recipes", "sauce"] = "recipes"
 
 
 class RecipeIngredientsAdjustWithAIRequest(MealieModel):
@@ -175,6 +177,11 @@ class RecipeMergeResponse(MealieModel):
     recipe: Recipe
     source_count: int
     archived_source_count: int
+    shopping_list_id: UUID4 | None = None
+    shopping_list_name: str | None = None
+    shopping_list_created: bool = False
+    shopping_list_organized: bool = False
+    shopping_list_error: str | None = None
 
 
 class RecipeMergeUndoResponse(MealieModel):
@@ -539,6 +546,7 @@ class RecipeController(BaseRecipeController):
                     on_progress=on_progress,
                     use_openai=use_openai,
                     target_language=req.translate_language,
+                    recipe_section=req.recipe_section,
                 )
                 slug = self._finish_recipe_from_web(req, recipe, extras)
                 await queue.put(
@@ -569,6 +577,7 @@ class RecipeController(BaseRecipeController):
                     await task
 
     def _finish_recipe_from_web(self, req: ScrapeRecipe | ScrapeRecipeData, recipe: Recipe, extras: object) -> str:
+        recipe = self.service._apply_primary_library_membership(recipe, req.recipe_section)
         if req.include_tags:
             ctx = ScraperContext(self.repos)
             recipe.tags = extras.use_tags(ctx)  # type: ignore
@@ -706,6 +715,7 @@ class RecipeController(BaseRecipeController):
         include_ai_tips: bool = Query(True, alias="includeAiTips"),
         include_mise_en_place: bool = Query(True, alias="includeMiseEnPlace"),
         include_item_images: bool = Query(True, alias="includeItemImages"),
+        recipe_section: Literal["recipes", "sauce"] = Query("recipes", alias="recipeSection"),
     ):
         """
         Create a recipe from an image using OpenAI.
@@ -725,6 +735,7 @@ class RecipeController(BaseRecipeController):
                 include_ai_tips,
                 notes,
                 include_mise_en_place=include_mise_en_place,
+                recipe_section=recipe_section,
             )
         except exceptions.NotARecipe as e:
             raise HTTPException(
@@ -779,6 +790,7 @@ class RecipeController(BaseRecipeController):
                 include_ai_tips=data.include_ai_tips,
                 include_mise_en_place=data.include_mise_en_place,
                 auto_image=data.auto_image,
+                recipe_section=data.recipe_section,
             )
             if data.include_item_images:
                 await self._ensure_recipe_item_images(recipe)
@@ -845,6 +857,7 @@ class RecipeController(BaseRecipeController):
                 data.include_ai_tips,
                 include_mise_en_place=data.include_mise_en_place,
                 auto_image=not data.image_url,
+                recipe_section=data.recipe_section,
             )
             recipe = self.service.apply_source_metadata(
                 recipe,
@@ -1793,14 +1806,16 @@ class RecipeController(BaseRecipeController):
             merged.is_merge_archived = False
             merged.extras = {
                 **(merged.extras or {}),
-                "recipeMerge": {
-                    "createdAt": datetime.now(UTC).isoformat(),
-                    "keepOriginals": data.keep_originals,
-                    "sourceIds": [str(source.id) for source in sources],
-                    "sourceSlugs": [source.slug for source in sources],
-                    "sourceNames": source_names,
-                    "mode": "ai" if data.use_ai else "standard",
-                },
+                "recipeMerge": orjson.dumps(
+                    {
+                        "createdAt": datetime.now(UTC).isoformat(),
+                        "keepOriginals": data.keep_originals,
+                        "sourceIds": [str(source.id) for source in sources],
+                        "sourceSlugs": [source.slug for source in sources],
+                        "sourceNames": source_names,
+                        "mode": "ai" if data.use_ai else "standard",
+                    }
+                ).decode("utf-8"),
             }
             merged = self.service.update_one(merged.slug, merged)
 
@@ -1836,11 +1851,56 @@ class RecipeController(BaseRecipeController):
                 detail=ErrorResponse.respond("Recipe merge failed"),
             ) from exc
 
+        if merged is None:
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("Recipe merge failed"),
+            )
+
+        merged, shopping_response = await self._enrich_merged_recipe(merged, sources)
+
         return RecipeMergeResponse(
             recipe=merged,
             source_count=len(sources),
             archived_source_count=0 if data.keep_originals else len(sources),
+            shopping_list_id=shopping_response.shopping_list_id,
+            shopping_list_name=shopping_response.shopping_list_name,
+            shopping_list_created=shopping_response.shopping_list_created,
+            shopping_list_organized=shopping_response.shopping_list_organized,
+            shopping_list_error=shopping_response.shopping_list_error,
         )
+
+    async def _enrich_merged_recipe(
+        self,
+        merged: Recipe,
+        sources: list[Recipe],
+    ) -> tuple[Recipe, CreateRecipeFromBrowserPageResponse]:
+        if not merged.image:
+            await self.service.attach_best_effort_image(
+                merged,
+                search_queries=[
+                    merged.name,
+                    f"{merged.name} plated dish",
+                    *(source.name for source in sources),
+                ],
+            )
+            merged = self.service.get_one(merged.slug)
+
+        shopping_response = await self._create_recipe_shopping_list(
+            merged,
+            CreateRecipeFromBrowserPageResponse(
+                recipe_slug=merged.slug,
+                group_slug=self.user.group_slug,
+            ),
+            include_ai_tips=True,
+            organize_shopping_list_with_ai=self._ai_enabled(),
+            include_item_images=True,
+            extras={
+                "aiCreatedFromRecipeMerge": True,
+                "mergedSourceRecipeIds": orjson.dumps([str(source.id) for source in sources]).decode("utf-8"),
+            },
+        )
+        return merged, shopping_response
 
     @router.post("/merge/{slug}/undo", response_model=RecipeMergeUndoResponse)
     def undo_recipe_merge(self, slug: str) -> RecipeMergeUndoResponse:

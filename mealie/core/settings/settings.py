@@ -144,6 +144,15 @@ class AppSettings(AppLoggingSettings):
     TOKEN_TIME: int = 48
     """time in hours"""
 
+    AUTO_BACKUP_ENABLED: bool = False
+    """Create rotating backups from the scheduler when enabled."""
+
+    AUTO_BACKUP_INTERVAL_HOURS: int = 12
+    """Minimum number of hours between automatic backups."""
+
+    AUTO_BACKUP_KEEP: int = 10
+    """Number of automatic backup archives to retain."""
+
     @field_validator("TOKEN_TIME")
     @classmethod
     def validate_token_time(cls, v: int) -> int:
@@ -151,6 +160,16 @@ class AppSettings(AppLoggingSettings):
             raise ValueError("TOKEN_TIME must be at least 1 hour")
         # Certain browsers (webkit) have issues with very long-lived cookies, so we limit to 400 days
         return min(v, 400 * 24)
+
+    @field_validator("AUTO_BACKUP_INTERVAL_HOURS")
+    @classmethod
+    def validate_auto_backup_interval(cls, value: int) -> int:
+        return max(1, min(value, 24 * 30))
+
+    @field_validator("AUTO_BACKUP_KEEP")
+    @classmethod
+    def validate_auto_backup_keep(cls, value: int) -> int:
+        return max(1, min(value, 100))
 
     SECRET: str
     SESSION_SECRET: str

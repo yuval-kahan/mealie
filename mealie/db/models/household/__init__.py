@@ -6,6 +6,7 @@ from .household import Household
 from .household_to_recipe import HouseholdToRecipe
 from .invite_tokens import GroupInviteToken
 from .mealplan import GroupMealPlan, GroupMealPlanRules
+from .notebook import Notebook, NotebookNode, NotebookRevision
 from .pantry_item import PantryItem, PantrySearchHistory
 from .preferences import HouseholdPreferencesModel
 from .product_knowledge import ProductKnowledge
@@ -37,6 +38,9 @@ __all__ = [
     "GroupInviteToken",
     "GroupMealPlan",
     "GroupMealPlanRules",
+    "Notebook",
+    "NotebookNode",
+    "NotebookRevision",
     "Household",
     "HouseholdPreferencesModel",
     "HouseholdToRecipe",

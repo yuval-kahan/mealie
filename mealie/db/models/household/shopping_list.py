@@ -63,6 +63,7 @@ class ShoppingListItem(SqlAlchemyBase, BaseMixins):
     is_ingredient: FilterableColumn[bool | None] = mapped_column(Boolean, default=True)
     position: FilterableColumn[int] = mapped_column(Integer, nullable=False, default=0, index=True)
     checked: FilterableColumn[bool | None] = mapped_column(Boolean, default=False)
+    quality_rating: FilterableColumn[int | None] = mapped_column(Integer, nullable=True)
 
     quantity: FilterableColumn[float | None] = mapped_column(Float, default=1)
     note: FilterableColumn[str | None] = mapped_column(String)
@@ -156,6 +157,9 @@ class ShoppingList(SqlAlchemyBase, BaseMixins):
     user: Mapped["User"] = orm.relationship("User", back_populates="shopping_lists")
 
     name: FilterableColumn[str | None] = mapped_column(String)
+    list_kind: FilterableColumn[str] = mapped_column(
+        String(32), nullable=False, default="shopping", server_default="shopping", index=True
+    )
     list_items: Mapped[list[ShoppingListItem]] = orm.relationship(
         ShoppingListItem,
         cascade="all, delete, delete-orphan",

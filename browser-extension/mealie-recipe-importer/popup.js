@@ -315,6 +315,10 @@ function updateModeText() {
     elements.sendToMealie.textContent = translator.t("actions.send-recipe");
     return;
   }
+  if (mode === "sauce") {
+    elements.sendToMealie.textContent = translator.t("actions.send-sauce");
+    return;
+  }
   elements.sendToMealie.textContent = translator.t("actions.send-auto");
 }
 
@@ -870,6 +874,9 @@ function statusTextForMode(mode) {
   if (mode === "article") {
     return translator.t("status.processing-article");
   }
+  if (mode === "sauce") {
+    return translator.t("status.processing-sauce");
+  }
   if (mode === "recipe") {
     return translator.t("status.processing-recipe");
   }
@@ -927,6 +934,7 @@ async function createRecipeFromBrowserPage(settings, extraction) {
       include_item_images: settings.includeItemImages !== false,
       create_shopping_list: settings.createShoppingList,
       organize_shopping_list_with_ai: settings.organizeShoppingList,
+      recipe_section: settings.extractMode === "sauce" ? "sauce" : "recipes",
     }),
   });
 

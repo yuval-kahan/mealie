@@ -49,6 +49,10 @@ export class UploadedBooksAPI extends BaseAPI {
     return await this.requests.get<UploadedBook[]>(routes.uploadedBooks);
   }
 
+  async rename(id: string, name: string) {
+    return await this.requests.patch<UploadedBook, { name: string }>(routes.uploadedBook(id), { name });
+  }
+
   async upload(file: File, name: string | null = null, classifyWithAi = true) {
     const formData = new FormData();
     formData.append("file", file);

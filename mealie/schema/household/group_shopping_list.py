@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import UUID4, ConfigDict, field_validator, model_validator
+from pydantic import UUID4, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy.orm.interfaces import LoaderOption
 
@@ -61,6 +61,7 @@ class ShoppingListItemBase(RecipeIngredientBase):
     position: int = 0
 
     quantity: float = 1
+    quality_rating: int | None = Field(None, ge=1, le=5)
 
     food_id: UUID4 | None = None
     label_id: UUID4 | None = None
@@ -176,6 +177,7 @@ class ShoppingListItemPagination(PaginationBase):
 
 class ShoppingListCreate(MealieModel):
     name: str | None = None
+    list_kind: str = Field("shopping", pattern="^(shopping|products|tools)$")
     extras: dict | None = {}
 
     created_at: datetime | None = None

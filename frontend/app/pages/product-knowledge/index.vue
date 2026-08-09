@@ -97,6 +97,17 @@
               variant="outlined"
               rows="12"
             />
+            <div class="d-flex align-center flex-wrap ga-2 mb-4">
+              <span class="text-body-2 text-medium-emphasis">{{ $t("product-knowledge.quality-rating") }}</span>
+              <v-rating
+                v-model="form.qualityRating"
+                :length="5"
+                color="warning"
+                active-color="warning"
+                clearable
+                hover
+              />
+            </div>
             <ArticleOrganizerInputs
               v-model:categories="form.categories"
               v-model:tags="form.tags"
@@ -147,6 +158,16 @@
         <p v-if="selectedItem.summary" class="text-subtitle-1 mb-4">
           {{ selectedItem.summary }}
         </p>
+        <v-rating
+          v-if="selectedItem.qualityRating"
+          :model-value="selectedItem.qualityRating"
+          :length="5"
+          color="warning"
+          active-color="warning"
+          density="compact"
+          readonly
+          class="mb-4"
+        />
         <SafeMarkdown :source="selectedItem.content" />
         <a
           v-if="selectedItem.source"
@@ -293,6 +314,17 @@
             {{ item.title }}
           </v-card-title>
           <v-card-text>
+            <v-rating
+              v-if="item.qualityRating"
+              :model-value="item.qualityRating"
+              :length="5"
+              color="warning"
+              active-color="warning"
+              density="compact"
+              size="small"
+              readonly
+              class="mb-2"
+            />
             <p class="product-card__summary">
               {{ item.summary || item.content }}
             </p>
@@ -419,6 +451,7 @@ const form = reactive<ProductKnowledgeCreate>({
   source: "",
   categories: [],
   tags: [],
+  qualityRating: null,
 });
 
 const targetLanguage = computed(() => {
@@ -505,6 +538,7 @@ function resetEditor() {
   form.source = "";
   form.categories = [];
   form.tags = [];
+  form.qualityRating = null;
   imageFile.value = null;
   imageUrl.value = "";
 }
@@ -523,6 +557,7 @@ function openEdit(item: ProductKnowledge) {
   form.source = item.source || "";
   form.categories = [...item.categories];
   form.tags = [...item.tags];
+  form.qualityRating = item.qualityRating ?? null;
   imageFile.value = null;
   imageUrl.value = "";
   editorOpen.value = true;

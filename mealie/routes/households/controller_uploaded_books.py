@@ -25,6 +25,8 @@ from mealie.schema.cookbook.uploaded_book import (
     UploadedBookExtractRequest,
     UploadedBookManualTranslationPageRequest,
     UploadedBookOut,
+    UploadedBookReaderAskAIRequest,
+    UploadedBookReaderAskAIResponse,
     UploadedBookReadingStateOut,
     UploadedBookReadingStateUpdate,
     UploadedBookRecipeCatalogImportRequest,
@@ -34,10 +36,13 @@ from mealie.schema.cookbook.uploaded_book import (
     UploadedBookRecipeDeleteResponse,
     UploadedBookRecipeSummary,
     UploadedBookTranslateRequest,
+    UploadedBookUpdate,
 )
 from mealie.schema.household.household import HouseholdInDB
+from mealie.schema.openai.general import OpenAIText
 from mealie.schema.user import PrivateUser
 from mealie.services.household_services.shopping_lists import ShoppingListService
+from mealie.services.openai import OpenAIService
 from mealie.services.recipe.recipe_service import RecipeService
 from mealie.services.uploaded_books import (
     AICookbookBuilder,
@@ -439,6 +444,15 @@ class UploadedBooksController(BasePublicController):
 
         return [UploadedBookOut.model_validate(book) for book in books]
 
+    @router.patch("/{book_id}", response_model=UploadedBookOut)
+    def update_book(self, book_id: UUID4, data: UploadedBookUpdate) -> UploadedBookOut:
+        book = self._get_book_or_404(book_id)
+        book.name = data.name
+        self.session.add(book)
+        self.session.commit()
+        self.session.refresh(book)
+        return UploadedBookOut.model_validate(book)
+
     @router.get("/reading-states", response_model=list[UploadedBookReadingStateOut])
     def get_reading_states(self) -> list[UploadedBookReadingStateOut]:
         states = (
@@ -485,6 +499,43 @@ class UploadedBooksController(BasePublicController):
         self.session.commit()
         self.session.refresh(state)
         return self._reading_state_out(state)
+
+    @router.post("/{book_id}/ask-ai", response_model=UploadedBookReaderAskAIResponse)
+    async def ask_ai_about_selection(
+        self,
+        book_id: UUID4,
+        data: UploadedBookReaderAskAIRequest,
+    ) -> UploadedBookReaderAskAIResponse:
+        book = self._get_book_or_404(book_id)
+        openai_service = OpenAIService(self.repos)
+        if not (openai_service.provider_settings and openai_service.provider_settings.ai_enabled):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="AI provider is not configured")
+
+        length_guidance = {
+            "short": "Answer in one or two concise sentences (up to about 60 words).",
+            "medium": "Answer clearly in two to four short paragraphs (up to about 220 words).",
+            "long": "Give a detailed but focused explanation (up to about 700 words).",
+        }[data.answer_length]
+        prompt = (
+            "You are a careful reading assistant for a cookbook. Explain only what is supported by the "
+            "selected passage and reliable culinary knowledge. If the question cannot be answered from the "
+            "passage, say so plainly instead of inventing details. Use natural, everyday language. "
+            f"Return the answer in {data.target_language}. {length_guidance}"
+        )
+        message = (
+            f"Book: {book.name}\n"
+            f"Page: {data.page or 'unknown'}\n"
+            f"Question: {data.question.strip()}\n\n"
+            f"Selected passage:\n{data.selected_text.strip()}"
+        )
+        try:
+            response = await openai_service.get_response(prompt, message, response_schema=OpenAIText)
+        except Exception as exc:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail="AI could not answer this selection") from exc
+        answer = (response.text if response else "").strip()
+        if not answer:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail="AI returned an empty answer")
+        return UploadedBookReaderAskAIResponse(answer=answer[:6000])
 
     @router.post("/generate", response_model=list[UploadedBookOut], status_code=status.HTTP_201_CREATED)
     async def generate_ai_cookbook(self, data: AICookbookGenerateRequest) -> list[UploadedBookOut]:

@@ -149,6 +149,7 @@ class ABCScraperStrategy(ABC):
         repos: AllRepositories,
         raw_html: str | None = None,
         target_language: str | None = None,
+        recipe_section: str = "recipes",
     ) -> None:
         self.logger = get_logger()
         self.url = url
@@ -156,6 +157,7 @@ class ABCScraperStrategy(ABC):
         self.translator = translator
         self.repos = repos
         self.target_language = (target_language or "").strip() or None
+        self.recipe_section = recipe_section
 
     @abstractmethod
     def can_scrape(self) -> bool: ...
@@ -426,6 +428,12 @@ class RecipeScraperOpenAI(RecipeScraperPackage):
                 "including the title, description, yield, ingredients, instructions, notes, categories, tags, "
                 "tools, source, and creator. Preserve URLs and proper names that should not be translated."
             )
+        if self.recipe_section == "sauce":
+            components.append(
+                "Extract only the sauce, dressing, glaze, marinade, dip, gravy, or liquid accompaniment. "
+                "Return a standalone sauce recipe and exclude all unrelated main-dish, side-dish, garnish, and "
+                "plating ingredients and instructions. Do not invent a sauce when none is present."
+            )
         if image:
             components.append(f"Recipe Image: {image}")
         return "\n".join(components)
@@ -592,6 +600,11 @@ class RecipeScraperOpenAITranscription(ABCScraperStrategy):
             f"Description: {video_data['description']}",
             f"Transcription: {video_data['transcription']}",
         ]
+        if self.recipe_section == "sauce":
+            message_parts.append(
+                "Extract only the sauce, dressing, glaze, marinade, dip, gravy, or liquid accompaniment as a "
+                "standalone recipe. Exclude the rest of the dish and do not invent a sauce."
+            )
 
         if on_progress:
             await on_progress(self.translator.t("recipe.create-progress.creating-recipe-from-transcript-with-ai"))

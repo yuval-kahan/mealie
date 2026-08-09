@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import ConfigDict, Field
 
 from mealie.schema._mealie.mealie_model import MealieModel
@@ -12,6 +14,7 @@ class ScrapeRecipeBase(MealieModel):
     include_tags: bool = False
     include_categories: bool = False
     translate_language: str | None = Field(None, alias="translateLanguage")
+    recipe_section: Literal["recipes", "sauce"] = Field("recipes", alias="recipeSection")
 
 
 class ScrapeRecipe(ScrapeRecipeBase):

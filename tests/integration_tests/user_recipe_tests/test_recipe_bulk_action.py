@@ -107,6 +107,82 @@ def test_bulk_delete_recipes(
         assert recipe is None
 
 
+def test_bulk_delete_recipes_deletes_linked_shopping_lists_when_requested(
+    api_client: TestClient,
+    unique_user: TestUser,
+    ten_slugs: list[str],
+):
+    recipe = utils.assert_deserialize(
+        api_client.get(f"{api_routes.recipes}/{ten_slugs[0]}", headers=unique_user.token), 200
+    )
+    shopping_list = utils.assert_deserialize(
+        api_client.post(
+            api_routes.households_shopping_lists,
+            json={"name": random_string(20)},
+            headers=unique_user.token,
+        ),
+        201,
+    )
+    response = api_client.post(
+        api_routes.households_shopping_lists_item_id_recipe_recipe_id(shopping_list["id"], recipe["id"]),
+        headers=unique_user.token,
+    )
+    assert response.status_code == 200
+
+    response = api_client.post(
+        api_routes.recipes_bulk_actions_delete,
+        json={"recipes": [ten_slugs[0]], "deleteShoppingLists": True},
+        headers=unique_user.token,
+    )
+    assert response.status_code == 200
+
+    response = api_client.get(
+        api_routes.households_shopping_lists_item_id(shopping_list["id"]),
+        headers=unique_user.token,
+    )
+    assert response.status_code == 404
+
+
+def test_bulk_delete_recipes_preserves_linked_shopping_lists_by_default(
+    api_client: TestClient,
+    unique_user: TestUser,
+    ten_slugs: list[str],
+):
+    recipe = utils.assert_deserialize(
+        api_client.get(f"{api_routes.recipes}/{ten_slugs[0]}", headers=unique_user.token), 200
+    )
+    shopping_list = utils.assert_deserialize(
+        api_client.post(
+            api_routes.households_shopping_lists,
+            json={"name": random_string(20)},
+            headers=unique_user.token,
+        ),
+        201,
+    )
+    response = api_client.post(
+        api_routes.households_shopping_lists_item_id_recipe_recipe_id(shopping_list["id"], recipe["id"]),
+        headers=unique_user.token,
+    )
+    assert response.status_code == 200
+
+    response = api_client.post(
+        api_routes.recipes_bulk_actions_delete,
+        json={"recipes": [ten_slugs[0]]},
+        headers=unique_user.token,
+    )
+    assert response.status_code == 200
+
+    response = api_client.get(
+        api_routes.households_shopping_lists_item_id(shopping_list["id"]),
+        headers=unique_user.token,
+    )
+    assert response.status_code == 200
+    api_client.delete(
+        api_routes.households_shopping_lists_item_id(shopping_list["id"]),
+        headers=unique_user.token,
+    )
+
+
 def test_bulk_export_recipes(api_client: TestClient, unique_user: TestUser, ten_slugs: list[str]):
     payload = {
         "recipes": ten_slugs,

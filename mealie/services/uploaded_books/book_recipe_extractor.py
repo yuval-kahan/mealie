@@ -1483,7 +1483,7 @@ class UploadedBookRecipeExtractor(BaseService):
 
         recipe = self.openai_recipe_service._convert_recipe(self._recipe_with_book_source(openai_recipe, book, chunk))
         recipe = self.recipe_service.apply_ai_recipe_attribution(recipe)
-        recipe.recipe_section = "book"
+        recipe = self.recipe_service._apply_primary_library_membership(recipe, "book")
         page_start, page_end = parse_book_source_page_range(recipe.source, chunk.start_page, chunk.end_page)
         recipe.extras = {
             **(recipe.extras or {}),

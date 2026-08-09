@@ -33,6 +33,26 @@
             {{ $t("recipe.ai-create-mode-image") }}
           </v-btn>
         </v-btn-toggle>
+        <div class="d-flex flex-wrap align-center ga-3 mb-4">
+          <span class="text-body-2 font-weight-medium">
+            {{ $t("recipe.ai-create-content-type") }}
+          </span>
+          <v-btn-toggle
+            v-model="recipeSection"
+            mandatory
+            divided
+            density="compact"
+            color="primary"
+            :disabled="state.loading"
+          >
+            <v-btn value="recipes">
+              {{ $t("recipe.ai-create-content-recipe") }}
+            </v-btn>
+            <v-btn value="sauce">
+              {{ $t("recipe.ai-create-content-sauce") }}
+            </v-btn>
+          </v-btn-toggle>
+        </div>
         <v-textarea
           v-if="createMode === 'text'"
           v-model="recipeText"
@@ -269,6 +289,7 @@ const sharedQueryText = typeof route.query.recipe_import_text === "string" ? rou
 const sharedUrl = sharedQueryUrl || (isHttpUrl(sharedQueryText) ? sharedQueryText : null);
 const sharedText = sharedUrl ? "" : sharedQueryText;
 const createMode = ref<CreateMode>(sharedUrl ? "url" : "text");
+const recipeSection = ref<"recipes" | "sauce">("recipes");
 const recipeText = ref<string | null>(sharedText);
 const recipeUrl = ref<string | null>(sharedUrl);
 const uploadedImages = ref<File[]>([]);
@@ -420,6 +441,7 @@ async function createRecipeFromText() {
     includeMiseEnPlace: includeMiseEnPlace.value,
     autoImage: true,
     includeItemImages: includeItemImages.value,
+    recipeSection: recipeSection.value,
   });
 
   if (error || !data) {
@@ -450,6 +472,7 @@ async function createRecipeFromImages() {
     includeItemImages.value,
     imageNotes.value.trim() || null,
     includeMiseEnPlace.value,
+    recipeSection.value,
   );
 
   if (error || !data) {
@@ -481,6 +504,7 @@ async function createRecipeFromUrl() {
     },
     true,
     shouldTranslate.value ? i18n.locale.value : null,
+    recipeSection.value,
   );
   createStatus.value = null;
 
@@ -594,6 +618,7 @@ async function createRecipeFromUrlViaExtension(url: string): Promise<ExtensionRe
           includeAiTips: includeAiTips.value,
           includeMiseEnPlace: includeMiseEnPlace.value,
           includeItemImages: includeItemImages.value,
+          extractMode: recipeSection.value === "sauce" ? "sauce" : "recipe",
         },
       },
       window.location.origin,

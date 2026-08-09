@@ -111,6 +111,15 @@ class RecipeModel(SqlAlchemyBase, BaseMixins):
         server_default="recipes",
         index=True,
     )
+    show_in_recipes: FilterableColumn[bool] = mapped_column(
+        sa.Boolean, nullable=False, default=True, server_default=sa.true(), index=True
+    )
+    show_in_book: FilterableColumn[bool] = mapped_column(
+        sa.Boolean, nullable=False, default=False, server_default=sa.false(), index=True
+    )
+    show_in_sauce: FilterableColumn[bool] = mapped_column(
+        sa.Boolean, nullable=False, default=False, server_default=sa.false(), index=True
+    )
 
     # Time Related Properties
     total_time: FilterableColumn[str | None] = mapped_column(sa.String)

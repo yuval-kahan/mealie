@@ -20,13 +20,24 @@
       <v-card
         v-bind="hoverProps"
         class="recipe-card"
-        :class="{ 'on-hover': isHovering }"
+        :class="{
+          'on-hover': isHovering,
+          'recipe-card--bulk-selected': bulkSelectionMode && bulkSelected,
+        }"
         :style="{ cursor }"
         :elevation="isHovering ? 12 : 2"
-        :to="recipeRoute"
+        :to="bulkSelectionMode ? undefined : recipeRoute"
         :min-height="imageHeight + 75"
-        @click.self="$emit('click')"
+        @click="handleCardClick"
       >
+        <v-checkbox-btn
+          v-if="bulkSelectionMode"
+          class="recipe-card-bulk-checkbox"
+          color="error"
+          :model-value="bulkSelected"
+          :aria-label="$t('recipe.select-recipe-for-deletion', { name: displayName })"
+          @click.stop.prevent="$emit('toggleBulkSelected', slug)"
+        />
         <RecipeCardImage
           small
           :icon-size="imageHeight"
@@ -247,7 +258,7 @@
 
             <!-- If we're not logged-in, no items display, so we hide this menu -->
             <RecipeContextMenu
-              v-if="isOwnGroup && showRecipeContent"
+              v-if="isOwnGroup && showRecipeContent && !bulkSelectionMode"
               ref="recipeContextMenu"
               color="grey-darken-2"
               :slug="slug"
@@ -257,7 +268,11 @@
               :rating="rating"
               :last-made="localLastMade"
               :recipe-section="recipeSection"
+              :show-in-recipes="showInRecipes"
+              :show-in-book="showInBook"
+              :show-in-sauce="showInSauce"
               :redirect-on-delete="false"
+              bulk-delete
               :use-items="{
                 edit: false,
                 rename: true,
@@ -279,6 +294,7 @@
                 markDone: true,
               }"
               @deleted="$emit('delete', slug)"
+              @delete-requested="$emit('bulkDeleteRequested', $event)"
               @image-updated="handleImageUpdated"
               @renamed="handleRenamed"
               @made="handleMade"
@@ -324,6 +340,11 @@ interface Props {
   extras?: Record<string, unknown> | null;
   lastMade?: string | null;
   recipeSection?: string;
+  showInRecipes?: boolean;
+  showInBook?: boolean;
+  showInSauce?: boolean;
+  bulkSelectionMode?: boolean;
+  bulkSelected?: boolean;
 }
 const props = withDefaults(defineProps<Props>(), {
   description: null,
@@ -336,11 +357,18 @@ const props = withDefaults(defineProps<Props>(), {
   extras: null,
   lastMade: null,
   recipeSection: "recipes",
+  showInRecipes: undefined,
+  showInBook: undefined,
+  showInSauce: undefined,
+  bulkSelectionMode: false,
+  bulkSelected: false,
 });
 
 const emit = defineEmits<{
   click: [];
   delete: [slug: string];
+  bulkDeleteRequested: [slug: string];
+  toggleBulkSelected: [slug: string];
   renamed: [{ slug: string; name: string; recipe?: any }];
   sectionUpdated: [{ slug: string; recipeSection: string }];
 }>();
@@ -414,7 +442,7 @@ const showRecipeContent = computed(() => props.recipeId && props.slug);
 const recipeRoute = computed<string>(() => {
   return showRecipeContent.value ? `/g/${groupSlug.value}/r/${props.slug}` : "";
 });
-const cursor = computed(() => (showRecipeContent.value ? "pointer" : "auto"));
+const cursor = computed(() => (showRecipeContent.value || props.bulkSelectionMode ? "pointer" : "auto"));
 const hasAllGroceries = computed(() => hasAllGroceriesForRecipe(displayName.value));
 const showAiImageButton = computed(() => isOwnGroup.value && showRecipeContent.value && (!localImageVersion.value || imageLoadFailed.value));
 const showAiItemImagesButton = computed(() => isOwnGroup.value && showRecipeContent.value && !itemImagesEnsured.value);
@@ -448,12 +476,24 @@ function handleImageUpdated(payload: { slug: string; image: string }) {
   imageLoadFailed.value = false;
 }
 
-function handleMade(payload: { slug: string; lastMade: string }) {
+function handleMade(payload: { slug: string; lastMade: string | null }) {
   localLastMade.value = payload.lastMade;
 }
 
 function handleSectionUpdated(payload: { slug: string; recipeSection: string }) {
   emit("sectionUpdated", payload);
+}
+
+function handleCardClick(event: MouseEvent) {
+  if (props.bulkSelectionMode) {
+    event.preventDefault();
+    emit("toggleBulkSelected", props.slug);
+    return;
+  }
+
+  if (event.currentTarget === event.target) {
+    emit("click");
+  }
 }
 
 function hasShoppingListStatus(extras: Record<string, unknown> | null | undefined) {
@@ -589,6 +629,20 @@ async function openShoppingListFromCard() {
 }
 .recipe-card {
   position: relative;
+}
+
+.recipe-card--bulk-selected {
+  box-shadow: inset 0 0 0 3px rgb(var(--v-theme-error)) !important;
+}
+
+.recipe-card-bulk-checkbox {
+  background: rgb(var(--v-theme-surface));
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 24%);
+  inset-inline-start: 8px;
+  position: absolute !important;
+  top: 8px;
+  z-index: 8;
 }
 
 .recipe-card-done-badge {

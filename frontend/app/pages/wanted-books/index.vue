@@ -6,6 +6,85 @@
       @saved="handleSaved"
     />
     <BaseDialog
+      v-model="detailDialogOpen"
+      :title="selectedBook?.title || $t('wanted-book.books-to-buy')"
+      :icon="$globals.icons.book"
+      width="920"
+    >
+      <div v-if="selectedBook" class="wanted-detail">
+        <div class="wanted-detail__cover">
+          <v-img
+            v-if="selectedBook.hasImage && !imageErrors.has(selectedBook.id)"
+            :src="api.wantedBooks.imageUrl(selectedBook)"
+            :alt="selectedBook.title"
+            max-height="460"
+            cover
+            @error="imageErrors.add(selectedBook.id)"
+          />
+          <div v-else class="wanted-cover-placeholder wanted-cover-placeholder--detail">
+            <v-icon size="96" color="primary">
+              {{ $globals.icons.book }}
+            </v-icon>
+          </div>
+        </div>
+        <div class="wanted-detail__content">
+          <h2>{{ selectedBook.title }}</h2>
+          <p v-if="selectedBook.subtitle" class="text-medium-emphasis">
+            {{ selectedBook.subtitle }}
+          </p>
+          <p v-if="selectedBook.authors.length">
+            <strong>{{ $t("wanted-book.authors") }}:</strong> {{ selectedBook.authors.join(", ") }}
+          </p>
+          <p v-if="selectedBook.publisher">
+            <strong>{{ $t("wanted-book.publisher") }}:</strong> {{ selectedBook.publisher }}
+          </p>
+          <p v-if="selectedBook.publishedYear">
+            <strong>{{ $t("wanted-book.published-year") }}:</strong> {{ selectedBook.publishedYear }}
+          </p>
+          <p v-if="selectedBook.isbn13">
+            <strong>ISBN-13:</strong> {{ selectedBook.isbn13 }}
+          </p>
+          <p v-if="selectedBook.isbn10">
+            <strong>ISBN-10:</strong> {{ selectedBook.isbn10 }}
+          </p>
+          <section v-if="selectedBook.summary">
+            <h3>{{ $t("wanted-book.summary") }}</h3>
+            <p class="wanted-detail__prose">
+              {{ selectedBook.summary }}
+            </p>
+          </section>
+          <section v-if="selectedBook.notes">
+            <h3>{{ $t("wanted-book.notes") }}</h3>
+            <p class="wanted-detail__prose">
+              {{ selectedBook.notes }}
+            </p>
+          </section>
+          <div class="d-flex flex-wrap ga-1">
+            <v-chip v-for="category in selectedBook.categories" :key="`category-${category}`" size="small" color="primary" variant="tonal">
+              {{ category }}
+            </v-chip>
+            <v-chip v-for="tag in selectedBook.tags" :key="`tag-${tag}`" size="small" variant="outlined">
+              {{ tag }}
+            </v-chip>
+          </div>
+          <a v-if="selectedBook.sourceUrl" :href="selectedBook.sourceUrl" target="_blank" rel="noopener" class="wanted-source-link">
+            <v-icon size="18">
+              {{ $globals.icons.openInNew }}
+            </v-icon>
+            {{ $t("wanted-book.open-source") }}
+          </a>
+        </div>
+      </div>
+      <template #custom-card-action>
+        <v-btn v-if="selectedBook" variant="text" color="primary" @click="openEditFromDetail">
+          <v-icon start>
+            {{ $globals.icons.edit }}
+          </v-icon>
+          {{ $t("general.edit") }}
+        </v-btn>
+      </template>
+    </BaseDialog>
+    <BaseDialog
       v-model="deleteDialogOpen"
       :title="$t('general.confirm')"
       :icon="$globals.icons.delete"
@@ -71,7 +150,16 @@
 
     <v-progress-linear v-if="loading" indeterminate color="primary" />
     <div v-else-if="paginatedBooks.length" class="wanted-grid mt-4">
-      <v-card v-for="book in paginatedBooks" :key="book.id" class="wanted-card" variant="outlined">
+      <v-card
+        v-for="book in paginatedBooks"
+        :key="book.id"
+        class="wanted-card"
+        variant="outlined"
+        role="button"
+        tabindex="0"
+        @click="openDetail(book)"
+        @keydown.enter="openDetail(book)"
+      >
         <v-img
           v-if="book.hasImage && !imageErrors.has(book.id)"
           :src="api.wantedBooks.imageUrl(book)"
@@ -111,16 +199,23 @@
           </div>
         </v-card-text>
         <v-card-actions>
-          <a v-if="book.sourceUrl" :href="book.sourceUrl" target="_blank" rel="noopener" class="text-decoration-none">
+          <a
+            v-if="book.sourceUrl"
+            :href="book.sourceUrl"
+            target="_blank"
+            rel="noopener"
+            class="text-decoration-none"
+            @click.stop
+          >
             <v-btn icon variant="text" :title="$t('wanted-book.open-source')">
               <v-icon>{{ $globals.icons.openInNew }}</v-icon>
             </v-btn>
           </a>
           <v-spacer />
-          <v-btn icon variant="text" :title="$t('general.edit')" @click="openEdit(book)">
+          <v-btn icon variant="text" :title="$t('general.edit')" @click.stop="openEdit(book)">
             <v-icon>{{ $globals.icons.edit }}</v-icon>
           </v-btn>
-          <v-btn icon variant="text" color="error" :title="$t('general.delete')" @click="openDelete(book)">
+          <v-btn icon variant="text" color="error" :title="$t('general.delete')" @click.stop="openDelete(book)">
             <v-icon>{{ $globals.icons.delete }}</v-icon>
           </v-btn>
         </v-card-actions>
@@ -146,8 +241,10 @@ const selectedAuthor = ref<string | null>(null);
 const selectedCategory = ref<string | null>(null);
 const dialogOpen = ref(false);
 const deleteDialogOpen = ref(false);
+const detailDialogOpen = ref(false);
 const editingBook = ref<WantedBook | null>(null);
 const deletingBook = ref<WantedBook | null>(null);
+const selectedBook = ref<WantedBook | null>(null);
 const imageErrors = reactive(new Set<string>());
 
 useSeoMeta({ title: i18n.t("wanted-book.books-to-buy") });
@@ -225,6 +322,17 @@ function openEdit(book: WantedBook) {
   dialogOpen.value = true;
 }
 
+function openDetail(book: WantedBook) {
+  selectedBook.value = book;
+  detailDialogOpen.value = true;
+}
+
+function openEditFromDetail() {
+  if (!selectedBook.value) return;
+  detailDialogOpen.value = false;
+  openEdit(selectedBook.value);
+}
+
 function openDelete(book: WantedBook) {
   deletingBook.value = book;
   deleteDialogOpen.value = true;
@@ -274,6 +382,19 @@ async function deleteBook() {
   display: flex;
   flex-direction: column;
   min-height: 520px;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+
+.wanted-card:hover,
+.wanted-card:focus-visible {
+  border-color: rgb(var(--v-theme-primary));
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.13);
+  outline: none;
+  transform: translateY(-2px);
 }
 
 .wanted-cover-placeholder {
@@ -282,6 +403,41 @@ async function deleteBook() {
   display: flex;
   height: 280px;
   justify-content: center;
+}
+
+.wanted-cover-placeholder--detail {
+  height: 420px;
+}
+
+.wanted-detail {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+  padding: 20px;
+}
+
+.wanted-detail__cover {
+  overflow: hidden;
+  align-self: start;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 4px;
+}
+
+.wanted-detail__content h2,
+.wanted-detail__content h3 {
+  margin-block: 0 10px;
+}
+
+.wanted-detail__prose {
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.wanted-source-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 18px;
 }
 
 .wanted-title {
@@ -307,6 +463,11 @@ async function deleteBook() {
 
   .wanted-filters {
     grid-template-columns: 1fr;
+  }
+
+  .wanted-detail {
+    grid-template-columns: 1fr;
+    padding: 10px;
   }
 }
 </style>

@@ -545,6 +545,7 @@ async function importRecipePage(mealieUrl, authToken, payload, extraction, t) {
       include_item_images: payload.includeItemImages !== false,
       create_shopping_list: payload.createShoppingList !== false,
       organize_shopping_list_with_ai: payload.organizeShoppingListWithAi !== false,
+      recipe_section: payload.extractMode === "sauce" ? "sauce" : "recipes",
     }),
   });
 

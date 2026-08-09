@@ -16,6 +16,11 @@ class OpenAIImageSearchQueries(OpenAIBase):
     queries: list[OpenAIImageSearchQuery] = Field(default_factory=list)
 
 
+class OpenAIImageSuitability(OpenAIBase):
+    suitable: bool = Field(..., description="Whether the supplied image clearly matches the requested item")
+    reason: str = Field("", description="A short explanation for the decision")
+
+
 class OpenAIBookClassification(OpenAIBase):
     summary: str = ""
     cuisines: list[str] = Field(default_factory=list)

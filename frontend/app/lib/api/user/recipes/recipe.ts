@@ -40,6 +40,7 @@ export interface CreateRecipeFromText {
   includeMiseEnPlace?: boolean;
   autoImage?: boolean;
   includeItemImages?: boolean;
+  recipeSection?: "recipes" | "sauce";
 }
 
 export interface RecipeAIShoppingListRequest {
@@ -102,6 +103,11 @@ export interface RecipeMergeResponse {
   recipe: Recipe;
   sourceCount: number;
   archivedSourceCount: number;
+  shoppingListId?: string | null;
+  shoppingListName?: string | null;
+  shoppingListCreated?: boolean;
+  shoppingListOrganized?: boolean;
+  shoppingListError?: string | null;
 }
 
 export interface RecipeMergeUndoResponse {
@@ -378,10 +384,11 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
     onProgress?: (message: string) => void,
     useOpenAI = false,
     translateLanguage: string | null = null,
+    recipeSection: "recipes" | "sauce" = "recipes",
   ): Promise<RequestResponse<string>> {
     return this.streamRecipeCreate(
       routes.recipesCreateUrl,
-      { url, includeTags, includeCategories, useOpenAI, translateLanguage },
+      { url, includeTags, includeCategories, useOpenAI, translateLanguage, recipeSection },
       onProgress,
     );
   }
@@ -411,6 +418,7 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
     includeItemImages = true,
     notes: string | null = null,
     includeMiseEnPlace = true,
+    recipeSection: "recipes" | "sauce" = "recipes",
   ) {
     const formData = new FormData();
 
@@ -429,6 +437,7 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
     query.set("includeAiTips", String(includeAiTips));
     query.set("includeMiseEnPlace", String(includeMiseEnPlace));
     query.set("includeItemImages", String(includeItemImages));
+    query.set("recipeSection", recipeSection);
     const queryString = query.toString();
     if (queryString) {
       apiRoute = `${apiRoute}?${queryString}`;
@@ -488,7 +497,7 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
     return await this.requests.patch<Recipe[]>(routes.recipesBase, payload);
   }
 
-  async updateLastMade(recipeSlug: string, timestamp: string) {
+  async updateLastMade(recipeSlug: string, timestamp: string | null) {
     return await this.requests.patch<Recipe, RecipeLastMade>(routes.recipesSlugLastMade(recipeSlug), { timestamp });
   }
 

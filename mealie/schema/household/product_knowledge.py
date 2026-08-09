@@ -13,6 +13,7 @@ class ProductKnowledgeBase(MealieModel):
     source: str | None = Field(None, max_length=2000)
     categories: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
+    quality_rating: int | None = Field(None, ge=1, le=5)
 
 
 class ProductKnowledgeCreate(ProductKnowledgeBase): ...

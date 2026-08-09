@@ -1,12 +1,20 @@
 from functools import cached_property
 from pathlib import Path
 
+import sqlalchemy
 from fastapi import APIRouter, HTTPException, status
 from pydantic import UUID4
 
 from mealie.core.dependencies.dependencies import get_temporary_zip_path
 from mealie.core.exceptions import PermissionDenied
 from mealie.core.security import create_file_token
+from mealie.db.models.household.shopping_list import (
+    ShoppingList,
+    ShoppingListItem,
+    ShoppingListItemRecipeReference,
+    ShoppingListRecipeReference,
+)
+from mealie.db.models.recipe.recipe import RecipeModel
 from mealie.routes._base import BaseUserController, controller
 from mealie.schema.group.group_exports import GroupDataExport
 from mealie.schema.recipe.recipe_bulk_actions import (
@@ -50,7 +58,46 @@ class RecipeBulkActionsController(BaseUserController):
     def bulk_delete_recipes(self, delete_recipes: DeleteRecipes):
         # TODO: this route should be migrated to the standard recipe controller
         try:
-            self.recipe_service.delete_many(delete_recipes.recipes)
+            recipe_slugs = list(dict.fromkeys(delete_recipes.recipes))
+            if not self.recipe_service.can_delete(recipe_slugs):
+                raise PermissionDenied("You do not have permission to delete all of these recipes.")
+
+            linked_shopping_list_ids: set[UUID4] = set()
+            if delete_recipes.delete_shopping_lists and recipe_slugs:
+                recipe_ids = self.session.execute(
+                    sqlalchemy.select(RecipeModel.id).where(
+                        RecipeModel.group_id == self.group_id,
+                        RecipeModel.slug.in_(recipe_slugs),
+                    )
+                ).scalars().all()
+
+                if recipe_ids:
+                    direct_list_ids = self.session.execute(
+                        sqlalchemy.select(ShoppingListRecipeReference.shopping_list_id)
+                        .join(ShoppingList, ShoppingList.id == ShoppingListRecipeReference.shopping_list_id)
+                        .where(
+                            ShoppingListRecipeReference.recipe_id.in_(recipe_ids),
+                            ShoppingList.group_id == self.group_id,
+                        )
+                    ).scalars().all()
+                    item_list_ids = self.session.execute(
+                        sqlalchemy.select(ShoppingListItem.shopping_list_id)
+                        .join(
+                            ShoppingListItemRecipeReference,
+                            ShoppingListItemRecipeReference.shopping_list_item_id == ShoppingListItem.id,
+                        )
+                        .join(ShoppingList, ShoppingList.id == ShoppingListItem.shopping_list_id)
+                        .where(
+                            ShoppingListItemRecipeReference.recipe_id.in_(recipe_ids),
+                            ShoppingList.group_id == self.group_id,
+                        )
+                    ).scalars().all()
+                    linked_shopping_list_ids.update(direct_list_ids)
+                    linked_shopping_list_ids.update(list_id for list_id in item_list_ids if list_id is not None)
+
+            self.recipe_service.delete_many(recipe_slugs)
+            if linked_shopping_list_ids:
+                self.repos.group_shopping_lists.delete_many(list(linked_shopping_list_ids))
         except PermissionDenied as e:
             self.logger.error("Permission Denied on recipe controller action")
             raise HTTPException(
