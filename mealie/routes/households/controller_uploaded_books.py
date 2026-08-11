@@ -195,14 +195,17 @@ class UploadedBooksController(BasePublicController):
         self.session.refresh(book)
         return book
 
-    def _get_book_or_404(self, book_id: UUID4) -> UploadedBook:
-        book = (
+    def _get_book(self, book_id: UUID4) -> UploadedBook | None:
+        return (
             self.session.execute(
                 select(UploadedBook).where(UploadedBook.id == book_id, UploadedBook.group_id == self.group_id)
             )
             .scalars()
             .one_or_none()
         )
+
+    def _get_book_or_404(self, book_id: UUID4) -> UploadedBook:
+        book = self._get_book(book_id)
         if book is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND)
 
@@ -399,25 +402,33 @@ class UploadedBooksController(BasePublicController):
 
         return max(ranked_books, key=lambda item: item[0])[1] if ranked_books else None
 
-    def _book_recipe_models(self, book: UploadedBook) -> list[RecipeModel]:
-        source_prefix = (book.name or "").strip().lower()
+    def _book_recipe_models_by_id(
+        self,
+        book_id: UUID4,
+        source_prefix: str | None = None,
+    ) -> list[RecipeModel]:
         linked_by_extra = RecipeModel.extras.any(
             sa.and_(
                 ApiExtras.key_name == "uploadedBookSourceId",
-                ApiExtras.value == str(book.id),
+                ApiExtras.value == str(book_id),
             )
         )
-        linked_by_source = sa.func.lower(sa.func.coalesce(RecipeModel.source, "")).startswith(
-            source_prefix,
-            autoescape=True,
-        )
+        link_filters = [linked_by_extra]
+        normalized_source_prefix = (source_prefix or "").strip().lower()
+        if normalized_source_prefix:
+            link_filters.append(
+                sa.func.lower(sa.func.coalesce(RecipeModel.source, "")).startswith(
+                    normalized_source_prefix,
+                    autoescape=True,
+                )
+            )
         return list(
             self.session.execute(
                 select(RecipeModel)
                 .where(
                     RecipeModel.group_id == self.group_id,
                     RecipeModel.household_id == self.household_id,
-                    sa.or_(linked_by_extra, linked_by_source),
+                    sa.or_(*link_filters),
                 )
                 .order_by(RecipeModel.name)
             )
@@ -425,6 +436,9 @@ class UploadedBooksController(BasePublicController):
             .unique()
             .all()
         )
+
+    def _book_recipe_models(self, book: UploadedBook) -> list[RecipeModel]:
+        return self._book_recipe_models_by_id(book.id, book.name)
 
     def _books_to_delete(self, book: UploadedBook) -> list[UploadedBook]:
         books_by_id = {book.id: book}
@@ -1142,8 +1156,9 @@ class UploadedBooksController(BasePublicController):
 
     @router.get("/{book_id}/recipes", response_model=list[UploadedBookRecipeSummary])
     def get_extracted_book_recipes(self, book_id: UUID4) -> list[UploadedBookRecipeSummary]:
-        book = self._get_book_or_404(book_id)
-        return [UploadedBookRecipeSummary.model_validate(recipe) for recipe in self._book_recipe_models(book)]
+        book = self._get_book(book_id)
+        recipes = self._book_recipe_models(book) if book else self._book_recipe_models_by_id(book_id)
+        return [UploadedBookRecipeSummary.model_validate(recipe) for recipe in recipes]
 
     @router.post("/{book_id}/recipes/delete", response_model=UploadedBookRecipeDeleteResponse)
     def delete_extracted_book_recipes(
@@ -1151,10 +1166,11 @@ class UploadedBooksController(BasePublicController):
         book_id: UUID4,
         payload: UploadedBookRecipeDeleteRequest,
     ) -> UploadedBookRecipeDeleteResponse:
-        book = self._get_book_or_404(book_id)
-        self._assert_book_not_processing(book)
+        book = self._get_book(book_id)
+        if book:
+            self._assert_book_not_processing(book)
         requested_ids = set(payload.recipe_ids)
-        book_recipes = self._book_recipe_models(book)
+        book_recipes = self._book_recipe_models(book) if book else self._book_recipe_models_by_id(book_id)
         selected_recipes = [recipe for recipe in book_recipes if recipe.id in requested_ids]
         skipped_count = len(requested_ids) - len(selected_recipes)
         selected_recipe_ids = {str(recipe.id) for recipe in selected_recipes}
@@ -1169,7 +1185,7 @@ class UploadedBooksController(BasePublicController):
                 .where(
                     ShoppingList.group_id == self.group_id,
                     ShoppingListExtras.key_name == "aiCreatedFromUploadedBookId",
-                    ShoppingListExtras.value == str(book.id),
+                    ShoppingListExtras.value == str(book_id),
                     sa.exists(
                         select(ShoppingListExtras.id).where(
                             ShoppingListExtras.shopping_list_id == ShoppingList.id,
@@ -1192,9 +1208,10 @@ class UploadedBooksController(BasePublicController):
         remaining_count = len(book_recipes)
         if payload.delete_recipes:
             remaining_count = max(0, len(book_recipes) - len(selected_recipes))
-            book.extraction_recipes_created = remaining_count
-            self.session.add(book)
-            self.session.commit()
+            if book:
+                book.extraction_recipes_created = remaining_count
+                self.session.add(book)
+                self.session.commit()
 
         return UploadedBookRecipeDeleteResponse(
             deleted_count=len(selected_recipes) if payload.delete_recipes else 0,

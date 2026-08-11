@@ -29,7 +29,7 @@ def upgrade():
         sa.Column("is_system", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column("is_protected", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column("created_at", sa.DateTime(), nullable=True),
-        sa.Column("updated_at", sa.DateTime(), nullable=True),
+        sa.Column("update_at", sa.DateTime(), nullable=True),
         sa.ForeignKeyConstraint(["group_id"], ["groups.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["household_id"], ["households.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(

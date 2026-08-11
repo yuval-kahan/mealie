@@ -300,6 +300,7 @@
             </button>
             <div v-if="group.bookId" class="recipe-book-group-actions">
               <v-btn
+                v-if="uploadedBookById(group.bookId)"
                 icon
                 size="small"
                 variant="text"
@@ -316,7 +317,7 @@
                 color="warning"
                 :title="$t('cookbook.delete-book-recipes')"
                 :aria-label="$t('cookbook.delete-book-recipes')"
-                @click="openBookRecipeDeleteDialog(group.bookId)"
+                @click="openBookRecipeDeleteDialog(group.bookId, group.title)"
               >
                 <v-icon>{{ $globals.icons.broom }}</v-icon>
               </v-btn>
@@ -523,7 +524,7 @@ const recipeCategoryEditTarget = ref<{
 const bookRenameDialog = ref(false);
 const bookRenameTarget = ref<UploadedBook | null>(null);
 const bookRecipeDeleteDialog = ref(false);
-const bookRecipeDeleteTarget = ref<UploadedBook | null>(null);
+const bookRecipeDeleteTarget = ref<{ id: string; name: string } | null>(null);
 const bulkDeleteMode = ref(false);
 const bulkDeleteDialog = ref(false);
 const bulkDeleteLoading = ref(false);
@@ -825,9 +826,9 @@ function openBookRenameDialog(bookId: string) {
   bookRenameDialog.value = Boolean(bookRenameTarget.value);
 }
 
-function openBookRecipeDeleteDialog(bookId: string) {
-  bookRecipeDeleteTarget.value = uploadedBookById(bookId);
-  bookRecipeDeleteDialog.value = Boolean(bookRecipeDeleteTarget.value);
+function openBookRecipeDeleteDialog(bookId: string, fallbackName: string) {
+  bookRecipeDeleteTarget.value = uploadedBookById(bookId) || { id: bookId, name: fallbackName };
+  bookRecipeDeleteDialog.value = true;
 }
 
 function handleBookRenamed(book: UploadedBook) {

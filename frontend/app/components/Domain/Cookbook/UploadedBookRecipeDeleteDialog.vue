@@ -116,13 +116,13 @@
 </template>
 
 <script setup lang="ts">
-import type { UploadedBook, UploadedBookRecipeSummary } from "~/lib/api/types/uploaded-book";
+import type { UploadedBookRecipeSummary } from "~/lib/api/types/uploaded-book";
 import { useUserApi } from "~/composables/api";
 import { alert } from "~/composables/use-toast";
 
 interface Props {
   modelValue: boolean;
-  book: UploadedBook | null;
+  book: { id: string; name: string } | null;
 }
 
 const props = defineProps<Props>();

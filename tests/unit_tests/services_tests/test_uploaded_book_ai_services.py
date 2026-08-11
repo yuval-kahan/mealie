@@ -274,7 +274,7 @@ def test_book_recipe_bulk_delete_skips_recipe_ids_from_other_books():
     linked_recipe = SimpleNamespace(id=uuid4(), slug="linked-recipe")
     foreign_recipe_id = uuid4()
     controller.session = MagicMock()
-    controller._get_book_or_404 = lambda _book_id: book
+    controller._get_book = lambda _book_id: book
     controller._assert_book_not_processing = lambda _book: None
     controller._book_recipe_models = lambda _book: [linked_recipe]
 
@@ -287,6 +287,33 @@ def test_book_recipe_bulk_delete_skips_recipe_ids_from_other_books():
     assert response.remaining_count == 1
     assert response.skipped_count == 1
     assert response.deleted_recipe_ids == []
+
+
+def test_book_recipe_bulk_delete_can_clean_up_an_orphaned_book_link(monkeypatch):
+    controller = object.__new__(UploadedBooksController)
+    linked_recipe = SimpleNamespace(id=uuid4(), slug="linked-recipe")
+    book_id = uuid4()
+    recipe_service = SimpleNamespace(delete_many=MagicMock())
+    controller.session = MagicMock()
+    controller._get_book = lambda _book_id: None
+    controller._book_recipe_models_by_id = lambda _book_id: [linked_recipe]
+    monkeypatch.setattr(
+        "mealie.routes.households.controller_uploaded_books.RecipeService",
+        lambda *_args, **_kwargs: recipe_service,
+    )
+
+    response = controller.delete_extracted_book_recipes(
+        book_id,
+        UploadedBookRecipeDeleteRequest(
+            recipe_ids=[linked_recipe.id],
+            delete_shopping_lists=False,
+        ),
+    )
+
+    recipe_service.delete_many.assert_called_once_with([linked_recipe.slug])
+    assert response.deleted_count == 1
+    assert response.remaining_count == 0
+    assert response.deleted_recipe_ids == [linked_recipe.id]
 
 
 def test_translation_completeness_allows_empty_decorative_or_ocr_page():
