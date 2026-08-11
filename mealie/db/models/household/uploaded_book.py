@@ -14,6 +14,37 @@ if TYPE_CHECKING:
     from .household import Household
 
 
+class UploadedBookCategory(SqlAlchemyBase, BaseMixins):
+    __tablename__ = "uploaded_book_categories"
+
+    id: FilterableColumn[guid.GUID] = mapped_column(guid.GUID, primary_key=True, default=guid.GUID.generate)
+    group_id: FilterableColumn[guid.GUID] = mapped_column(
+        guid.GUID, ForeignKey("groups.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    household_id: FilterableColumn[guid.GUID] = mapped_column(
+        guid.GUID, ForeignKey("households.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: FilterableColumn[str] = mapped_column(String(160), nullable=False)
+    parent_category_id: FilterableColumn[guid.GUID | None] = mapped_column(
+        guid.GUID,
+        ForeignKey("uploaded_book_categories.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    parent: Mapped[Optional["UploadedBookCategory"]] = orm.relationship(
+        "UploadedBookCategory",
+        remote_side="UploadedBookCategory.id",
+        foreign_keys=[parent_category_id],
+    )
+    position: FilterableColumn[int] = mapped_column(Integer, nullable=False, default=0)
+    is_system: FilterableColumn[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_protected: FilterableColumn[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    @auto_init()
+    def __init__(self, **_) -> None:
+        pass
+
+
 class UploadedBook(SqlAlchemyBase, BaseMixins):
     __tablename__ = "uploaded_books"
 
@@ -32,6 +63,14 @@ class UploadedBook(SqlAlchemyBase, BaseMixins):
     household: Mapped[Optional["Household"]] = orm.relationship("Household")
     user_id: FilterableColumn[guid.GUID] = mapped_column(guid.GUID, ForeignKey("users.id"), nullable=False, index=True)
     user: Mapped[Optional["User"]] = orm.relationship("User")
+
+    category_id: FilterableColumn[guid.GUID | None] = mapped_column(
+        guid.GUID,
+        ForeignKey("uploaded_book_categories.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    category: Mapped[Optional["UploadedBookCategory"]] = orm.relationship("UploadedBookCategory")
 
     name: FilterableColumn[str] = mapped_column(String, nullable=False)
     file_name: FilterableColumn[str] = mapped_column(String, nullable=False)
@@ -103,6 +142,7 @@ class UploadedBookReadingState(SqlAlchemyBase, BaseMixins):
     )
     current_page: FilterableColumn[int] = mapped_column(Integer, nullable=False, default=0)
     current_page_index: FilterableColumn[int] = mapped_column(Integer, nullable=False, default=0)
+    scroll_offset: FilterableColumn[float] = mapped_column(Float, nullable=False, default=0)
     current_chapter_id: FilterableColumn[str | None] = mapped_column(String(160), nullable=True)
     reading_percent: FilterableColumn[float] = mapped_column(Float, nullable=False, default=0)
     completed_chapters_json: FilterableColumn[str] = mapped_column(Text, nullable=False, default="[]")

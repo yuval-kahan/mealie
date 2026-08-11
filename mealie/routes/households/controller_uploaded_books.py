@@ -13,13 +13,16 @@ from starlette.responses import FileResponse, RedirectResponse
 from mealie.core.dependencies.dependencies import get_current_user
 from mealie.db.models._model_utils.datetime import get_utc_now
 from mealie.db.models.household.shopping_list import ShoppingList
-from mealie.db.models.household.uploaded_book import UploadedBook, UploadedBookReadingState
+from mealie.db.models.household.uploaded_book import UploadedBook, UploadedBookCategory, UploadedBookReadingState
 from mealie.db.models.recipe import RecipeModel
 from mealie.db.models.recipe.api_extras import ApiExtras, ShoppingListExtras
 from mealie.routes._base import controller
 from mealie.routes._base.base_controllers import BasePublicController
 from mealie.schema.cookbook.uploaded_book import (
     AICookbookGenerateRequest,
+    UploadedBookCategoryCreate,
+    UploadedBookCategoryOut,
+    UploadedBookCategoryUpdate,
     UploadedBookCoverURLRequest,
     UploadedBookDeletePreview,
     UploadedBookExtractRequest,
@@ -50,6 +53,10 @@ from mealie.services.uploaded_books import (
     UploadedBookCoverService,
     UploadedBookRecipeExtractor,
     UploadedBookTranslator,
+)
+from mealie.services.uploaded_books.book_library_categories import (
+    BOOK_LIBRARY_CATEGORIES,
+    UNCATEGORIZED_BOOK_CATEGORY,
 )
 from mealie.services.uploaded_books.book_recipe_extractor import (
     EXTRACTION_CANCELLED,
@@ -201,6 +208,82 @@ class UploadedBooksController(BasePublicController):
 
         return book
 
+    def _ensure_book_categories(self) -> list[UploadedBookCategory]:
+        categories = list(
+            self.session.execute(
+                select(UploadedBookCategory).where(
+                    UploadedBookCategory.group_id == self.group_id,
+                    UploadedBookCategory.household_id == self.household_id,
+                )
+            ).scalars().all()
+        )
+        initial_seed = not categories
+        existing_names = {
+            category.name.strip().casefold()
+            for category in categories
+            if category.parent_category_id is None
+        }
+        changed = False
+        seed_names = (
+            (*BOOK_LIBRARY_CATEGORIES, UNCATEGORIZED_BOOK_CATEGORY)
+            if initial_seed
+            else (UNCATEGORIZED_BOOK_CATEGORY,)
+        )
+        for position, name in enumerate(seed_names, start=1):
+            if name.casefold() in existing_names:
+                continue
+            category = UploadedBookCategory(
+                group_id=self.group_id,
+                household_id=self.household_id,
+                name=name,
+                position=position,
+                is_system=name == UNCATEGORIZED_BOOK_CATEGORY,
+                is_protected=name == UNCATEGORIZED_BOOK_CATEGORY,
+                session=self.session,
+            )
+            self.session.add(category)
+            categories.append(category)
+            existing_names.add(name.casefold())
+            changed = True
+        if changed:
+            self.session.commit()
+            categories = list(
+                self.session.execute(
+                    select(UploadedBookCategory).where(
+                        UploadedBookCategory.group_id == self.group_id,
+                        UploadedBookCategory.household_id == self.household_id,
+                    )
+                ).scalars().all()
+            )
+        return categories
+
+    def _get_book_category_or_404(self, category_id: UUID4) -> UploadedBookCategory:
+        category = self.session.execute(
+            select(UploadedBookCategory).where(
+                UploadedBookCategory.id == category_id,
+                UploadedBookCategory.group_id == self.group_id,
+                UploadedBookCategory.household_id == self.household_id,
+            )
+        ).scalar_one_or_none()
+        if category is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Book category not found")
+        return category
+
+    def _assert_unique_book_category_name(
+        self,
+        name: str,
+        parent_category_id: UUID4 | None,
+        exclude_id: UUID4 | None = None,
+    ) -> None:
+        normalized = name.strip().casefold()
+        if any(
+            category.id != exclude_id
+            and category.parent_category_id == parent_category_id
+            and category.name.strip().casefold() == normalized
+            for category in self._ensure_book_categories()
+        ):
+            raise HTTPException(status.HTTP_409_CONFLICT, detail="A book category with this name already exists")
+
     def _reading_state_out(self, state: UploadedBookReadingState) -> UploadedBookReadingStateOut:
         def json_value(raw: str, fallback):
             try:
@@ -215,6 +298,7 @@ class UploadedBooksController(BasePublicController):
             user_id=state.user_id,
             current_page=state.current_page,
             current_page_index=state.current_page_index,
+            scroll_offset=state.scroll_offset,
             current_chapter_id=state.current_chapter_id,
             reading_percent=state.reading_percent,
             completed_chapters=json_value(state.completed_chapters_json, []),
@@ -432,6 +516,7 @@ class UploadedBooksController(BasePublicController):
 
     @router.get("", response_model=list[UploadedBookOut])
     def get_all(self) -> list[UploadedBookOut]:
+        self._ensure_book_categories()
         books = (
             self.session.execute(
                 select(UploadedBook)
@@ -444,11 +529,147 @@ class UploadedBooksController(BasePublicController):
 
         return [UploadedBookOut.model_validate(book) for book in books]
 
+    @router.get("/categories", response_model=list[UploadedBookCategoryOut])
+    def get_book_categories(self) -> list[UploadedBookCategoryOut]:
+        categories = self._ensure_book_categories()
+        categories.sort(key=lambda category: (category.position, category.name.casefold()))
+        return [UploadedBookCategoryOut.model_validate(category) for category in categories]
+
+    @router.post("/categories", response_model=UploadedBookCategoryOut, status_code=status.HTTP_201_CREATED)
+    def create_book_category(self, data: UploadedBookCategoryCreate) -> UploadedBookCategoryOut:
+        parent = self._get_book_category_or_404(data.parent_category_id) if data.parent_category_id else None
+        if parent and parent.parent_category_id is not None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Book categories support one subcategory level")
+        self._assert_unique_book_category_name(data.name, data.parent_category_id)
+        max_position = self.session.execute(
+            select(sa.func.max(UploadedBookCategory.position)).where(
+                UploadedBookCategory.group_id == self.group_id,
+                UploadedBookCategory.parent_category_id == data.parent_category_id,
+            )
+        ).scalar_one_or_none() or 0
+        category = UploadedBookCategory(
+            group_id=self.group_id,
+            household_id=self.household_id,
+            name=data.name,
+            parent_category_id=data.parent_category_id,
+            position=max_position + 1,
+            session=self.session,
+        )
+        self.session.add(category)
+        self.session.commit()
+        self.session.refresh(category)
+        return UploadedBookCategoryOut.model_validate(category)
+
+    @router.patch("/categories/{category_id}", response_model=UploadedBookCategoryOut)
+    def update_book_category(
+        self,
+        category_id: UUID4,
+        data: UploadedBookCategoryUpdate,
+    ) -> UploadedBookCategoryOut:
+        category = self._get_book_category_or_404(category_id)
+        if category.is_protected and (data.name is not None or "parent_category_id" in data.model_fields_set):
+            raise HTTPException(status.HTTP_409_CONFLICT, detail="This built-in book category cannot be changed")
+        next_parent_id = (
+            data.parent_category_id
+            if "parent_category_id" in data.model_fields_set
+            else category.parent_category_id
+        )
+        if next_parent_id == category.id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="A category cannot be its own parent")
+        if next_parent_id:
+            parent = self._get_book_category_or_404(next_parent_id)
+            if parent.parent_category_id is not None:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Book categories support one subcategory level")
+            has_children = self.session.execute(
+                select(sa.func.count()).select_from(UploadedBookCategory).where(
+                    UploadedBookCategory.parent_category_id == category.id
+                )
+            ).scalar_one()
+            if has_children:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    detail="A category with subcategories cannot become a subcategory",
+                )
+        next_name = data.name or category.name
+        self._assert_unique_book_category_name(next_name, next_parent_id, category.id)
+        if data.name is not None:
+            category.name = data.name
+        if "parent_category_id" in data.model_fields_set:
+            category.parent_category_id = data.parent_category_id
+        if data.position is not None:
+            category.position = data.position
+        self.session.add(category)
+        self.session.commit()
+        self.session.refresh(category)
+        return UploadedBookCategoryOut.model_validate(category)
+
+    @router.delete("/categories/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
+    def delete_book_category(
+        self,
+        category_id: UUID4,
+        replacement_category_id: UUID4 | None = Query(None),
+    ) -> None:
+        category = self._get_book_category_or_404(category_id)
+        if category.is_protected:
+            raise HTTPException(status.HTTP_409_CONFLICT, detail="This built-in book category cannot be deleted")
+        replacement = (
+            self._get_book_category_or_404(replacement_category_id)
+            if replacement_category_id
+            else None
+        )
+        if replacement and replacement.id == category.id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Replacement category must be different")
+        if replacement is None:
+            if category.parent_category_id:
+                replacement = self._get_book_category_or_404(category.parent_category_id)
+            else:
+                replacement = next(
+                    item
+                    for item in self._ensure_book_categories()
+                    if item.name == UNCATEGORIZED_BOOK_CATEGORY
+                )
+        books = self.session.execute(
+            select(UploadedBook).where(
+                UploadedBook.group_id == self.group_id,
+                UploadedBook.category_id == category.id,
+            )
+        ).scalars().all()
+        for book in books:
+            book.category_id = replacement.id
+            self.session.add(book)
+        children = self.session.execute(
+            select(UploadedBookCategory).where(UploadedBookCategory.parent_category_id == category.id)
+        ).scalars().all()
+        for child in children:
+            child.parent_category_id = None
+            self.session.add(child)
+        self.session.delete(category)
+        self.session.commit()
+
     @router.patch("/{book_id}", response_model=UploadedBookOut)
     def update_book(self, book_id: UUID4, data: UploadedBookUpdate) -> UploadedBookOut:
         book = self._get_book_or_404(book_id)
-        book.name = data.name
-        self.session.add(book)
+        root_id = book.translated_from_book_id or book.id
+        variants = self.session.execute(
+            select(UploadedBook).where(
+                UploadedBook.group_id == self.group_id,
+                sa.or_(UploadedBook.id == root_id, UploadedBook.translated_from_book_id == root_id),
+            )
+        ).scalars().all()
+        if data.name is not None:
+            for variant in variants:
+                variant.name = (
+                    f"{data.name} ({variant.translation_language})"
+                    if variant.is_translated_book and variant.translation_language
+                    else data.name
+                )
+                self.session.add(variant)
+        if "category_id" in data.model_fields_set:
+            if data.category_id is not None:
+                self._get_book_category_or_404(data.category_id)
+            for variant in variants:
+                variant.category_id = data.category_id
+                self.session.add(variant)
         self.session.commit()
         self.session.refresh(book)
         return UploadedBookOut.model_validate(book)
@@ -482,6 +703,7 @@ class UploadedBooksController(BasePublicController):
         state = self._get_or_create_reading_state(self._get_book_or_404(book_id))
         state.current_page = data.current_page
         state.current_page_index = data.current_page_index
+        state.scroll_offset = data.scroll_offset
         state.current_chapter_id = data.current_chapter_id
         state.reading_percent = data.reading_percent
         state.completed_chapters_json = json.dumps(
@@ -839,6 +1061,7 @@ class UploadedBooksController(BasePublicController):
         file: UploadFile = File(...),
         name: str | None = Form(None),
         classify_with_ai: bool = Form(True),
+        category_id: UUID4 | None = Form(None),
     ) -> UploadedBookOut:
         original_file_name = file.filename or ""
         extension = get_book_extension(original_file_name)
@@ -881,16 +1104,23 @@ class UploadedBooksController(BasePublicController):
         if not book_name:
             book_name = "Uploaded book"
 
+        if category_id is not None:
+            self._get_book_category_or_404(category_id)
+        else:
+            self._ensure_book_categories()
+
         book = UploadedBook(
             group_id=self.group_id,
             household_id=self.household_id,
             user_id=self.user.id,
+            category_id=category_id,
             name=book_name,
             file_name=stored_file_name,
             original_file_name=original_file_name or stored_file_name,
             extension=extension,
             content_type=file.content_type,
             size=size,
+            classification_status="processing" if classify_with_ai else "not_started",
             session=self.session,
         )
         book.id = book_id

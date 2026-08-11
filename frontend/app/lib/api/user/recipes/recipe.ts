@@ -148,6 +148,8 @@ const routes = {
   recipesRecipeSlugShoppingListOpenOrCreate: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/shopping-list/open-or-create`,
   recipesRecipeSlugImage: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/image`,
   recipesRecipeSlugImageAi: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/image/ai`,
+  recipesRecipeSlugInstructionImageAi: (recipe_slug: string, step_id: string) =>
+    `${prefix}/recipes/${recipe_slug}/instructions/${step_id}/image/ai`,
   recipesRecipeSlugAiEdit: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/ai-edit`,
   recipesRecipeSlugItemImagesEnsure: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/item-images/ensure`,
   recipesRecipeSlugScaleFromText: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/scale-from-text`,
@@ -300,6 +302,10 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
 
   createAIImage(slug: string, prompt?: string) {
     return this.requests.post<UpdateImageResponse>(routes.recipesRecipeSlugImageAi(slug), { prompt: prompt || null });
+  }
+
+  createAIInstructionImage(slug: string, stepId: string) {
+    return this.requests.post<RecipeAsset>(routes.recipesRecipeSlugInstructionImageAi(slug, stepId), {});
   }
 
   createAIEdit(slug: string, instruction: string) {

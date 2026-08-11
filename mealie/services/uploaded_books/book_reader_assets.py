@@ -390,7 +390,7 @@ def book_reader_script(labels: dict[str, str]) -> str:
       const askAiEndpoint = `/api/households/uploaded-books/${encodeURIComponent(bookId)}/ask-ai`;
       const storageKey = `mealieBookReader:${bookId}`;
       const defaults = {
-        currentPage: 0, currentPageIndex: 0, currentChapterId: null, readingPercent: 0,
+        currentPage: 0, currentPageIndex: 0, currentChapterId: null, scrollOffset: 0, readingPercent: 0,
         completedChapters: [], totalChapters: 0, notes: [], highlights: [],
         preferences: {
           fontSize: 18, fontFamily: "serif", lineHeight: 1.75, wordSpacing: 0, pageWidth: 980,
@@ -413,6 +413,7 @@ def book_reader_script(labels: dict[str, str]) -> str:
       let lastSelection = null;
       let annotationTimer = 0;
       let hoverFrame = 0;
+      let scrollTimer = 0;
       let aiHoverRanges = [];
       let destroyed = false;
 
@@ -429,6 +430,7 @@ def book_reader_script(labels: dict[str, str]) -> str:
         currentPage: clamp(value?.currentPage ?? value?.current_page, 0, 100000, 0),
         currentPageIndex: clamp(value?.currentPageIndex ?? value?.current_page_index, 0, 100000, 0),
         currentChapterId: value?.currentChapterId ?? value?.current_chapter_id ?? null,
+        scrollOffset: clamp(value?.scrollOffset ?? value?.scroll_offset, 0, 1000000, 0),
         readingPercent: clamp(value?.readingPercent ?? value?.reading_percent, 0, 100, 0),
         completedChapters: uniqueStrings(value?.completedChapters ?? value?.completed_chapters),
         totalChapters: clamp(value?.totalChapters ?? value?.total_chapters, 0, 1000, chapterRows.length),
@@ -451,6 +453,7 @@ def book_reader_script(labels: dict[str, str]) -> str:
         currentPage: state.currentPage,
         currentPageIndex: state.currentPageIndex,
         currentChapterId: state.currentChapterId,
+        scrollOffset: state.scrollOffset,
         readingPercent: state.readingPercent,
         completedChapters: uniqueStrings(state.completedChapters),
         totalChapters: chapterRows.length,
@@ -753,18 +756,25 @@ def book_reader_script(labels: dict[str, str]) -> str:
         scheduleSave();
       };
       window.addEventListener("mealie:book-position", handleReadingPosition);
+      const handleReaderScroll = () => {
+        window.clearTimeout(scrollTimer);
+        scrollTimer = window.setTimeout(() => {
+          state.scrollOffset = clamp(window.scrollY, 0, 1000000, 0);
+          scheduleSave();
+        }, 180);
+      };
+      window.addEventListener("scroll", handleReaderScroll, { passive: true });
 
       const restoreReadingPosition = () => {
-        if (location.hash || (!state.currentPageIndex && !state.currentPage)) return;
+        if (location.hash || (!state.currentPageIndex && !state.currentPage && !state.scrollOffset)) return;
         const target = document.querySelector(
           state.currentPageIndex
             ? `.reading-position[data-page-index="${CSS.escape(String(state.currentPageIndex))}"]`
             : `.reading-position[data-page-number="${CSS.escape(String(state.currentPage))}"]`
         );
-        if (!target) return;
         requestAnimationFrame(() => requestAnimationFrame(() => {
           if (destroyed) return;
-          const top = target.getBoundingClientRect().top + window.scrollY - 64;
+          const top = state.scrollOffset || (target ? target.getBoundingClientRect().top + window.scrollY - 64 : 0);
           window.scrollTo({ top: Math.max(0, top), behavior: "instant" });
         }));
       };
@@ -853,6 +863,7 @@ def book_reader_script(labels: dict[str, str]) -> str:
       window.addEventListener("pagehide", (event) => {
         window.clearTimeout(saveTimer);
         window.clearTimeout(annotationTimer);
+        window.clearTimeout(scrollTimer);
         writeLocal();
         requestController?.abort();
         aiRequestController?.abort();
@@ -860,6 +871,7 @@ def book_reader_script(labels: dict[str, str]) -> str:
         if (!event.persisted) {
           destroyed = true;
           window.removeEventListener("mealie:book-position", handleReadingPosition);
+          window.removeEventListener("scroll", handleReaderScroll);
           document.removeEventListener("selectionchange", captureSelection);
           document.removeEventListener("mousemove", handleAiHover);
         }

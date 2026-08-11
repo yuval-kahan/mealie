@@ -96,7 +96,7 @@ export interface UserExperiencePreferences {
   showRecipeItemImages: boolean;
   recipeGroupCollapseBehavior: "remember" | "collapsed";
   sauceGroupCollapseBehavior: "remember" | "collapsed";
-  bookGroupCollapseBehavior: "remember" | "collapsed";
+  bookGroupCollapseBehavior: "remember" | "collapsed" | "expanded";
 }
 
 export function useUserMealPlanPreferences(): Ref<UserMealPlanPreferences> {

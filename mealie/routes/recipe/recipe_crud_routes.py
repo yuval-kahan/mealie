@@ -13,6 +13,7 @@ from uuid import UUID, uuid4
 import orjson
 import sqlalchemy
 import sqlalchemy.exc
+from bs4 import BeautifulSoup
 from fastapi import (
     BackgroundTasks,
     Depends,
@@ -83,6 +84,7 @@ from mealie.schema.response.responses import (
     SuccessResponse,
 )
 from mealie.services import urls
+from mealie.services.entity_image_service import EntityImageService
 from mealie.services.event_bus_service.event_types import (
     EventOperation,
     EventRecipeBulkData,
@@ -104,10 +106,6 @@ from mealie.services.recipe.video_asset_service import (
     VideoTranscodeError,
     normalize_video_asset,
 )
-from mealie.services.uploaded_books.book_recipe_extractor import (
-    SUPPORTED_TEXT_EXTRACTION_EXTENSIONS,
-    UploadedBookRecipeExtractor,
-)
 from mealie.services.scraper.recipe_bulk_scraper import BulkImportVideo, RecipeBulkScraperService
 from mealie.services.scraper.scraped_extras import ScraperContext
 from mealie.services.scraper.scraper import create_from_html
@@ -115,6 +113,10 @@ from mealie.services.scraper.scraper_strategies import (
     ForceTimeoutException,
     RecipeScraperOpenAI,
     RecipeScraperPackage,
+)
+from mealie.services.uploaded_books.book_recipe_extractor import (
+    SUPPORTED_TEXT_EXTRACTION_EXTENSIONS,
+    UploadedBookRecipeExtractor,
 )
 
 from ._base import BaseRecipeController, JSONBytes
@@ -134,6 +136,7 @@ ASSET_ALLOWED_EXTENSIONS = {
     "json",
     *VIDEO_ASSET_EXTENSIONS,
 }
+AI_INSTRUCTION_ASSET_PREFIX = "instruction-ai::"
 
 router = UserAPIRouter(prefix="/recipes", route_class=MealieCrudRoute)
 
@@ -2503,6 +2506,82 @@ class RecipeController(BaseRecipeController):
             )
 
         return UpdateImageResponse(image=recipe.image)
+
+    @router.post(
+        "/{slug}/instructions/{step_id}/image/ai",
+        response_model=RecipeAsset,
+        tags=["Recipe: Images and Assets"],
+    )
+    async def create_ai_recipe_instruction_image(self, slug: str, step_id: UUID):
+        recipe = self.mixins.get_one(slug)
+        instructions = recipe.recipe_instructions or []
+        step_index = next((index for index, step in enumerate(instructions) if step.id == step_id), None)
+        if step_index is None:
+            raise HTTPException(status_code=404, detail=ErrorResponse.respond("Recipe instruction was not found"))
+
+        openai_service = OpenAIService(self.repos)
+        if not openai_service.image_provider:
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond("Configure an image provider before creating instruction images"),
+            )
+
+        step = instructions[step_index]
+        step_text = BeautifulSoup(step.text or "", "html.parser").get_text(" ", strip=True)[:4000]
+        ingredient_names = [
+            ingredient.display or ingredient.note or (ingredient.food.name if ingredient.food else "")
+            for ingredient in (recipe.recipe_ingredient or [])[:30]
+        ]
+        ingredients = ", ".join(name.strip() for name in ingredient_names if name and name.strip())[:3000]
+        prompt = (
+            "Create one realistic, professional food-photography image for a single recipe instruction step. "
+            "Show the cooking action or the food immediately after that action, with the relevant cookware when "
+            "useful. Do not show a recipe page, written ingredients, labels, captions, split panels, collages, or a "
+            "flat lay of raw "
+            "ingredients. Do not add any visible text. Keep the scene faithful to the named dish and instruction. "
+            f"Dish: {recipe.name}. "
+            f"Recipe description: {(recipe.description or '')[:1200]}. "
+            f"Step {step_index + 1} title: {(step.title or step.summary or '')[:500]}. "
+            f"Step instruction: {step_text}. "
+            f"Relevant recipe ingredients: {ingredients}."
+        )
+
+        try:
+            image_content = await openai_service.generate_image(prompt)
+            asset_name = f"{AI_INSTRUCTION_ASSET_PREFIX}{step_id}"
+            file_name = f"instruction-ai-{step_id}.webp"
+            destination = recipe.asset_dir.joinpath(file_name)
+            await EntityImageService(recipe.asset_dir).save_content(destination, image_content)
+
+            assets = list(recipe.assets or [])
+            replaced_assets = [asset for asset in assets if asset.name == asset_name]
+            for old_asset in replaced_assets:
+                if not old_asset.file_name or old_asset.file_name == file_name:
+                    continue
+                old_path = recipe.asset_dir.joinpath(old_asset.file_name).resolve()
+                if old_path.is_relative_to(recipe.asset_dir.resolve()):
+                    old_path.unlink(missing_ok=True)
+
+            asset = RecipeAsset(name=asset_name, icon="mdi-file-image", file_name=file_name)
+            recipe.assets = [existing for existing in assets if existing.name != asset_name]
+            recipe.assets.append(asset)
+            self.service.update_one(slug, recipe)
+            return asset
+        except exceptions.RateLimitError as error:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=ErrorResponse.respond("The image provider rate limit was reached. Try again later."),
+            ) from error
+        except HTTPException:
+            raise
+        except Exception as error:
+            self.logger.exception("Failed to generate an instruction image for recipe %s", slug)
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=ErrorResponse.respond(
+                    "The configured image provider could not generate this image. Check its model and API settings."
+                ),
+            ) from error
 
     @router.put("/{slug}/image", response_model=UpdateImageResponse, tags=["Recipe: Images and Assets"])
     def update_recipe_image(self, slug: str, image: bytes = File(...), extension: str = Form(...)):

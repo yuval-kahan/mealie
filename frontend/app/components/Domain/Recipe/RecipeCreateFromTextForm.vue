@@ -389,7 +389,7 @@ const newRecipeGroupName = ref("");
 const newRecipeGroupParentId = ref<string | null>(null);
 const recipeGroupCategories = computed(() => categories.store.value
   .filter(category => category.isRecipeGroup
-    && category.recipeGroupSection === recipeSection.value
+    && (category.recipeGroupSection || "recipes") === recipeSection.value
     && category.id));
 const recipeGroupOptions = computed(() => recipeGroupCategories.value
   .map((category) => {

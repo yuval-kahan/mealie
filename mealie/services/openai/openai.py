@@ -1,4 +1,5 @@
 import base64
+import binascii
 import inspect
 import json
 import os
@@ -16,7 +17,7 @@ from pydantic import BaseModel, field_validator
 
 from mealie.core import exceptions, root_logger
 from mealie.core.config import get_app_settings
-from mealie.pkgs import img
+from mealie.pkgs import img, safehttp
 from mealie.repos.repository_factory import AllRepositories
 from mealie.schema.group.ai_providers import AIProviderCreate, AIProviderOut
 from mealie.schema.openai._base import OpenAIBase
@@ -26,6 +27,7 @@ from .._base_service import BaseService
 
 T = TypeVar("T", bound=OpenAIBase)
 logger = root_logger.get_logger(__name__)
+GENERATED_IMAGE_MAX_BYTES = 12 * 1024 * 1024
 
 
 class OpenAINotEnabledException(Exception):
@@ -534,6 +536,69 @@ class OpenAIService(BaseService):
             raise exceptions.RateLimitError(str(e)) from e
         except Exception as e:
             raise Exception(f"OpenAI Request Failed. {e.__class__.__name__}: {e}") from e
+
+    async def generate_image(self, prompt: str) -> bytes:
+        """Generate one bounded image using the explicitly configured image provider."""
+
+        if not self.image_provider:
+            raise OpenAINotEnabledException("No image provider set")
+
+        normalized_prompt = " ".join(prompt.split()).strip()
+        if not normalized_prompt:
+            raise ValueError("Image prompt cannot be empty")
+
+        client = self.get_client(self.image_provider)
+        try:
+            response = await client.images.generate(
+                model=self.image_provider.model,
+                prompt=normalized_prompt[:8000],
+                n=1,
+                response_format="b64_json",
+            )
+        except openai.RateLimitError as e:
+            raise exceptions.RateLimitError(str(e)) from e
+        except Exception as e:
+            raise Exception(f"Image generation failed. {e.__class__.__name__}: {e}") from e
+        finally:
+            await self._close_client(client)
+
+        if not response.data:
+            raise ValueError("The image provider returned no image")
+
+        generated = response.data[0]
+        encoded = generated.b64_json
+        if encoded:
+            max_encoded_length = ((GENERATED_IMAGE_MAX_BYTES + 2) // 3) * 4
+            if len(encoded) > max_encoded_length:
+                raise ValueError("Generated image exceeds the size limit")
+            try:
+                content = base64.b64decode(encoded, validate=True)
+            except (binascii.Error, ValueError) as e:
+                raise ValueError("The image provider returned invalid image data") from e
+        elif generated.url:
+            limits = httpx.Limits(max_connections=2, max_keepalive_connections=1)
+            async with httpx.AsyncClient(
+                transport=safehttp.AsyncSafeTransport(impersonate="chrome"),
+                timeout=30.0,
+                follow_redirects=True,
+                limits=limits,
+            ) as download_client:
+                async with download_client.stream("GET", generated.url) as download_response:
+                    download_response.raise_for_status()
+                    chunks: list[bytes] = []
+                    total = 0
+                    async for chunk in download_response.aiter_bytes():
+                        total += len(chunk)
+                        if total > GENERATED_IMAGE_MAX_BYTES:
+                            raise ValueError("Generated image exceeds the size limit")
+                        chunks.append(chunk)
+                    content = b"".join(chunks)
+        else:
+            raise ValueError("The image provider returned no usable image data")
+
+        if not content or len(content) > GENERATED_IMAGE_MAX_BYTES:
+            raise ValueError("Generated image is empty or exceeds the size limit")
+        return content
 
     async def transcribe_audio(self, audio_file_path: Path) -> str | None:
         if not self.audio_provider:

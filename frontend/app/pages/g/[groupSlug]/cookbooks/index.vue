@@ -112,6 +112,160 @@
     </BaseDialog>
 
     <BaseDialog
+      v-model="bookCategoryDialog"
+      :title="bookCategoryEditing ? $t('cookbook.edit-book-category') : $t('cookbook.create-book-category')"
+      :icon="$globals.icons.categories"
+      width="560"
+      max-width="96vw"
+      can-submit
+      keep-open
+      :loading="bookCategorySaving"
+      :submit-disabled="!bookCategoryName.trim()"
+      @submit="saveBookCategory"
+      @close="resetBookCategoryDialog"
+    >
+      <v-card-text class="pt-4">
+        <v-text-field
+          v-model="bookCategoryName"
+          variant="outlined"
+          autofocus
+          maxlength="160"
+          counter
+          :label="$t('cookbook.book-category-name')"
+        />
+        <v-select
+          v-model="bookCategoryParentId"
+          :items="topLevelBookCategoryOptions"
+          item-title="title"
+          item-value="value"
+          variant="outlined"
+          clearable
+          :disabled="Boolean(bookCategoryEditing?.parentCategoryId)"
+          :label="$t('cookbook.parent-book-category')"
+          :hint="$t('cookbook.parent-book-category-hint')"
+          persistent-hint
+        />
+        <v-divider class="my-5" />
+        <div class="d-flex align-center ga-2 mb-2">
+          <h3 class="text-subtitle-1 font-weight-medium">
+            {{ $t("category.categories") }}
+          </h3>
+          <v-spacer />
+          <v-btn
+            size="small"
+            variant="text"
+            :prepend-icon="$globals.icons.add"
+            @click="openCreateBookCategory()"
+          >
+            {{ $t("cookbook.create-book-category") }}
+          </v-btn>
+        </div>
+        <div class="book-category-manager">
+          <div
+            v-for="category in orderedUploadedBookCategories"
+            :key="category.id"
+            class="book-category-manager__row"
+            :class="{ 'book-category-manager__row--child': category.parentCategoryId }"
+          >
+            <v-icon :icon="$globals.icons.folderOutline" size="18" />
+            <span class="text-body-2 text-truncate">{{ category.name }}</span>
+            <v-spacer />
+            <v-chip size="x-small" variant="tonal">
+              {{ booksInBookCategoryId(category.id) }}
+            </v-chip>
+            <v-icon
+              v-if="category.isProtected"
+              :icon="$globals.icons.lock"
+              size="18"
+              :title="$t('recipe.locked')"
+            />
+            <template v-else>
+              <v-btn
+                v-if="!category.parentCategoryId"
+                icon
+                size="x-small"
+                variant="text"
+                :title="$t('cookbook.create-book-subcategory')"
+                @click="openCreateBookCategory(category.id)"
+              >
+                <v-icon :icon="$globals.icons.add" size="18" />
+              </v-btn>
+              <v-btn
+                icon
+                size="x-small"
+                variant="text"
+                :title="$t('general.edit')"
+                @click="openEditBookCategory(category)"
+              >
+                <v-icon :icon="$globals.icons.edit" size="18" />
+              </v-btn>
+              <v-btn
+                icon
+                size="x-small"
+                variant="text"
+                color="error"
+                :title="$t('general.delete')"
+                @click="confirmDeleteBookCategory(category)"
+              >
+                <v-icon :icon="$globals.icons.delete" size="18" />
+              </v-btn>
+            </template>
+          </div>
+        </div>
+      </v-card-text>
+    </BaseDialog>
+
+    <BaseDialog
+      v-model="bookCategoryDeleteDialog"
+      :title="$t('cookbook.delete-book-category')"
+      :icon="$globals.icons.delete"
+      color="error"
+      can-confirm
+      :loading="bookCategoryDeleting"
+      @confirm="deleteBookCategory"
+    >
+      <v-card-text>
+        <p>{{ $t("cookbook.delete-book-category-description") }}</p>
+        <strong v-if="bookCategoryDeleteTarget" class="d-block my-3">
+          {{ bookCategoryDeleteTarget.name }}
+        </strong>
+        <v-select
+          v-model="bookCategoryReplacementId"
+          :items="bookCategoryReplacementOptions"
+          item-title="title"
+          item-value="value"
+          variant="outlined"
+          :label="$t('cookbook.reassign-books-to')"
+        />
+      </v-card-text>
+    </BaseDialog>
+
+    <BaseDialog
+      v-model="bookCategoryAssignmentDialog"
+      :title="$t('cookbook.assign-book-category')"
+      :icon="$globals.icons.categories"
+      can-submit
+      keep-open
+      :loading="bookCategoryAssigning"
+      :submit-disabled="!bookCategoryAssignmentTarget || !bookCategoryAssignmentId"
+      @submit="assignBookCategory"
+    >
+      <v-card-text class="pt-4">
+        <p v-if="bookCategoryAssignmentTarget" class="font-weight-medium mb-4">
+          {{ bookCategoryAssignmentTarget.name }}
+        </p>
+        <v-select
+          v-model="bookCategoryAssignmentId"
+          :items="bookCategoryOptions"
+          item-title="title"
+          item-value="value"
+          variant="outlined"
+          :label="$t('cookbook.book-category')"
+        />
+      </v-card-text>
+    </BaseDialog>
+
+    <BaseDialog
       v-model="uploadedBookDeleteDialog"
       :title="$t('cookbook.delete-book')"
       :icon="$globals.icons.delete"
@@ -688,6 +842,14 @@
             {{ $t("cookbook.create-book-with-ai") }}
           </v-btn>
           <v-btn
+            color="primary"
+            variant="tonal"
+            :prepend-icon="$globals.icons.categories"
+            @click="openCreateBookCategory()"
+          >
+            {{ $t("cookbook.create-book-category") }}
+          </v-btn>
+          <v-btn
             icon
             variant="text"
             :loading="uploadedBooksLoading"
@@ -718,6 +880,16 @@
             hide-details
             :label="$t('cookbook.book-type')"
           />
+          <v-select
+            v-model="bookCategoryFilter"
+            :items="bookCategoryFilterOptions"
+            item-title="title"
+            item-value="value"
+            variant="outlined"
+            density="comfortable"
+            hide-details
+            :label="$t('cookbook.book-category')"
+          />
           <v-autocomplete
             v-model="bookMetadataFilters"
             :items="bookMetadataOptions"
@@ -740,6 +912,27 @@
             hide-details
             :label="$t('cookbook.group-books-by')"
           />
+          <v-select
+            v-model="bookLibraryViewMode"
+            :items="bookLibraryViewOptions"
+            item-title="title"
+            item-value="value"
+            variant="outlined"
+            density="comfortable"
+            hide-details
+            :label="$t('cookbook.book-library-view')"
+          />
+          <v-select
+            v-if="bookLibraryViewMode === 'headings'"
+            v-model="bookLibraryExpansionMode"
+            :items="bookLibraryExpansionOptions"
+            item-title="title"
+            item-value="value"
+            variant="outlined"
+            density="comfortable"
+            hide-details
+            :label="$t('cookbook.category-expansion')"
+          />
         </div>
         <BaseListSortControls
           v-model:sort-by="uploadedBookSortBy"
@@ -761,12 +954,65 @@
         <div v-else class="cookbook-library__grid">
           <template v-for="(book, bookIndex) in paginatedUploadedBooks" :key="book.id">
             <div
-              v-if="isFirstBookGroupItem(bookIndex)"
+              v-if="isFirstBookCategoryItem(bookIndex)"
+              class="cookbook-library__category-divider"
+            >
+              <button
+                class="cookbook-library__category-toggle"
+                type="button"
+                :aria-expanded="isBookCategoryOpen(book)"
+                @click="toggleBookCategory(book)"
+              >
+                <v-icon
+                  :icon="isBookCategoryOpen(book) ? $globals.icons.chevronDown : $globals.icons.chevronRight"
+                  size="22"
+                />
+                <span>{{ bookCategoryPath(book) }}</span>
+                <v-chip size="small" variant="tonal">
+                  {{ booksInCategory(book) }}
+                </v-chip>
+              </button>
+              <v-spacer />
+              <template v-if="bookCategory(book) && !bookCategory(book)?.isProtected">
+                <v-btn
+                  v-if="!bookCategory(book)?.parentCategoryId"
+                  icon
+                  size="small"
+                  variant="text"
+                  :title="$t('cookbook.create-book-subcategory')"
+                  @click="openCreateBookSubcategory(book)"
+                >
+                  <v-icon :icon="$globals.icons.add" />
+                </v-btn>
+                <v-btn
+                  icon
+                  size="small"
+                  variant="text"
+                  :title="$t('general.edit')"
+                  @click="openEditBookCategoryForBook(book)"
+                >
+                  <v-icon :icon="$globals.icons.edit" />
+                </v-btn>
+                <v-btn
+                  icon
+                  size="small"
+                  variant="text"
+                  color="error"
+                  :title="$t('general.delete')"
+                  @click="confirmDeleteBookCategoryForBook(book)"
+                >
+                  <v-icon :icon="$globals.icons.delete" />
+                </v-btn>
+              </template>
+            </div>
+            <div
+              v-if="bookLibraryViewMode !== 'headings' && isFirstBookGroupItem(bookIndex)"
               class="cookbook-library__group-divider"
             >
               <span>{{ bookGroupLabel(book) }}</span>
             </div>
             <v-card
+              v-if="isBookCategoryOpen(book)"
               variant="outlined"
               class="cookbook-library__book"
               :class="{ 'cookbook-library__book--complete': isBookCompleted(book) }"
@@ -782,9 +1028,9 @@
                 @keydown.space.prevent="openUploadedBook(book)"
               >
                 <v-img
-                  v-if="book.bookMetadata?.cover_file_name"
-                  :src="api.uploadedBooks.coverUrl(book.id, book.updatedAt)"
-                  :alt="book.name"
+                  v-if="bookCoverSource(book).bookMetadata?.cover_file_name"
+                  :src="api.uploadedBooks.coverUrl(bookCoverSource(book).id, bookCoverSource(book).updatedAt)"
+                  :alt="bookLogicalTitle(book)"
                   cover
                   height="260"
                 >
@@ -834,10 +1080,10 @@
                   </v-avatar>
                 </template>
                 <v-card-title class="text-subtitle-1 text-wrap">
-                  {{ book.name }}
+                  {{ bookLogicalTitle(book) }}
                 </v-card-title>
                 <v-card-subtitle>
-                  {{ bookTypeLabel(book) }} · {{ book.extension.toUpperCase() }}
+                  {{ bookCategoryPath(book) }}
                 </v-card-subtitle>
               </v-card-item>
               <v-card-text class="pt-0">
@@ -853,6 +1099,19 @@
                   >
                     {{ label }}
                   </v-chip>
+                </div>
+                <div class="cookbook-library__variants mt-3">
+                  <v-btn
+                    v-for="variant in bookVariants(book)"
+                    :key="variant.id"
+                    size="small"
+                    variant="tonal"
+                    :color="variant.id === book.id ? 'primary' : undefined"
+                    :prepend-icon="variant.isTranslatedBook ? $globals.icons.translate : bookIcon(variant)"
+                    @click="openUploadedBookVariant(variant)"
+                  >
+                    {{ bookVariantLabel(variant) }}
+                  </v-btn>
                 </div>
                 <v-progress-linear
                   v-if="book.classificationStatus === 'processing'"
@@ -946,6 +1205,14 @@
                   <v-icon :icon="$globals.icons.edit" />
                 </v-btn>
                 <v-btn
+                  icon
+                  variant="text"
+                  :title="$t('cookbook.assign-book-category')"
+                  @click="openBookCategoryAssignment(book)"
+                >
+                  <v-icon :icon="$globals.icons.categories" />
+                </v-btn>
+                <v-btn
                   v-if="isGeneratedBook(book)"
                   icon
                   variant="text"
@@ -1025,6 +1292,7 @@ import { useCookbookPreferences } from "~/composables/use-users/preferences";
 import type {
   AICookbookGenerateRequest,
   UploadedBook,
+  UploadedBookCategory,
   UploadedBookClassification,
   UploadedBookDeletePreview,
   UploadedBookReadingState,
@@ -1072,6 +1340,7 @@ const { household } = useHouseholdSelf();
 const cookbookPreferences = useCookbookPreferences();
 
 const uploadedBooks = ref<UploadedBook[]>([]);
+const uploadedBookCategories = ref<UploadedBookCategory[]>([]);
 const uploadedBooksById = computed(() =>
   new Map(uploadedBooks.value.map(book => [book.id, book])),
 );
@@ -1080,6 +1349,65 @@ const uploadedBooksLoading = ref(false);
 const bookSearch = ref("");
 const bookTypeFilter = ref("all");
 const bookMetadataFilters = ref<string[]>([]);
+const bookCategoryFilter = ref("all");
+const BOOK_LIBRARY_VIEW_MODES = ["headings", "focus"] as const;
+type BookLibraryViewMode = typeof BOOK_LIBRARY_VIEW_MODES[number];
+const BOOK_LIBRARY_EXPANSION_MODES = ["remember", "collapsed", "expanded"] as const;
+type BookLibraryExpansionMode = typeof BOOK_LIBRARY_EXPANSION_MODES[number];
+const bookLibraryViewPreferences = useLocalStorage<Record<string, BookLibraryViewMode>>(
+  "mealie-book-library-view-mode",
+  {},
+  { deep: true },
+);
+const bookLibraryExpansionPreferences = useLocalStorage<Record<string, BookLibraryExpansionMode>>(
+  "mealie-book-library-expansion-mode",
+  {},
+  { deep: true },
+);
+const bookLibraryOpenCategoryPreferences = useLocalStorage<Record<string, string[]>>(
+  "mealie-book-library-open-categories",
+  {},
+  { deep: true },
+);
+const bookLibraryPreferenceKey = computed(() => `${auth.user.value?.id || "anonymous"}:uploaded-books`);
+const bookLibraryViewMode = computed<BookLibraryViewMode>({
+  get() {
+    const stored = bookLibraryViewPreferences.value[bookLibraryPreferenceKey.value];
+    return stored && BOOK_LIBRARY_VIEW_MODES.includes(stored) ? stored : "headings";
+  },
+  set(value) {
+    if (!BOOK_LIBRARY_VIEW_MODES.includes(value)) return;
+    bookLibraryViewPreferences.value = {
+      ...bookLibraryViewPreferences.value,
+      [bookLibraryPreferenceKey.value]: value,
+    };
+  },
+});
+const bookLibraryExpansionMode = computed<BookLibraryExpansionMode>({
+  get() {
+    const stored = bookLibraryExpansionPreferences.value[bookLibraryPreferenceKey.value];
+    return stored && BOOK_LIBRARY_EXPANSION_MODES.includes(stored) ? stored : "remember";
+  },
+  set(value) {
+    if (!BOOK_LIBRARY_EXPANSION_MODES.includes(value)) return;
+    bookLibraryExpansionPreferences.value = {
+      ...bookLibraryExpansionPreferences.value,
+      [bookLibraryPreferenceKey.value]: value,
+    };
+  },
+});
+const rememberedOpenBookCategoryIds = computed<Set<string>>({
+  get() {
+    return new Set(bookLibraryOpenCategoryPreferences.value[bookLibraryPreferenceKey.value] || []);
+  },
+  set(value) {
+    const validIds = new Set(uploadedBookCategories.value.map(category => category.id));
+    bookLibraryOpenCategoryPreferences.value = {
+      ...bookLibraryOpenCategoryPreferences.value,
+      [bookLibraryPreferenceKey.value]: [...value].filter(id => validIds.has(id)).slice(0, 200),
+    };
+  },
+});
 const UPLOADED_BOOK_GROUP_KEYS = ["none", "difficulty", "michelin", "cuisine", "teaching", "type"] as const;
 type UploadedBookGroupKey = typeof UPLOADED_BOOK_GROUP_KEYS[number];
 const uploadedBookGroupPreferences = useLocalStorage<Record<string, UploadedBookGroupKey>>(
@@ -1131,6 +1459,19 @@ const aiBookTitle = ref("");
 const aiBookMaxRecipes = ref(100);
 const aiBookMaxPages = ref(300);
 const refreshingBookIds = ref(new Set<string>());
+const bookCategoryDialog = ref(false);
+const bookCategorySaving = ref(false);
+const bookCategoryEditing = ref<UploadedBookCategory | null>(null);
+const bookCategoryName = ref("");
+const bookCategoryParentId = ref<string | null>(null);
+const bookCategoryDeleteDialog = ref(false);
+const bookCategoryDeleting = ref(false);
+const bookCategoryDeleteTarget = ref<UploadedBookCategory | null>(null);
+const bookCategoryReplacementId = ref<string | null>(null);
+const bookCategoryAssignmentDialog = ref(false);
+const bookCategoryAssigning = ref(false);
+const bookCategoryAssignmentTarget = ref<UploadedBook | null>(null);
+const bookCategoryAssignmentId = ref<string | null>(null);
 const uploadedBookDeleteDialog = ref(false);
 const bookCoverDialog = ref(false);
 const bookCoverSaving = ref(false);
@@ -1293,27 +1634,162 @@ function bookLabels(book: UploadedBook) {
   ].filter((value): value is string => Boolean(value && value !== "unspecified"))));
 }
 
+const orderedUploadedBookCategories = computed(() => {
+  const compare = (left: UploadedBookCategory, right: UploadedBookCategory) =>
+    left.position - right.position
+    || left.name.localeCompare(right.name, i18n.locale.value, { numeric: true, sensitivity: "base" });
+  const roots = uploadedBookCategories.value.filter(category => !category.parentCategoryId).sort(compare);
+  const children = new Map<string, UploadedBookCategory[]>();
+  for (const category of uploadedBookCategories.value.filter(category => category.parentCategoryId)) {
+    const list = children.get(category.parentCategoryId!) || [];
+    list.push(category);
+    children.set(category.parentCategoryId!, list);
+  }
+  return roots.flatMap(root => [root, ...(children.get(root.id) || []).sort(compare)]);
+});
+const topLevelBookCategoryOptions = computed(() =>
+  orderedUploadedBookCategories.value
+    .filter(category => !category.parentCategoryId && category.id !== bookCategoryEditing.value?.id)
+    .map(category => ({ title: category.name, value: category.id })),
+);
+const bookCategoryOptions = computed(() => {
+  const byId = new Map(uploadedBookCategories.value.map(category => [category.id, category]));
+  return orderedUploadedBookCategories.value.map((category) => {
+    const parent = category.parentCategoryId ? byId.get(category.parentCategoryId) : undefined;
+    return {
+      title: parent ? `${parent.name} / ${category.name}` : category.name,
+      value: category.id,
+    };
+  });
+});
+const bookCategoryFilterOptions = computed(() => [
+  { title: i18n.t("cookbook.all-book-categories"), value: "all" },
+  ...bookCategoryOptions.value,
+]);
+const bookCategoryReplacementOptions = computed(() =>
+  bookCategoryOptions.value.filter(option => option.value !== bookCategoryDeleteTarget.value?.id),
+);
+const bookLibraryViewOptions = computed(() => [
+  { title: i18n.t("cookbook.book-library-view-headings"), value: "headings" },
+  { title: i18n.t("cookbook.book-library-view-focus"), value: "focus" },
+]);
+const bookLibraryExpansionOptions = computed(() => [
+  { title: i18n.t("cookbook.remember-category-state"), value: "remember" },
+  { title: i18n.t("cookbook.all-categories-collapsed"), value: "collapsed" },
+  { title: i18n.t("cookbook.all-categories-expanded"), value: "expanded" },
+]);
+
+function normalizedLogicalBookIdentity(book: UploadedBook) {
+  if (isGeneratedBook(book) && book.bookMetadata?.series_id) {
+    return `generated:${book.bookMetadata.series_id}:${book.bookMetadata.volume_number || 1}`;
+  }
+  const source = book.isTranslatedBook && book.translatedFromBookId
+    ? uploadedBooksById.value.get(book.translatedFromBookId) || book
+    : book;
+  return String(source.name || source.originalFileName || source.id)
+    .normalize("NFKC")
+    .replace(/\.(pdf|epub|mobi|azw3?|html?|docx?|odt|rtf|txt)$/gi, "")
+    .replace(/\s*(?:\(|\[)(hebrew|translated|עברית|מתורגם)(?:\)|\])/gi, "")
+    .replace(/\s*[-–:]\s*(hebrew|translated|עברית|מתורגם)\s*$/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLocaleLowerCase();
+}
+
+const logicalUploadedBookGroups = computed(() => {
+  const grouped = new Map<string, UploadedBook[]>();
+  for (const book of uploadedBooks.value) {
+    const key = normalizedLogicalBookIdentity(book) || book.id;
+    const variants = grouped.get(key) || [];
+    variants.push(book);
+    grouped.set(key, variants);
+  }
+  return [...grouped.values()].map((variants) => {
+    const translated = variants
+      .filter(book => book.isTranslatedBook && ["completed", "partial_failed"].includes(book.translationStatus))
+      .sort((left, right) => bookTranslationPercent(right) - bookTranslationPercent(left))[0];
+    const original = variants.find(book => !book.isTranslatedBook) || variants[0];
+    return {
+      primary: translated || original,
+      variants: [...variants].sort((left, right) => {
+        if (left.isTranslatedBook !== right.isTranslatedBook) return left.isTranslatedBook ? -1 : 1;
+        return left.extension.localeCompare(right.extension);
+      }),
+    };
+  });
+});
+const logicalUploadedBookVariantsByPrimaryId = computed(() =>
+  new Map(logicalUploadedBookGroups.value.flatMap(group =>
+    group.variants.map(variant => [variant.id, group.variants] as const),
+  )),
+);
+const logicalUploadedBooks = computed(() => logicalUploadedBookGroups.value.map(group => group.primary));
+
+function bookVariants(book: UploadedBook) {
+  return logicalUploadedBookVariantsByPrimaryId.value.get(book.id) || [book];
+}
+
+function bookCoverSource(book: UploadedBook) {
+  return bookVariants(book).find(variant => variant.bookMetadata?.cover_file_name) || book;
+}
+
+function bookLogicalTitle(book: UploadedBook) {
+  return bookVariants(book).find(variant => !variant.isTranslatedBook)?.name || book.name;
+}
+
+function bookCategoryId(book: UploadedBook) {
+  return bookVariants(book).find(variant => variant.categoryId)?.categoryId
+    || uploadedBookCategories.value.find(category => category.isProtected)?.id
+    || null;
+}
+
+function bookCategory(book: UploadedBook) {
+  const categoryId = bookCategoryId(book);
+  return uploadedBookCategories.value.find(category => category.id === categoryId) || null;
+}
+
+function bookCategoryPath(book: UploadedBook) {
+  const category = bookCategory(book);
+  if (!category) return i18n.t("cookbook.uncategorized-books");
+  const parent = category.parentCategoryId
+    ? uploadedBookCategories.value.find(candidate => candidate.id === category.parentCategoryId)
+    : null;
+  return parent ? `${parent.name} / ${category.name}` : category.name;
+}
+
+function booksInBookCategoryId(categoryId: string) {
+  return logicalUploadedBooks.value.filter(book => bookCategoryId(book) === categoryId).length;
+}
+
+function bookVariantLabel(book: UploadedBook) {
+  return `${book.extension.toUpperCase()} · ${book.isTranslatedBook
+    ? i18n.t("cookbook.translated-version")
+    : i18n.t("cookbook.original-version")}`;
+}
+
 const bookMetadataOptions = computed(() =>
-  Array.from(new Set(uploadedBooks.value.flatMap(bookLabels))).sort((a, b) => a.localeCompare(b)),
+  Array.from(new Set(logicalUploadedBooks.value.flatMap(bookLabels))).sort((a, b) => a.localeCompare(b)),
 );
 
 function matchesBookType(book: UploadedBook) {
-  if (bookTypeFilter.value === "generated") return isGeneratedBook(book);
-  if (bookTypeFilter.value === "translated") return book.isTranslatedBook;
-  if (bookTypeFilter.value === "uploaded") return !book.isTranslatedBook && !isGeneratedBook(book);
+  const variants = bookVariants(book);
+  if (bookTypeFilter.value === "generated") return variants.some(isGeneratedBook);
+  if (bookTypeFilter.value === "translated") return variants.some(variant => variant.isTranslatedBook);
+  if (bookTypeFilter.value === "uploaded") return variants.some(variant => !variant.isTranslatedBook && !isGeneratedBook(variant));
   return true;
 }
 
 const filteredUploadedBooks = computed(() => {
   const query = bookSearch.value.trim().toLocaleLowerCase();
-  return uploadedBooks.value.filter((book) => {
+  return logicalUploadedBooks.value.filter((book) => {
     if (!matchesBookType(book)) return false;
+    if (bookCategoryFilter.value !== "all" && bookCategoryId(book) !== bookCategoryFilter.value) return false;
     const labels = bookLabels(book);
     if (bookMetadataFilters.value.some(filter => !labels.includes(filter))) return false;
     if (!query) return true;
-    return `${book.name} ${book.originalFileName} ${labels.join(" ")} ${bookClassification(book)?.summary || ""}`
+    return bookVariants(book).some(variant => `${variant.name} ${variant.originalFileName} ${labels.join(" ")} ${bookClassification(variant)?.summary || ""}`
       .toLocaleLowerCase()
-      .includes(query);
+      .includes(query));
   });
 });
 const baseSortedUploadedBooks = sortListItems(
@@ -1348,14 +1824,20 @@ function bookGroupLabel(book: UploadedBook) {
   }
 }
 const sortedUploadedBooks = computed(() => {
-  if (uploadedBookGroupBy.value === "none") return baseSortedUploadedBooks.value;
-  return baseSortedUploadedBooks.value
-    .map((book, index) => ({ book, index, group: bookGroupLabel(book) }))
-    .sort((left, right) => left.group.localeCompare(right.group, i18n.locale.value, {
-      numeric: true,
-      sensitivity: "base",
-    }) || left.index - right.index)
-    .map(entry => entry.book);
+  const groupedBooks = uploadedBookGroupBy.value === "none"
+    ? baseSortedUploadedBooks.value
+    : baseSortedUploadedBooks.value
+        .map((book, index) => ({ book, index, group: bookGroupLabel(book) }))
+        .sort((left, right) => left.group.localeCompare(right.group, i18n.locale.value, {
+          numeric: true,
+          sensitivity: "base",
+        }) || left.index - right.index)
+        .map(entry => entry.book);
+  if (bookLibraryViewMode.value !== "headings") return groupedBooks;
+  const order = new Map(orderedUploadedBookCategories.value.map((category, index) => [category.id, index]));
+  return [...groupedBooks].sort((left, right) =>
+    (order.get(bookCategoryId(left) || "") ?? Number.MAX_SAFE_INTEGER)
+    - (order.get(bookCategoryId(right) || "") ?? Number.MAX_SAFE_INTEGER));
 });
 const {
   page: uploadedBookPage,
@@ -1371,20 +1853,178 @@ function isFirstBookGroupItem(index: number) {
   return !previous || bookGroupLabel(previous) !== bookGroupLabel(current);
 }
 
+function isFirstBookCategoryItem(index: number) {
+  if (bookLibraryViewMode.value !== "headings") return false;
+  const current = paginatedUploadedBooks.value[index];
+  const previous = paginatedUploadedBooks.value[index - 1];
+  return !previous || bookCategoryId(previous) !== bookCategoryId(current);
+}
+
+function isBookCategoryOpen(book: UploadedBook) {
+  if (bookLibraryViewMode.value !== "headings") return true;
+  if (bookLibraryExpansionMode.value === "expanded") return true;
+  if (bookLibraryExpansionMode.value === "collapsed") return false;
+  const categoryId = bookCategoryId(book) || "uncategorized";
+  const remembered = rememberedOpenBookCategoryIds.value;
+  if (!(bookLibraryPreferenceKey.value in bookLibraryOpenCategoryPreferences.value)) return true;
+  return remembered.has(categoryId);
+}
+
+function toggleBookCategory(book: UploadedBook) {
+  if (bookLibraryExpansionMode.value !== "remember") return;
+  const categoryId = bookCategoryId(book) || "uncategorized";
+  const hasStoredState = bookLibraryPreferenceKey.value in bookLibraryOpenCategoryPreferences.value;
+  const next = hasStoredState
+    ? new Set(rememberedOpenBookCategoryIds.value)
+    : new Set([...uploadedBookCategories.value.map(category => category.id), "uncategorized"]);
+  if (next.has(categoryId)) next.delete(categoryId);
+  else next.add(categoryId);
+  bookLibraryOpenCategoryPreferences.value = {
+    ...bookLibraryOpenCategoryPreferences.value,
+    [bookLibraryPreferenceKey.value]: [...next].slice(0, 201),
+  };
+}
+
+function booksInCategory(book: UploadedBook) {
+  const categoryId = bookCategoryId(book);
+  return filteredUploadedBooks.value.filter(candidate => bookCategoryId(candidate) === categoryId).length;
+}
+
 async function loadUploadedBooks() {
   uploadedBooksLoading.value = true;
   try {
-    const [booksResponse, statesResponse] = await Promise.all([
+    const [booksResponse, statesResponse, categoriesResponse] = await Promise.all([
       api.uploadedBooks.getAll(),
       api.uploadedBooks.getReadingStates(),
+      api.uploadedBooks.getCategories(),
     ]);
     uploadedBooks.value = booksResponse.data || [];
+    uploadedBookCategories.value = categoriesResponse.data || [];
     uploadedBookReadingStates.value = Object.fromEntries(
       (statesResponse.data || []).map(state => [state.bookId, state]),
     );
   }
   finally {
     uploadedBooksLoading.value = false;
+  }
+}
+
+function resetBookCategoryDialog() {
+  bookCategoryEditing.value = null;
+  bookCategoryName.value = "";
+  bookCategoryParentId.value = null;
+}
+
+function openCreateBookCategory(parentId: string | null = null) {
+  resetBookCategoryDialog();
+  bookCategoryParentId.value = parentId;
+  bookCategoryDialog.value = true;
+}
+
+function openCreateBookSubcategory(book: UploadedBook) {
+  const category = bookCategory(book);
+  if (category && !category.parentCategoryId) openCreateBookCategory(category.id);
+}
+
+function openEditBookCategory(category: UploadedBookCategory) {
+  if (category.isProtected) return;
+  bookCategoryEditing.value = category;
+  bookCategoryName.value = category.name;
+  bookCategoryParentId.value = category.parentCategoryId || null;
+  bookCategoryDialog.value = true;
+}
+
+function openEditBookCategoryForBook(book: UploadedBook) {
+  const category = bookCategory(book);
+  if (category) openEditBookCategory(category);
+}
+
+async function saveBookCategory() {
+  const name = bookCategoryName.value.trim();
+  if (!name || bookCategorySaving.value) return;
+  bookCategorySaving.value = true;
+  try {
+    const response = bookCategoryEditing.value
+      ? await api.uploadedBooks.updateCategory(bookCategoryEditing.value.id, { name })
+      : await api.uploadedBooks.createCategory({ name, parentCategoryId: bookCategoryParentId.value });
+    if (response.error || !response.data) {
+      alert.error(i18n.t("cookbook.book-category-save-failed"));
+      return;
+    }
+    await loadUploadedBooks();
+    bookCategoryDialog.value = false;
+    resetBookCategoryDialog();
+    alert.success(i18n.t("cookbook.book-category-saved"));
+  }
+  finally {
+    bookCategorySaving.value = false;
+  }
+}
+
+function confirmDeleteBookCategory(category: UploadedBookCategory) {
+  if (category.isProtected) return;
+  bookCategoryDeleteTarget.value = category;
+  bookCategoryReplacementId.value = uploadedBookCategories.value.find(candidate => candidate.isProtected)?.id
+    || bookCategoryReplacementOptions.value[0]?.value
+    || null;
+  bookCategoryDeleteDialog.value = true;
+}
+
+function confirmDeleteBookCategoryForBook(book: UploadedBook) {
+  const category = bookCategory(book);
+  if (category) confirmDeleteBookCategory(category);
+}
+
+async function deleteBookCategory() {
+  if (!bookCategoryDeleteTarget.value || bookCategoryDeleting.value) return;
+  bookCategoryDeleting.value = true;
+  try {
+    const { error } = await api.uploadedBooks.deleteCategory(
+      bookCategoryDeleteTarget.value.id,
+      bookCategoryReplacementId.value,
+    );
+    if (error) {
+      alert.error(i18n.t("cookbook.book-category-delete-failed"));
+      return;
+    }
+    if (bookCategoryFilter.value === bookCategoryDeleteTarget.value.id) bookCategoryFilter.value = "all";
+    bookCategoryDeleteDialog.value = false;
+    bookCategoryDeleteTarget.value = null;
+    await loadUploadedBooks();
+    alert.success(i18n.t("cookbook.book-category-deleted"));
+  }
+  finally {
+    bookCategoryDeleting.value = false;
+  }
+}
+
+function openBookCategoryAssignment(book: UploadedBook) {
+  bookCategoryAssignmentTarget.value = book;
+  bookCategoryAssignmentId.value = bookCategoryId(book)
+    || uploadedBookCategories.value.find(category => category.isProtected)?.id
+    || null;
+  bookCategoryAssignmentDialog.value = true;
+}
+
+async function assignBookCategory() {
+  const book = bookCategoryAssignmentTarget.value;
+  const categoryId = bookCategoryAssignmentId.value;
+  if (!book || !categoryId || bookCategoryAssigning.value) return;
+  bookCategoryAssigning.value = true;
+  try {
+    for (const variant of bookVariants(book)) {
+      const response = await api.uploadedBooks.update(variant.id, { categoryId });
+      if (response.error || !response.data) {
+        alert.error(i18n.t("cookbook.book-category-save-failed"));
+        return;
+      }
+    }
+    bookCategoryAssignmentDialog.value = false;
+    await loadUploadedBooks();
+    alert.success(i18n.t("cookbook.book-category-saved"));
+  }
+  finally {
+    bookCategoryAssigning.value = false;
   }
 }
 
@@ -1450,6 +2090,10 @@ function isBookCompleted(book: UploadedBook) {
 }
 
 function openUploadedBook(book: UploadedBook) {
+  window.open(api.uploadedBooks.openUrl(book.id), "_blank", "noopener");
+}
+
+function openUploadedBookVariant(book: UploadedBook) {
   window.open(api.uploadedBooks.fileUrl(book.id), "_blank", "noopener");
 }
 
@@ -1575,14 +2219,24 @@ function openBookRecipeDeleteDialog(book: UploadedBook) {
 }
 
 function openBookRenameDialog(book: UploadedBook) {
-  bookRenameTarget.value = book;
+  bookRenameTarget.value = bookVariants(book).find(variant => !variant.isTranslatedBook) || book;
   bookRenameDialog.value = true;
 }
 
-function handleBookRenamed(book: UploadedBook) {
-  const index = uploadedBooks.value.findIndex(item => item.id === book.id);
-  if (index >= 0) uploadedBooks.value[index] = book;
+async function handleBookRenamed(book: UploadedBook) {
+  const target = bookRenameTarget.value;
   bookRenameTarget.value = null;
+  if (!target) {
+    await loadUploadedBooks();
+    return;
+  }
+  const additionalRoots = bookVariants(target).filter(variant =>
+    !variant.isTranslatedBook && variant.id !== book.id,
+  );
+  for (const variant of additionalRoots) {
+    await api.uploadedBooks.rename(variant.id, book.name);
+  }
+  await loadUploadedBooks();
 }
 
 function openBookExtractionDialog(book: UploadedBook) {
@@ -1909,6 +2563,29 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.book-category-manager {
+  border-block: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.book-category-manager__row {
+  align-items: center;
+  border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.65));
+  display: flex;
+  gap: 8px;
+  min-height: 42px;
+  padding: 4px 2px;
+}
+
+.book-category-manager__row:last-child {
+  border-bottom: 0;
+}
+
+.book-category-manager__row--child {
+  padding-inline-start: 28px;
+}
+
 .cookbook-library {
   border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
 }
@@ -1935,6 +2612,37 @@ onBeforeUnmount(() => {
   content: "";
   flex: 1;
   height: 1px;
+}
+
+.cookbook-library__category-divider {
+  align-items: center;
+  border-block: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  display: flex;
+  gap: 4px;
+  grid-column: 1 / -1;
+  min-height: 48px;
+}
+
+.cookbook-library__category-toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: rgb(var(--v-theme-on-surface));
+  cursor: pointer;
+  display: flex;
+  flex: 1;
+  font: inherit;
+  font-weight: 700;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 4px;
+  text-align: start;
+}
+
+.cookbook-library__category-toggle:hover,
+.cookbook-library__category-toggle:focus-visible {
+  color: rgb(var(--v-theme-primary));
+  outline: none;
 }
 
 .book-recipe-catalog__search {
@@ -2109,7 +2817,14 @@ onBeforeUnmount(() => {
 }
 
 .cookbook-library__book .v-card-actions {
+  flex-wrap: wrap;
   margin-top: auto;
+}
+
+.cookbook-library__variants {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .book-summary {

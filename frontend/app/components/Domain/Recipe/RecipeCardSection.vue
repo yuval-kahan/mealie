@@ -666,20 +666,35 @@ const collapseBehavior = computed(() => props.groupByBook
 let loadedExpansionScope = "";
 
 watch(
-  [expansionStorageScope, collapseBehavior, () => recipeGroups.value.map(group => group.key).join("|")],
+  [expansionStorageScope, collapseBehavior],
   ([scope, behavior]) => {
-    const currentKeys = new Set(recipeGroups.value.map(group => group.key));
+    loadedExpansionScope = scope;
     if (behavior === "collapsed") {
       expandedRecipeGroups.value = new Set();
-      loadedExpansionScope = scope;
       return;
     }
-    const saved = expandedRecipeGroupStorage.value[scope] || [];
-    const source = loadedExpansionScope === scope ? [...expandedRecipeGroups.value] : saved;
-    expandedRecipeGroups.value = new Set(source.filter(key => currentKeys.has(key)));
-    loadedExpansionScope = scope;
+    if (behavior === "expanded") {
+      expandedRecipeGroups.value = new Set(recipeGroups.value.map(group => group.key));
+      return;
+    }
+    // Keep saved keys even while the async recipe/category request is still empty.
+    // Filtering at that point used to erase the remembered open state on navigation.
+    expandedRecipeGroups.value = new Set(expandedRecipeGroupStorage.value[scope] || []);
   },
   { immediate: true },
+);
+
+watch(
+  () => recipeGroups.value.map(group => group.key).join("|"),
+  () => {
+    if (loadedExpansionScope !== expansionStorageScope.value) return;
+    if (collapseBehavior.value === "expanded") {
+      expandedRecipeGroups.value = new Set(recipeGroups.value.map(group => group.key));
+    }
+    else if (collapseBehavior.value === "collapsed") {
+      expandedRecipeGroups.value = new Set();
+    }
+  },
 );
 
 const { fetchPage, getRandom } = useLazyRecipes(isOwnGroup.value ? null : groupSlug.value);

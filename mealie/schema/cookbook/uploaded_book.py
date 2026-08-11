@@ -13,6 +13,7 @@ class UploadedBookOut(MealieModel):
     group_id: UUID4
     household_id: UUID4
     user_id: UUID4
+    category_id: UUID4 | None = None
     name: str
     file_name: str
     original_file_name: str
@@ -70,14 +71,59 @@ class UploadedBookOut(MealieModel):
 
 
 class UploadedBookUpdate(MealieModel):
-    name: str = Field(..., min_length=1, max_length=255)
+    name: str | None = Field(None, min_length=1, max_length=255)
+    category_id: UUID4 | None = None
+
+    @model_validator(mode="after")
+    def normalize_name(self):
+        if self.name is not None:
+            self.name = self.name.strip()
+            if not self.name:
+                raise ValueError("Book name cannot be empty")
+        if not ({"name", "category_id"} & self.model_fields_set):
+            raise ValueError("At least one book field must be supplied")
+        return self
+
+
+class UploadedBookCategoryCreate(MealieModel):
+    name: str = Field(..., min_length=1, max_length=160)
+    parent_category_id: UUID4 | None = None
 
     @model_validator(mode="after")
     def normalize_name(self):
         self.name = self.name.strip()
         if not self.name:
-            raise ValueError("Book name cannot be empty")
+            raise ValueError("Category name cannot be empty")
         return self
+
+
+class UploadedBookCategoryUpdate(MealieModel):
+    name: str | None = Field(None, min_length=1, max_length=160)
+    parent_category_id: UUID4 | None = None
+    position: int | None = Field(None, ge=0, le=10000)
+
+    @model_validator(mode="after")
+    def normalize_name(self):
+        if self.name is not None:
+            self.name = self.name.strip()
+            if not self.name:
+                raise ValueError("Category name cannot be empty")
+        return self
+
+
+class UploadedBookCategoryOut(MealieModel):
+    id: UUID4
+    group_id: UUID4
+    household_id: UUID4
+    name: str
+    parent_category_id: UUID4 | None = None
+    position: int = 0
+    is_system: bool = False
+    is_protected: bool = False
+    created_at: datetime | None = None
+    updated_at: datetime | None = UpdatedAtField(default=None)
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UploadedBookReaderPreferences(MealieModel):
@@ -123,6 +169,7 @@ class UploadedBookReaderHighlight(MealieModel):
 class UploadedBookReadingStateUpdate(MealieModel):
     current_page: int = Field(0, ge=0, le=100000)
     current_page_index: int = Field(0, ge=0, le=100000)
+    scroll_offset: float = Field(0, ge=0, le=1000000)
     current_chapter_id: str | None = Field(None, max_length=160)
     reading_percent: float = Field(0, ge=0, le=100)
     completed_chapters: list[str] = Field(default_factory=list, max_length=1000)

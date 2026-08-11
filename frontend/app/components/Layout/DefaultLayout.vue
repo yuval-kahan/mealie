@@ -313,6 +313,19 @@
               {{ $t("cookbook.selected-book-files", { count: uploadedBookFiles.length }) }}
             </v-chip>
           </div>
+          <v-select
+            v-model="uploadedBookCategoryId"
+            :items="uploadedBookCategoryOptions"
+            item-title="title"
+            item-value="value"
+            variant="outlined"
+            density="comfortable"
+            clearable
+            :label="$t('cookbook.book-category')"
+            :hint="$t('cookbook.upload-book-category-hint')"
+            persistent-hint
+            class="mt-3"
+          />
           <v-checkbox
             v-model="uploadedBookClassifyWithAi"
             color="primary"
@@ -964,7 +977,7 @@ import { useCategoryStore, usePublicCategoryStore } from "~/composables/store/us
 import { usePublicTagStore, useTagStore } from "~/composables/store/use-tag-store";
 import type { ReadCookBook } from "~/lib/api/types/cookbook";
 import type { RecipeCategory, RecipeTag } from "~/lib/api/types/recipe";
-import type { UploadedBook } from "~/lib/api/types/uploaded-book";
+import type { UploadedBook, UploadedBookCategory } from "~/lib/api/types/uploaded-book";
 import type { ShoppingListSummary } from "~/lib/api/types/household";
 import type { Article, ArticleCreate } from "~/lib/api/types/article";
 import { useUserApi } from "~/composables/api/api-client";
@@ -1112,6 +1125,8 @@ const uploadedBookName = ref("");
 const uploadedBookUploading = ref(false);
 const uploadedBookClassifyWithAi = ref(true);
 const uploadedBooks = ref<UploadedBook[]>([]);
+const uploadedBookCategories = ref<UploadedBookCategory[]>([]);
+const uploadedBookCategoryId = ref<string | null>(null);
 const uploadedBookAction = ref<"none" | "extract" | "translate">("none");
 const uploadedBookPagesPerChunk = ref(10);
 const uploadedBookPageStart = ref<number | null>(null);
@@ -1158,6 +1173,24 @@ const uploadedBookTranslationLanguageOptions = computed(() => [
   i18n.t("cookbook.language-german"),
   i18n.t("cookbook.language-russian"),
 ]);
+const uploadedBookCategoryOptions = computed(() => {
+  const compare = (left: UploadedBookCategory, right: UploadedBookCategory) =>
+    left.position - right.position || left.name.localeCompare(right.name, i18n.locale.value);
+  const roots = uploadedBookCategories.value.filter(category => !category.parentCategoryId).sort(compare);
+  const children = new Map<string, UploadedBookCategory[]>();
+  for (const category of uploadedBookCategories.value.filter(category => category.parentCategoryId)) {
+    const list = children.get(category.parentCategoryId!) || [];
+    list.push(category);
+    children.set(category.parentCategoryId!, list);
+  }
+  return roots.flatMap(root => [
+    { title: root.name, value: root.id },
+    ...(children.get(root.id) || []).sort(compare).map(category => ({
+      title: `${root.name} / ${category.name}`,
+      value: category.id,
+    })),
+  ]);
+});
 const quickArticleTargetLanguage = computed(defaultUploadedBookTargetLanguage);
 const canSubmitQuickArticle = computed(() => {
   if (quickArticleCreateMode.value === "manual") {
@@ -1621,6 +1654,7 @@ function resetUploadBookForm() {
   }
   uploadedBookName.value = "";
   uploadedBookClassifyWithAi.value = true;
+  uploadedBookCategoryId.value = null;
   uploadedBookAction.value = "none";
   uploadedBookPagesPerChunk.value = 10;
   uploadedBookPageStart.value = null;
@@ -1648,8 +1682,12 @@ async function refreshUploadedBooks() {
 
   uploadedBookRefreshInFlight.value = true;
   try {
-    const { data } = await api.uploadedBooks.getAll();
-    uploadedBooks.value = data || [];
+    const [booksResponse, categoriesResponse] = await Promise.all([
+      api.uploadedBooks.getAll(),
+      api.uploadedBooks.getCategories(),
+    ]);
+    uploadedBooks.value = booksResponse.data || [];
+    uploadedBookCategories.value = categoriesResponse.data || [];
     if (selectedUploadedBook.value) {
       selectedUploadedBook.value = uploadedBooks.value.find(book => book.id === selectedUploadedBook.value?.id) || selectedUploadedBook.value;
     }
@@ -1741,6 +1779,7 @@ async function uploadBook() {
         file,
         hasMultipleUploadedBookFiles.value ? null : uploadedBookName.value,
         uploadedBookClassifyWithAi.value,
+        uploadedBookCategoryId.value,
       );
       if (data) {
         uploaded.push(data);

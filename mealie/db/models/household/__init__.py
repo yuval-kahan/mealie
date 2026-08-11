@@ -21,7 +21,7 @@ from .shopping_list import (
     ShoppingListRecipeReference,
 )
 from .shopping_website import RecipeShoppingWebsite, ShoppingListShoppingWebsite, ShoppingWebsite
-from .uploaded_book import UploadedBook, UploadedBookReadingState
+from .uploaded_book import UploadedBook, UploadedBookCategory, UploadedBookReadingState
 from .video import RecipeVideo, ShoppingListVideo, Video, VideoDownloadSettings
 from .wanted_book import WantedBook
 from .webhooks import GroupWebhooksModel
@@ -59,6 +59,7 @@ __all__ = [
     "RecipeShoppingWebsite",
     "ShoppingListShoppingWebsite",
     "UploadedBook",
+    "UploadedBookCategory",
     "UploadedBookReadingState",
     "Video",
     "VideoDownloadSettings",

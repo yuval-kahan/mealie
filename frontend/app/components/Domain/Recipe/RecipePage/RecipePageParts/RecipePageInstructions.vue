@@ -97,6 +97,27 @@
       </template>
     </BaseDialog>
 
+    <BaseDialog
+      v-model="imageProviderDialog"
+      :title="$t('recipe.instruction-images-provider-required')"
+      :icon="$globals.icons.fileImage"
+      width="100%"
+      max-width="560px"
+    >
+      <v-card-text class="pt-4">
+        {{ $t("recipe.instruction-images-provider-required-description") }}
+      </v-card-text>
+      <template #card-actions>
+        <BaseButton cancel @click="imageProviderDialog = false" />
+        <v-spacer />
+        <BaseButton
+          :icon="$globals.icons.robot"
+          :text="$t('recipe.open-ai-provider-settings')"
+          @click="openImageProviderSettings"
+        />
+      </template>
+    </BaseDialog>
+
     <div class="d-flex align-center flex-wrap ga-2">
       <h2
         v-if="!isCookMode"
@@ -120,6 +141,24 @@
           :label="$t('recipe.copy-ingredients-and-instructions')"
           :copy-text="ingredientsAndInstructionsCopyText"
         />
+        <BaseButton
+          minor
+          cancel
+          color="primary"
+          :loading="generatingInstructionImages"
+          :disabled="generatingInstructionImages || !generatableInstructionCount"
+          @click="generateInstructionImages"
+        >
+          <template #icon>
+            {{ $globals.icons.fileImage }}
+          </template>
+          <template v-if="generatingInstructionImages">
+            {{ $t("recipe.instruction-images-progress", instructionImageProgress) }}
+          </template>
+          <template v-else>
+            {{ $t("recipe.create-instruction-images-with-ai") }}
+          </template>
+        </BaseButton>
         <BaseButton
           minor
           cancel
@@ -398,7 +437,7 @@
 
 <script setup lang="ts">
 import { VueDraggable } from "vue-draggable-plus";
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import type { RecipeStep, IngredientReferences, RecipeIngredient, RecipeAsset, Recipe } from "~/lib/api/types/recipe";
 import { uuid4 } from "~/composables/use-utils";
 import { useUserApi, useStaticRoutes } from "~/composables/api";
@@ -410,6 +449,8 @@ import RecipeIngredients from "~/components/Domain/Recipe/RecipeIngredients.vue"
 import RecipeIngredientHtml from "~/components/Domain/Recipe/RecipeIngredientHtml.vue";
 import { useRecipeCopy } from "~/composables/recipes/use-recipe-copy";
 import { useUserExperiencePreferences } from "~/composables/use-users/preferences";
+import { useGroupSelf } from "~/composables/use-groups";
+import { alert } from "~/composables/use-toast";
 
 interface MergerHistory {
   target: number;
@@ -441,6 +482,9 @@ const {
   formatRecipeInstructionsForCopy,
 } = useRecipeCopy();
 const userExperiencePreferences = useUserExperiencePreferences();
+const i18n = useI18n();
+const router = useRouter();
+const { group } = useGroupSelf();
 
 const dialog = ref(false);
 const disabledSteps = ref<number[]>([]);
@@ -452,6 +496,75 @@ const instructionCopyText = computed(() => formatRecipeInstructionsForCopy(props
 const ingredientsAndInstructionsCopyText = computed(() =>
   formatRecipeIngredientsAndInstructionsForCopy(props.recipe, props.scale),
 );
+const generatableInstructionCount = computed(() => instructionList.value.filter(step => step.id && step.text.trim()).length);
+
+const imageProviderDialog = ref(false);
+const generatingInstructionImages = ref(false);
+const instructionImageProgress = reactive({ current: 0, total: 0 });
+let instructionImageGenerationRun = 0;
+
+function openImageProviderSettings() {
+  imageProviderDialog.value = false;
+  router.push("/group");
+}
+
+async function generateInstructionImages() {
+  if (!group.value?.aiProviderSettings?.imageProviderEnabled) {
+    imageProviderDialog.value = true;
+    return;
+  }
+
+  const steps = instructionList.value.filter(step => step.id && step.text.trim());
+  if (!steps.length || generatingInstructionImages.value) {
+    return;
+  }
+
+  const run = ++instructionImageGenerationRun;
+  generatingInstructionImages.value = true;
+  instructionImageProgress.current = 0;
+  instructionImageProgress.total = steps.length;
+  let created = 0;
+  let failed = 0;
+  let nextAssets = [...assets.value];
+
+  try {
+    for (const step of steps) {
+      if (run !== instructionImageGenerationRun || !step.id) {
+        break;
+      }
+
+      const { data, error } = await api.recipes.createAIInstructionImage(props.recipe.slug, step.id);
+      instructionImageProgress.current += 1;
+      if (error || !data) {
+        failed += 1;
+        continue;
+      }
+
+      created += 1;
+      nextAssets = [...nextAssets.filter(asset => asset.name !== data.name), data];
+      emit("update:assets", nextAssets);
+    }
+
+    if (failed && created) {
+      alert.warning(i18n.t("recipe.instruction-images-created-partially", { created, failed }));
+    }
+    else if (failed) {
+      alert.error(i18n.t("recipe.instruction-images-create-failed"));
+    }
+    else {
+      alert.success(i18n.t("recipe.instruction-images-created", { count: created }));
+    }
+  }
+  finally {
+    if (run === instructionImageGenerationRun) {
+      generatingInstructionImages.value = false;
+    }
+  }
+}
+
+onBeforeUnmount(() => {
+  instructionImageGenerationRun += 1;
+});
 
 // ===============================================================
 // UI State Helpers

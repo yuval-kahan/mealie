@@ -207,7 +207,7 @@
           />
           <v-select
             v-model="experiencePreferences.bookGroupCollapseBehavior"
-            :items="groupCollapseOptions"
+            :items="bookGroupCollapseOptions"
             :label="$t('user.book-recipe-collapse-behavior')"
             density="comfortable"
             variant="underlined"
@@ -276,6 +276,10 @@ const activityOptions = getDefaultActivityLabels(i18n);
 const groupCollapseOptions = computed(() => [
   { title: i18n.t("user.remember-group-state"), value: "remember" },
   { title: i18n.t("user.always-collapse-groups"), value: "collapsed" },
+]);
+const bookGroupCollapseOptions = computed(() => [
+  ...groupCollapseOptions.value,
+  { title: i18n.t("user.always-expand-groups"), value: "expanded" },
 ]);
 const selectedDefaultActivity = ref(getActivityLabel(i18n, activityPreferences.value.defaultActivity));
 watch(selectedDefaultActivity, () => {

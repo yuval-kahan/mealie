@@ -4593,6 +4593,7 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
             "group_id": book.group_id,
             "household_id": book.household_id,
             "user_id": book.user_id,
+            "category_id": book.category_id,
             "name": f"{book.name} ({target_language})",
             "file_name": file_name,
             "original_file_name": f"{book.name} - {target_language}.html",

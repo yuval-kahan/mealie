@@ -34,6 +34,7 @@ class OpenAIBookClassification(OpenAIBase):
     categories: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     language: str = ""
+    library_category: str = ""
 
 
 class OpenAICookbookChapter(OpenAIBase):

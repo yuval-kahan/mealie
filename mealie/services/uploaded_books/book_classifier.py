@@ -7,7 +7,7 @@ import sqlalchemy as sa
 from pydantic import UUID4
 
 from mealie.db.models._model_utils.datetime import get_utc_now
-from mealie.db.models.household.uploaded_book import UploadedBook
+from mealie.db.models.household.uploaded_book import UploadedBook, UploadedBookCategory
 from mealie.lang.providers import Translator
 from mealie.repos.repository_factory import AllRepositories
 from mealie.schema.household.household import HouseholdInDB
@@ -17,6 +17,7 @@ from mealie.services._base_service import BaseService
 from mealie.services.openai import OpenAIService
 
 from .book_cover_service import UploadedBookCoverService
+from .book_library_categories import BOOK_LIBRARY_CATEGORIES, resolve_library_category_name
 
 
 class UploadedBookClassifier(BaseService):
@@ -160,7 +161,9 @@ class UploadedBookClassifier(BaseService):
                 f"File type: {book.extension}\n"
                 f"Requested metadata language: {output_language}\n"
                 "No book pages or book text are provided. Public catalog metadata may contain imperfect "
-                "matches, so verify title/author alignment and ignore unrelated records:\n"
+                "matches, so verify title/author alignment and ignore unrelated records. "
+                "Set library_category to exactly one of these Hebrew category names: "
+                f"{json.dumps(BOOK_LIBRARY_CATEGORIES, ensure_ascii=False)}.\n"
                 f"{json.dumps(catalog_metadata, ensure_ascii=False)}"
             )
             response = await openai_service.get_response(
@@ -179,6 +182,17 @@ class UploadedBookClassifier(BaseService):
             book.book_metadata_json = json.dumps(existing, ensure_ascii=False)
             book.classification_status = "completed"
             book.classification_error = None
+            if book.category_id is None:
+                category_name = resolve_library_category_name(response.model_dump())
+                category = self.repos.session.execute(
+                    sa.select(UploadedBookCategory).where(
+                        UploadedBookCategory.group_id == book.group_id,
+                        UploadedBookCategory.parent_category_id.is_(None),
+                        UploadedBookCategory.name == category_name,
+                    )
+                ).scalar_one_or_none()
+                if category is not None:
+                    book.category_id = category.id
             try:
                 await UploadedBookCoverService(self.repos).ensure_cover(book, uploaded_books_root)
             except Exception:

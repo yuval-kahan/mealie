@@ -3,6 +3,7 @@ export interface UploadedBook {
   groupId: string;
   householdId: string;
   userId: string;
+  categoryId?: string | null;
   name: string;
   fileName: string;
   originalFileName: string;
@@ -54,6 +55,19 @@ export interface UploadedBook {
   extractionChunkStatus?: string | null;
   extractionStartedAt?: string | null;
   extractionCompletedAt?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface UploadedBookCategory {
+  id: string;
+  groupId: string;
+  householdId: string;
+  name: string;
+  parentCategoryId?: string | null;
+  position: number;
+  isSystem: boolean;
+  isProtected: boolean;
   createdAt?: string | null;
   updatedAt?: string | null;
 }
@@ -227,6 +241,7 @@ export interface UploadedBookReadingStateUpdate {
   currentPage: number;
   currentPageIndex: number;
   currentChapterId?: string | null;
+  scrollOffset: number;
   readingPercent: number;
   completedChapters: string[];
   totalChapters: number;

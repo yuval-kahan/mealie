@@ -2,6 +2,7 @@ import { BaseAPI } from "../base/base-clients";
 import type {
   AICookbookGenerateRequest,
   UploadedBook,
+  UploadedBookCategory,
   UploadedBookExtractRequest,
   UploadedBookDeletePreview,
   UploadedBookRecipeDeleteResponse,
@@ -20,6 +21,8 @@ const prefix = "/api";
 
 const routes = {
   uploadedBooks: `${prefix}/households/uploaded-books`,
+  uploadedBookCategories: `${prefix}/households/uploaded-books/categories`,
+  uploadedBookCategory: (id: string) => `${prefix}/households/uploaded-books/categories/${id}`,
   uploadedBook: (id: string) => `${prefix}/households/uploaded-books/${id}`,
   extractRecipes: (id: string) => `${prefix}/households/uploaded-books/${id}/extract-recipes`,
   recipeCatalog: (id: string) => `${prefix}/households/uploaded-books/${id}/recipe-catalog`,
@@ -49,11 +52,15 @@ export class UploadedBooksAPI extends BaseAPI {
     return await this.requests.get<UploadedBook[]>(routes.uploadedBooks);
   }
 
-  async rename(id: string, name: string) {
-    return await this.requests.patch<UploadedBook, { name: string }>(routes.uploadedBook(id), { name });
+  async update(id: string, payload: { name?: string; categoryId?: string | null }) {
+    return await this.requests.patch<UploadedBook, typeof payload>(routes.uploadedBook(id), payload);
   }
 
-  async upload(file: File, name: string | null = null, classifyWithAi = true) {
+  async rename(id: string, name: string) {
+    return await this.update(id, { name });
+  }
+
+  async upload(file: File, name: string | null = null, classifyWithAi = true, categoryId: string | null = null) {
     const formData = new FormData();
     formData.append("file", file);
 
@@ -61,8 +68,30 @@ export class UploadedBooksAPI extends BaseAPI {
       formData.append("name", name.trim());
     }
     formData.append("classify_with_ai", String(classifyWithAi));
+    if (categoryId) {
+      formData.append("category_id", categoryId);
+    }
 
     return await this.requests.post<UploadedBook>(routes.uploadedBooks, formData);
+  }
+
+  async getCategories() {
+    return await this.requests.get<UploadedBookCategory[]>(routes.uploadedBookCategories);
+  }
+
+  async createCategory(payload: { name: string; parentCategoryId?: string | null }) {
+    return await this.requests.post<UploadedBookCategory, typeof payload>(routes.uploadedBookCategories, payload);
+  }
+
+  async updateCategory(id: string, payload: { name?: string; parentCategoryId?: string | null; position?: number }) {
+    return await this.requests.patch<UploadedBookCategory, typeof payload>(routes.uploadedBookCategory(id), payload);
+  }
+
+  async deleteCategory(id: string, replacementCategoryId?: string | null) {
+    const query = replacementCategoryId
+      ? `?replacement_category_id=${encodeURIComponent(replacementCategoryId)}`
+      : "";
+    return await this.requests.delete<unknown>(`${routes.uploadedBookCategory(id)}${query}`);
   }
 
   async extractRecipes(id: string, payload: UploadedBookExtractRequest) {

@@ -132,6 +132,7 @@
                       <RecipePageOrganizers v-model="recipe" />
                     </div>
                     <RecipeNotes v-model="recipe.notes" :edit="isEditForm" />
+                    <RecipeInstructionImages v-if="!isEditForm" :recipe="recipe" />
                   </v-col>
                 </v-row>
               </template>
@@ -245,6 +246,7 @@ import RecipePageHeroImage from "./RecipePageParts/RecipePageHeroImage.vue";
 import RecipePageIngredientEditor from "./RecipePageParts/RecipePageIngredientEditor.vue";
 import RecipePageIngredientToolsView from "./RecipePageParts/RecipePageIngredientToolsView.vue";
 import RecipePageInstructions from "./RecipePageParts/RecipePageInstructions.vue";
+import RecipeInstructionImages from "./RecipePageParts/RecipeInstructionImages.vue";
 import RecipePageOrganizers from "./RecipePageParts/RecipePageOrganizers.vue";
 import RecipePageParseDialog from "./RecipePageParts/RecipePageParseDialog.vue";
 import RecipePageScale from "./RecipePageParts/RecipePageScale.vue";

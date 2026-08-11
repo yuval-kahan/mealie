@@ -23,6 +23,9 @@ export function route(rest: string, params: Record<string, QueryValue> | null = 
   const url = new URL(parts.prefix + rest, parts.host);
   if (params) {
     for (const [key, value] of Object.entries(params)) {
+      if (value === null || value === undefined) {
+        continue;
+      }
       if (Array.isArray(value)) {
         for (const item of value) {
           url.searchParams.append(key, String(item));
