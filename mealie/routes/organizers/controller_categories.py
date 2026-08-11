@@ -21,6 +21,9 @@ class CategorySummary(BaseModel):
     id: UUID4
     slug: str
     name: str
+    is_recipe_group: bool = False
+    recipe_group_section: str = "recipes"
+    parent_category_id: UUID4 | None = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -48,7 +51,7 @@ class RecipeCategoryController(BaseCrudController):
         response.set_pagination_guides(router.url_path_for("get_all"), q.model_dump())
         return response
 
-    @router.post("", status_code=201)
+    @router.post("", response_model=CategoryOut, status_code=201)
     def create_one(self, category: CategoryIn):
         """Creates a Category in the database"""
         self.checks.can_organize()
@@ -85,6 +88,15 @@ class RecipeCategoryController(BaseCrudController):
     def update_one(self, item_id: UUID4, update_data: CategoryIn):
         """Updates an existing Tag in the database"""
         self.checks.can_organize()
+        if "is_recipe_group" not in update_data.model_fields_set:
+            current = self.mixins.get_one(item_id)
+            update_data.is_recipe_group = bool(current.is_recipe_group)
+        else:
+            current = self.mixins.get_one(item_id)
+        if "recipe_group_section" not in update_data.model_fields_set:
+            update_data.recipe_group_section = current.recipe_group_section or "recipes"
+        if "parent_category_id" not in update_data.model_fields_set:
+            update_data.parent_category_id = current.parent_category_id
         save_data = mapper.cast(update_data, CategorySave, group_id=self.group_id)
         category = self.mixins.update_one(save_data, item_id)
 
@@ -137,5 +149,9 @@ class RecipeCategoryController(BaseCrudController):
             id=category.id,
             slug=category.slug,
             name=category.name,
+            group_id=category.group_id,
+            is_recipe_group=category.is_recipe_group,
+            recipe_group_section=category.recipe_group_section or "recipes",
+            parent_category_id=category.parent_category_id,
             recipes=recipe_data.items,
         )

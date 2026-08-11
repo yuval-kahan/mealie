@@ -18,6 +18,9 @@ export interface AssignCategories {
 }
 export interface CategoryBase {
   name: string;
+  isRecipeGroup?: boolean;
+  recipeGroupSection?: string;
+  parentCategoryId?: string | null;
   id: string;
   groupId?: string | null;
   slug: string;
@@ -46,15 +49,24 @@ export interface TagBase {
 }
 export interface CategoryIn {
   name: string;
+  isRecipeGroup?: boolean;
+  recipeGroupSection?: string;
+  parentCategoryId?: string | null;
 }
 export interface CategoryOut {
   name: string;
+  isRecipeGroup?: boolean;
+  recipeGroupSection?: string;
+  parentCategoryId?: string | null;
   id: string;
   groupId: string;
   slug: string;
 }
 export interface CategorySave {
   name: string;
+  isRecipeGroup?: boolean;
+  recipeGroupSection?: string;
+  parentCategoryId?: string | null;
   groupId: string;
 }
 export interface CreateIngredientFood {
@@ -104,6 +116,9 @@ export interface RecipeCategory {
   groupId?: string | null;
   name: string;
   slug: string;
+  isRecipeGroup?: boolean;
+  recipeGroupSection?: string;
+  parentCategoryId?: string | null;
 }
 export interface RecipeTag {
   id?: string | null;
@@ -312,6 +327,9 @@ export interface UserBase {
 }
 export interface RecipeCategoryResponse {
   name: string;
+  isRecipeGroup?: boolean;
+  recipeGroupSection?: string;
+  parentCategoryId?: string | null;
   id: string;
   groupId?: string | null;
   slug: string;

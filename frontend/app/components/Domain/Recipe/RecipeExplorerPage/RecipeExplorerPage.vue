@@ -32,6 +32,7 @@
         :title="$t(titleKey)"
         :section="section"
         :group-by-book="groupByBook"
+        :group-by-category="['recipes', 'sauce'].includes(section) && isOwnGroup"
         :recipes="recipes"
         :query="searchQuery"
         disable-sort

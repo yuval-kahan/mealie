@@ -8,6 +8,8 @@ import type {
   NotebookRevision,
   NotebookSearchResult,
   NotebookSummary,
+  NotebookTOCRequest,
+  NotebookTOCResponse,
 } from "~/lib/api/types/notebook";
 
 const prefix = "/api/households/notebooks";
@@ -54,6 +56,13 @@ export class NotebooksAPI extends BaseAPI {
 
   async search(query: string, notebookId?: string) {
     return await this.requests.get<NotebookSearchResult[]>(route(`${prefix}/search`, { query, notebookId }));
+  }
+
+  async generateToc(notebookId: string, payload: NotebookTOCRequest) {
+    return await this.requests.post<NotebookTOCResponse, NotebookTOCRequest>(
+      `${prefix}/${notebookId}/generate-toc`,
+      payload,
+    );
   }
 
   async revisions(notebookId: string, nodeId: string) {

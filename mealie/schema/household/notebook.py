@@ -5,6 +5,7 @@ from pydantic import UUID4, ConfigDict, Field, model_validator
 
 from mealie.schema._mealie import MealieModel
 from mealie.schema._mealie.mealie_model import UpdatedAtField
+from mealie.schema.openai._base import OpenAIBase
 
 NotebookNodeType = Literal["section_group", "section", "page"]
 
@@ -137,3 +138,28 @@ class NotebookSearchResult(MealieModel):
     node_type: NotebookNodeType
     excerpt: str = ""
     updated_at: datetime | None = UpdatedAtField(default=None)
+
+
+class NotebookTOCRequest(MealieModel):
+    language: str = Field("en-US", min_length=2, max_length=32)
+    pages_per_chunk: int = Field(8, ge=2, le=20)
+
+
+class NotebookTOCEntry(OpenAIBase):
+    node_id: str = Field(..., description="The exact notebook page id supplied in the input.")
+    title: str = Field(..., description="A concise, meaningful title for this page.")
+    section_title: str = Field(..., description="A short chapter or section heading that groups related pages.")
+    summary: str = Field(..., description="A one-sentence description of the page contents.")
+
+
+class NotebookTOCChunk(OpenAIBase):
+    entries: list[NotebookTOCEntry] = Field(
+        default_factory=list,
+        description="One entry for every supplied notebook page, in the same order.",
+    )
+
+
+class NotebookTOCResponse(MealieModel):
+    toc_node: NotebookNodeOut
+    chunk_count: int
+    provider_count: int

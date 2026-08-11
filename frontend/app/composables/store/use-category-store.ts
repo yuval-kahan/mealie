@@ -22,6 +22,9 @@ export const useCategoryData = function () {
     id: "",
     name: "",
     slug: "",
+    isRecipeGroup: false,
+    recipeGroupSection: "recipes",
+    parentCategoryId: null,
   });
 };
 

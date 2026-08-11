@@ -1,6 +1,8 @@
+import asyncio
 import json
 import re
 from collections import defaultdict, deque
+from html import escape
 from typing import Any
 
 import sqlalchemy as sa
@@ -23,9 +25,15 @@ from mealie.schema.household.notebook import (
     NotebookRevisionOut,
     NotebookSearchResult,
     NotebookSummary,
+    NotebookTOCChunk,
+    NotebookTOCEntry,
+    NotebookTOCRequest,
+    NotebookTOCResponse,
     NotebookUpdate,
 )
+from mealie.schema.group.ai_providers import AIProviderOut
 from mealie.schema.response.responses import ErrorResponse
+from mealie.services.openai.openai import OpenAIService
 
 router = APIRouter(prefix="/households/notebooks", tags=["Households: Notebooks"])
 
@@ -281,6 +289,49 @@ class NotebookController(BaseUserController):
         if stale_ids:
             self.session.execute(sa.delete(NotebookRevision).where(NotebookRevision.id.in_(stale_ids)))
 
+    @staticmethod
+    def _toc_provider_slots(openai_service: OpenAIService) -> list[AIProviderOut]:
+        provider = openai_service.default_provider
+        if provider is None:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=ErrorResponse.respond("Configure a default AI provider before creating a table of contents"),
+            )
+        if not OpenAIService._is_gemini_provider_data(provider):
+            return [provider]
+        keys = OpenAIService._split_api_keys(provider.api_key)
+        if not keys:
+            return [provider]
+        return [provider.model_copy(update={"api_key": key}) for key in keys]
+
+    @staticmethod
+    def _toc_page_text(node: NotebookNode) -> str:
+        plain_text = SPACE_RE.sub(" ", BeautifulSoup(node.content_html or "", "html.parser").get_text(" ")).strip()
+        return plain_text[:4_000]
+
+    @staticmethod
+    def _toc_html(entries: list[NotebookTOCEntry], language: str, notebook_id: UUID4) -> str:
+        is_hebrew = language.lower().startswith("he")
+        current_section = ""
+        sections: list[str] = []
+        for entry in entries:
+            section_title = entry.section_title.strip() or ("דפים" if is_hebrew else "Pages")
+            if section_title != current_section:
+                if current_section:
+                    sections.append("</ol></section>")
+                current_section = section_title
+                sections.append(f'<section class="notebook-toc-section"><h2>{escape(section_title)}</h2><ol>')
+            link = f"/notebooks?focus=1&notebook={notebook_id}&page={escape(entry.node_id)}"
+            summary = entry.summary.strip()
+            summary_html = f"<small>{escape(summary)}</small>" if summary else ""
+            sections.append(
+                '<li><a href="'
+                f'{link}"><strong>{escape(entry.title.strip())}</strong>{summary_html}</a></li>'
+            )
+        if current_section:
+            sections.append("</ol></section>")
+        return '<nav class="notebook-generated-toc">' + "".join(sections) + "</nav>"
+
     @router.get("", response_model=list[NotebookSummary])
     def get_all(self, search: str | None = Query(None, max_length=255)) -> list[NotebookSummary]:
         statement = sa.select(Notebook).where(
@@ -411,6 +462,146 @@ class NotebookController(BaseUserController):
         return NotebookDetail(
             **self._summary(notebook, {str(notebook.id): (len(nodes), page_count)}).model_dump(),
             nodes=[self._node_out(node) for node in nodes],
+        )
+
+    @router.post("/{notebook_id}/generate-toc", response_model=NotebookTOCResponse)
+    async def generate_toc(self, notebook_id: UUID4, data: NotebookTOCRequest) -> NotebookTOCResponse:
+        notebook = self._notebook_or_404(notebook_id)
+        pages = self.session.execute(
+            sa.select(NotebookNode)
+            .where(
+                NotebookNode.notebook_id == notebook.id,
+                NotebookNode.user_id == self.user.id,
+                NotebookNode.node_type == "page",
+            )
+            .order_by(NotebookNode.position.asc(), NotebookNode.created_at.asc())
+        ).scalars().all()
+        pages = [page for page in pages if not _safe_json_loads(page.settings_json, {}).get("generatedToc")]
+        if not pages:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=ErrorResponse.respond("Add at least one notebook page before creating a table of contents"),
+            )
+
+        openai_service = OpenAIService(self.repos)
+        providers = self._toc_provider_slots(openai_service)
+        chunks = [pages[index : index + data.pages_per_chunk] for index in range(0, len(pages), data.pages_per_chunk)]
+        worker_count = min(len(providers), len(chunks))
+        prompt = (
+            "You are organizing a personal notebook into a professional table of contents. "
+            "Return exactly one entry for every page supplied, preserve the exact node_id, keep the original page "
+            "order, group related pages under concise section titles, and write titles and summaries in the requested "
+            "language. Do not invent subjects that are not supported by the page text."
+        )
+
+        async def analyze_chunk(chunk: list[NotebookNode], provider: AIProviderOut) -> NotebookTOCChunk | None:
+            page_blocks = []
+            for page in chunk:
+                page_blocks.append(
+                    f"NODE_ID: {page.id}\nCURRENT_TITLE: {page.title}\nCONTENT: {self._toc_page_text(page)}"
+                )
+            message = (
+                f"Notebook title: {notebook.title}\nRequested language: {data.language}\n\n"
+                + "\n\n--- PAGE ---\n".join(page_blocks)
+            )
+            return await openai_service.get_response(
+                prompt,
+                message,
+                response_schema=NotebookTOCChunk,
+                provider=provider,
+            )
+
+        responses: list[NotebookTOCChunk | Exception | None] = [None] * len(chunks)
+
+        async def worker(slot: int) -> None:
+            provider = providers[slot]
+            for index in range(slot, len(chunks), worker_count):
+                try:
+                    responses[index] = await analyze_chunk(chunks[index], provider)
+                except Exception as error:  # A failed chunk falls back without stopping the remaining notebook.
+                    responses[index] = error
+
+        await asyncio.gather(*(worker(slot) for slot in range(worker_count)))
+        entries: list[NotebookTOCEntry] = []
+        for chunk, response in zip(chunks, responses, strict=True):
+            response_entries = response.entries if isinstance(response, NotebookTOCChunk) else []
+            entries_by_id = {entry.node_id: entry for entry in response_entries}
+            for page in chunk:
+                entry = entries_by_id.get(str(page.id))
+                if entry is None:
+                    entry = NotebookTOCEntry(
+                        node_id=str(page.id),
+                        title=page.title,
+                        section_title="דפים" if data.language.lower().startswith("he") else "Pages",
+                        summary=self._toc_page_text(page)[:180],
+                    )
+                entries.append(entry)
+
+        toc_title = "תוכן עניינים" if data.language.lower().startswith("he") else "Table of Contents"
+        toc_html = self._toc_html(entries, data.language, notebook.id)
+        existing_toc = next(
+            (
+                page
+                for page in self.session.execute(
+                    sa.select(NotebookNode).where(
+                        NotebookNode.notebook_id == notebook.id,
+                        NotebookNode.node_type == "page",
+                    )
+                ).scalars()
+                if _safe_json_loads(page.settings_json, {}).get("generatedToc")
+            ),
+            None,
+        )
+        toc_settings = {
+            "generatedToc": True,
+            "tocEntries": [
+                {
+                    "nodeId": entry.node_id,
+                    "title": entry.title,
+                    "sectionTitle": entry.section_title,
+                    "summary": entry.summary,
+                }
+                for entry in entries
+            ],
+            "fontFamily": "Arial",
+            "fontSize": 16,
+            "lineHeight": 1.6,
+            "wordSpacing": 0,
+            "paragraphSpacing": 12,
+            "pageWidth": 980,
+            "textDirection": "rtl" if data.language.lower().startswith("he") else "ltr",
+            "spellcheck": True,
+            "zoom": 100,
+        }
+        if existing_toc is None:
+            existing_toc = NotebookNode(
+                notebook_id=notebook.id,
+                group_id=self.group_id,
+                household_id=self.household_id,
+                user_id=self.user.id,
+                node_type="page",
+                title=toc_title,
+                content_html=toc_html,
+                position=0,
+                is_pinned=True,
+                settings_json=_safe_json_dumps(toc_settings),
+                highlight_categories_json=_safe_json_dumps(DEFAULT_HIGHLIGHT_CATEGORIES),
+                session=self.session,
+            )
+        else:
+            self._save_revision(existing_toc)
+            existing_toc.title = toc_title
+            existing_toc.content_html = toc_html
+            existing_toc.settings_json = _safe_json_dumps(toc_settings)
+            existing_toc.is_pinned = True
+            existing_toc.content_version += 1
+        self.session.add(existing_toc)
+        self.session.commit()
+        self.session.refresh(existing_toc)
+        return NotebookTOCResponse(
+            toc_node=self._node_out(existing_toc),
+            chunk_count=len(chunks),
+            provider_count=worker_count,
         )
 
     @router.put("/{notebook_id}", response_model=NotebookSummary)

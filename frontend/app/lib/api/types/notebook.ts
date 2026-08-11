@@ -96,3 +96,14 @@ export interface NotebookSearchResult {
   excerpt: string;
   updatedAt?: string | null;
 }
+
+export interface NotebookTOCRequest {
+  language: string;
+  pagesPerChunk: number;
+}
+
+export interface NotebookTOCResponse {
+  tocNode: NotebookNode;
+  chunkCount: number;
+  providerCount: number;
+}

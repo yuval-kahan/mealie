@@ -104,6 +104,10 @@ from mealie.services.recipe.video_asset_service import (
     VideoTranscodeError,
     normalize_video_asset,
 )
+from mealie.services.uploaded_books.book_recipe_extractor import (
+    SUPPORTED_TEXT_EXTRACTION_EXTENSIONS,
+    UploadedBookRecipeExtractor,
+)
 from mealie.services.scraper.recipe_bulk_scraper import BulkImportVideo, RecipeBulkScraperService
 from mealie.services.scraper.scraped_extras import ScraperContext
 from mealie.services.scraper.scraper import create_from_html
@@ -765,6 +769,107 @@ class RecipeController(BaseRecipeController):
         )
 
         return recipe.slug
+
+    @router.post("/create/file", status_code=201, response_model=list[str])
+    async def create_recipes_from_file(
+        self,
+        document: UploadFile = File(...),
+        translate_language: str | None = Query(None, alias="translateLanguage"),
+        include_ai_tips: bool = Query(True, alias="includeAiTips"),
+        include_mise_en_place: bool = Query(True, alias="includeMiseEnPlace"),
+        auto_image: bool = Query(True, alias="autoImage"),
+        include_item_images: bool = Query(True, alias="includeItemImages"),
+        recipe_section: Literal["recipes", "sauce"] = Query("recipes", alias="recipeSection"),
+    ):
+        """Extract and create every complete recipe found in a bounded document upload."""
+
+        if not self._ai_enabled():
+            raise HTTPException(status_code=400, detail=ErrorResponse.respond("OpenAI services are not enabled"))
+
+        file_name = FileSystemPath(document.filename or "recipes.txt").name
+        lower_name = file_name.lower()
+        extension = ".fb2.zip" if lower_name.endswith(".fb2.zip") else FileSystemPath(lower_name).suffix
+        if extension not in SUPPORTED_TEXT_EXTRACTION_EXTENSIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond(f"Unsupported recipe document type: {extension or 'unknown'}"),
+            )
+
+        temp_dir = FileSystemPath(mkdtemp(prefix="mealie-recipe-document-"))
+        temp_path = temp_dir / file_name
+        try:
+            total_bytes = 0
+            with temp_path.open("wb") as target:
+                while content := await document.read(1024 * 1024):
+                    total_bytes += len(content)
+                    if total_bytes > 25 * 1024 * 1024:
+                        raise HTTPException(
+                            status_code=413,
+                            detail=ErrorResponse.respond("Recipe document uploads are limited to 25 MB"),
+                        )
+                    target.write(content)
+
+            extractor = UploadedBookRecipeExtractor(self.repos, self.user, self.household, self.translator)
+            pages = await asyncio.to_thread(extractor._extract_pages, temp_path, extension, 250)
+            chunks: list[str] = []
+            current_parts: list[str] = []
+            current_size = 0
+            total_text_size = 0
+            for page in pages:
+                page_text = f"\n\n[Page {page.number}]\n{page.text.strip()}"
+                remaining = 800_000 - total_text_size
+                if remaining <= 0:
+                    break
+                page_text = page_text[:remaining]
+                if current_parts and current_size + len(page_text) > 60_000:
+                    chunks.append("".join(current_parts))
+                    current_parts = []
+                    current_size = 0
+                current_parts.append(page_text)
+                current_size += len(page_text)
+                total_text_size += len(page_text)
+                if len(chunks) >= 19:
+                    break
+            if current_parts and len(chunks) < 20:
+                chunks.append("".join(current_parts))
+
+            recipes = await self.service.create_many_from_document_text(
+                chunks,
+                translate_language=translate_language,
+                include_ai_tips=include_ai_tips,
+                include_mise_en_place=include_mise_en_place,
+                auto_image=auto_image,
+                recipe_section=recipe_section,
+            )
+            for recipe in recipes:
+                if include_item_images:
+                    await self._ensure_recipe_item_images(recipe)
+                self.publish_event(
+                    event_type=EventTypes.recipe_created,
+                    document_data=EventRecipeData(operation=EventOperation.create, recipe_slug=recipe.slug),
+                    group_id=recipe.group_id,
+                    household_id=recipe.household_id,
+                )
+            return [recipe.slug for recipe in recipes]
+        except HTTPException:
+            raise
+        except exceptions.NotARecipe as error:
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond(message=str(error), exception="NotARecipe"),
+            ) from error
+        except Exception as error:
+            self.session.rollback()
+            self.logger.exception("AI recipe document creation failed")
+            raise HTTPException(
+                status_code=502,
+                detail=ErrorResponse.respond(
+                    message="AI recipe document creation failed. Check the configured provider and try again.",
+                    exception="AIProviderError",
+                ),
+            ) from error
+        finally:
+            rmtree(temp_dir, ignore_errors=True)
 
     @router.post("/create/text", status_code=201)
     async def create_recipe_from_text(self, data: CreateRecipeFromText):

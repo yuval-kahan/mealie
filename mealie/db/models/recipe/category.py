@@ -60,6 +60,26 @@ class Category(SqlAlchemyBase, BaseMixins):
     id: FilterableColumn[GUID] = mapped_column(GUID, primary_key=True, default=GUID.generate)
     name: FilterableColumn[str] = mapped_column(sa.String, index=True, nullable=False)
     slug: FilterableColumn[str] = mapped_column(sa.String, index=True, nullable=False)
+    is_recipe_group: FilterableColumn[bool] = mapped_column(
+        sa.Boolean,
+        nullable=False,
+        default=False,
+        server_default=sa.false(),
+        index=True,
+    )
+    recipe_group_section: FilterableColumn[str] = mapped_column(
+        sa.String(64),
+        nullable=False,
+        default="recipes",
+        server_default="recipes",
+        index=True,
+    )
+    parent_category_id: FilterableColumn[GUID | None] = mapped_column(
+        GUID,
+        sa.ForeignKey("categories.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     recipes: Mapped[list["RecipeModel"]] = orm.relationship(
         "RecipeModel", secondary=recipes_to_categories, back_populates="recipe_category"
     )
@@ -69,7 +89,18 @@ class Category(SqlAlchemyBase, BaseMixins):
         assert name != ""
         return name
 
-    def __init__(self, name, group_id, **_) -> None:
+    def __init__(
+        self,
+        name,
+        group_id,
+        is_recipe_group=False,
+        recipe_group_section="recipes",
+        parent_category_id=None,
+        **_,
+    ) -> None:
         self.group_id = group_id
         self.name = name.strip()
         self.slug = slugify(name)
+        self.is_recipe_group = bool(is_recipe_group)
+        self.recipe_group_section = (recipe_group_section or "recipes").strip()[:64]
+        self.parent_category_id = parent_category_id

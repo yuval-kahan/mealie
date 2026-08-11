@@ -5,6 +5,23 @@
       v-model="recipeMergeDialog"
       @updated="loadRecipePage"
     />
+    <RecipeOrganizerDialog
+      v-if="isOwnGroup"
+      v-model="recipeCategoryDialog"
+      item-type="categories"
+      recipe-group
+      :recipe-group-section="section"
+      @created-item="handleRecipeCategoryCreated"
+    />
+    <RecipeOrganizerDialog
+      v-if="isOwnGroup"
+      v-model="recipeCategoryEditDialog"
+      item-type="categories"
+      recipe-group
+      :recipe-group-section="section"
+      :edit-category="recipeCategoryEditTarget"
+      @created-item="handleRecipeCategoryEdited"
+    />
     <UploadedBookRenameDialog
       v-model="bookRenameDialog"
       :book="bookRenameTarget"
@@ -81,6 +98,18 @@
           {{ $globals.icons.book }}
         </v-icon>
         {{ $vuetify.display.xs ? null : $t("cookbook.create-book-with-ai") }}
+      </v-btn>
+      <v-btn
+        v-if="isOwnGroup && groupByCategory"
+        variant="text"
+        :icon="$vuetify.display.xs"
+        :title="$t('recipe.create-recipe-category')"
+        @click="recipeCategoryDialog = true"
+      >
+        <v-icon :start="!$vuetify.display.xs">
+          {{ $globals.icons.categories }}
+        </v-icon>
+        {{ $vuetify.display.xs ? null : $t("recipe.create-recipe-category") }}
       </v-btn>
       <v-btn
         v-if="isOwnGroup"
@@ -253,19 +282,19 @@
           :key="group.key"
         >
           <div
-            v-if="showBookGroups"
+            v-if="showRecipeGroups"
             class="recipe-book-group-row"
           >
             <button
               type="button"
               class="recipe-book-group"
-              :aria-expanded="isBookGroupExpanded(group.key)"
-              @click="toggleBookGroup(group.key)"
+              :aria-expanded="isRecipeGroupExpanded(group.key)"
+              @click="toggleRecipeGroup(group.key)"
             >
               <v-icon>
-                {{ isBookGroupExpanded(group.key) ? $globals.icons.chevronDown : $globals.icons.chevronRight }}
+                {{ isRecipeGroupExpanded(group.key) ? $globals.icons.chevronDown : $globals.icons.chevronRight }}
               </v-icon>
-              <v-icon>{{ group.bookId ? $globals.icons.book : $globals.icons.silverwareForkKnife }}</v-icon>
+              <v-icon>{{ groupIcon(group) }}</v-icon>
               <strong>{{ group.title }}</strong>
               <span>{{ group.recipes.length }}</span>
             </button>
@@ -292,9 +321,21 @@
                 <v-icon>{{ $globals.icons.broom }}</v-icon>
               </v-btn>
             </div>
+            <div v-else-if="group.categoryId" class="recipe-book-group-actions">
+              <v-btn
+                icon
+                size="small"
+                variant="text"
+                :title="$t('recipe.rename-recipe-category')"
+                :aria-label="$t('recipe.rename-recipe-category')"
+                @click="openRecipeCategoryEditDialog(group.categoryId)"
+              >
+                <v-icon>{{ $globals.icons.edit }}</v-icon>
+              </v-btn>
+            </div>
           </div>
           <v-expand-transition>
-            <div v-show="!showBookGroups || isBookGroupExpanded(group.key)">
+            <div v-show="!showRecipeGroups || isRecipeGroupExpanded(group.key)">
               <v-row v-if="!useMobileCards">
                 <v-col
                   v-for="recipe in group.recipes"
@@ -401,6 +442,8 @@ import { useUserApi } from "~/composables/api/api-client";
 import type { UploadedBook } from "~/lib/api/types/uploaded-book";
 import { usePersistedListPageSize } from "~/composables/use-list-pagination";
 import { alert } from "~/composables/use-toast";
+import { useCategoryStore } from "~/composables/store/use-category-store";
+import { useLocalStorage } from "@vueuse/core";
 
 const REPLACE_RECIPES_EVENT = "replaceRecipes";
 
@@ -414,6 +457,7 @@ interface Props {
   query?: RecipeSearchQuery | null;
   section?: string;
   groupByBook?: boolean;
+  groupByCategory?: boolean;
 }
 const props = withDefaults(defineProps<Props>(), {
   disableToolbar: false,
@@ -425,6 +469,7 @@ const props = withDefaults(defineProps<Props>(), {
   query: null,
   section: "recipes",
   groupByBook: false,
+  groupByCategory: false,
 });
 
 const emit = defineEmits<{
@@ -451,9 +496,11 @@ const { $globals } = useNuxtApp();
 const { isOwnGroup, groupSlug } = useLoggedInState();
 const i18n = useI18n();
 const api = useUserApi();
+const categoryStore = useCategoryStore();
 const uploadedBooks = ref<UploadedBook[]>([]);
-const expandedBookGroups = ref<Set<string>>(new Set());
+const expandedRecipeGroups = ref<Set<string>>(new Set());
 const aiCookbookRoute = computed(() => `/g/${groupSlug.value}/cookbooks?generate=true`);
+const groupByCategory = computed(() => props.groupByCategory);
 const useMobileCards = computed(() => {
   return display.smAndDown.value || preferences.value.useMobileCards;
 });
@@ -464,6 +511,15 @@ const displayTitleIcon = computed(() => {
 
 const sortLoading = ref(false);
 const recipeMergeDialog = ref(false);
+const recipeCategoryDialog = ref(false);
+const recipeCategoryEditDialog = ref(false);
+const recipeCategoryEditTarget = ref<{
+  id?: string | null;
+  name: string;
+  isRecipeGroup?: boolean | null;
+  recipeGroupSection?: string | null;
+  parentCategoryId?: string | null;
+} | null>(null);
 const bookRenameDialog = ref(false);
 const bookRenameTarget = ref<UploadedBook | null>(null);
 const bookRecipeDeleteDialog = ref(false);
@@ -483,20 +539,70 @@ const ready = ref(false);
 const loading = ref(false);
 let recipeRequestId = 0;
 
-interface RecipeBookGroup {
+interface RecipeDisplayGroup {
   key: string;
   bookId: string | null;
+  categoryId: string | null;
   title: string;
   recipes: Recipe[];
 }
 
-const recipeGroups = computed<RecipeBookGroup[]>(() => {
+const recipeGroupCategories = computed(() => categoryStore.store.value.filter(category => category.isRecipeGroup
+  && (category.recipeGroupSection || "recipes") === props.section));
+const recipeGroupCategoryNames = computed(() => new Map(recipeGroupCategories.value
+  .filter(category => category.id)
+  .map(category => [category.id!, category.name])));
+
+const recipeGroups = computed<RecipeDisplayGroup[]>(() => {
+  if (!props.groupByBook && !props.groupByCategory) {
+    return [{ key: "all", bookId: null, categoryId: null, title: props.title || "", recipes: props.recipes }];
+  }
+
+  if (props.groupByCategory && recipeGroupCategories.value.length) {
+    const groups = recipeGroupCategories.value.map(category => ({
+      key: `category:${category.id || category.slug}`,
+      bookId: null,
+      categoryId: category.id || null,
+      title: i18n.t("recipe.recipes-in-category", {
+        category: category.parentCategoryId
+          ? `${recipeGroupCategoryNames.value.get(category.parentCategoryId) || i18n.t("recipe.recipe-category")} / ${category.name}`
+          : category.name,
+      }),
+      recipes: [] as Recipe[],
+    })).sort((left, right) => left.title.localeCompare(right.title));
+    const groupsById = new Map(groups.filter(group => group.categoryId).map(group => [group.categoryId!, group]));
+    const ungrouped: Recipe[] = [];
+
+    for (const recipe of props.recipes) {
+      let assigned = false;
+      for (const category of recipe.recipeCategory || []) {
+        if (!category.id) continue;
+        const group = groupsById.get(category.id);
+        if (!group) continue;
+        group.recipes.push(recipe);
+        assigned = true;
+      }
+      if (!assigned) ungrouped.push(recipe);
+    }
+
+    if (ungrouped.length) {
+      groups.push({
+        key: "category:unassigned",
+        bookId: null,
+        categoryId: null,
+        title: i18n.t("recipe.recipes-without-custom-category"),
+        recipes: ungrouped,
+      });
+    }
+    return groups;
+  }
+
   if (!props.groupByBook) {
-    return [{ key: "all", bookId: null, title: props.title || "", recipes: props.recipes }];
+    return [{ key: "all", bookId: null, categoryId: null, title: props.title || "", recipes: props.recipes }];
   }
 
   const bookNames = new Map(uploadedBooks.value.map(book => [book.id, book.name]));
-  const groups = new Map<string, RecipeBookGroup>();
+  const groups = new Map<string, RecipeDisplayGroup>();
   const unlinked: Recipe[] = [];
 
   for (const recipe of props.recipes) {
@@ -511,6 +617,7 @@ const recipeGroups = computed<RecipeBookGroup[]>(() => {
       group = {
         key: `book:${bookId}`,
         bookId,
+        categoryId: null,
         title: i18n.t("recipe.recipes-from-book", {
           book: bookNames.get(bookId) || i18n.t("cookbook.cookbook"),
         }),
@@ -526,13 +633,17 @@ const recipeGroups = computed<RecipeBookGroup[]>(() => {
     result.push({
       key: "unlinked",
       bookId: null,
+      categoryId: null,
       title: i18n.t("recipe.recipes-not-from-book"),
       recipes: unlinked,
     });
   }
   return result;
 });
-const showBookGroups = computed(() => props.groupByBook && recipeGroups.value.length > 0);
+const showRecipeGroups = computed(() => {
+  return (props.groupByBook || (props.groupByCategory && recipeGroupCategories.value.length > 0))
+    && recipeGroups.value.length > 0;
+});
 const allVisibleRecipesSelected = computed(() => {
   return props.recipes.length > 0 && props.recipes.every(recipe => Boolean(recipe.slug) && selectedRecipeSlugs.value.has(recipe.slug!));
 });
@@ -543,18 +654,30 @@ const selectedRecipeEntries = computed(() => {
   }));
 });
 
+const expandedRecipeGroupStorage = useLocalStorage<Record<string, string[]>>("recipe-group-expanded-v2", {});
+const MAX_EXPANSION_STORAGE_SCOPES = 40;
+const MAX_EXPANDED_GROUPS_PER_SCOPE = 250;
+const expansionStorageScope = computed(() => `${groupSlug.value || "public"}:${props.section}:${props.groupByBook ? "books" : "categories"}`);
+const collapseBehavior = computed(() => props.groupByBook
+  ? userExperiencePreferences.value.bookGroupCollapseBehavior
+  : props.section === "sauce"
+    ? userExperiencePreferences.value.sauceGroupCollapseBehavior
+    : userExperiencePreferences.value.recipeGroupCollapseBehavior);
+let loadedExpansionScope = "";
+
 watch(
-  () => recipeGroups.value.map(group => group.key),
-  (keys) => {
-    const next = new Set(expandedBookGroups.value);
-    const currentKeys = new Set(keys);
-    for (const key of keys) {
-      if (!next.has(key)) next.add(key);
+  [expansionStorageScope, collapseBehavior, () => recipeGroups.value.map(group => group.key).join("|")],
+  ([scope, behavior]) => {
+    const currentKeys = new Set(recipeGroups.value.map(group => group.key));
+    if (behavior === "collapsed") {
+      expandedRecipeGroups.value = new Set();
+      loadedExpansionScope = scope;
+      return;
     }
-    for (const key of next) {
-      if (!currentKeys.has(key)) next.delete(key);
-    }
-    expandedBookGroups.value = next;
+    const saved = expandedRecipeGroupStorage.value[scope] || [];
+    const source = loadedExpansionScope === scope ? [...expandedRecipeGroups.value] : saved;
+    expandedRecipeGroups.value = new Set(source.filter(key => currentKeys.has(key)));
+    loadedExpansionScope = scope;
   },
   { immediate: true },
 );
@@ -610,6 +733,9 @@ onMounted(async () => {
   if (isOwnGroup.value && props.groupByBook) {
     void loadUploadedBooks();
   }
+  if (isOwnGroup.value && props.groupByCategory) {
+    await categoryStore.actions.refresh();
+  }
   loading.value = true;
   try {
     await initRecipes();
@@ -635,15 +761,44 @@ async function loadUploadedBooks() {
   }
 }
 
-function isBookGroupExpanded(key: string) {
-  return expandedBookGroups.value.has(key);
+function isRecipeGroupExpanded(key: string) {
+  return expandedRecipeGroups.value.has(key);
 }
 
-function toggleBookGroup(key: string) {
-  const next = new Set(expandedBookGroups.value);
+function toggleRecipeGroup(key: string) {
+  const next = new Set(expandedRecipeGroups.value);
   if (next.has(key)) next.delete(key);
   else next.add(key);
-  expandedBookGroups.value = next;
+  expandedRecipeGroups.value = next;
+  if (collapseBehavior.value === "remember") {
+    const scope = expansionStorageScope.value;
+    const entries = Object.entries(expandedRecipeGroupStorage.value)
+      .filter(([storedScope]) => storedScope !== scope);
+    entries.push([scope, [...next].slice(0, MAX_EXPANDED_GROUPS_PER_SCOPE)]);
+    expandedRecipeGroupStorage.value = Object.fromEntries(entries.slice(-MAX_EXPANSION_STORAGE_SCOPES));
+  }
+}
+
+function groupIcon(group: RecipeDisplayGroup) {
+  if (group.bookId) return $globals.icons.book;
+  if (group.categoryId) return $globals.icons.categories;
+  return $globals.icons.silverwareForkKnife;
+}
+
+async function handleRecipeCategoryCreated() {
+  await categoryStore.actions.refresh();
+  window.dispatchEvent(new CustomEvent("mealie:organizers-updated"));
+}
+
+function openRecipeCategoryEditDialog(categoryId: string) {
+  recipeCategoryEditTarget.value = recipeGroupCategories.value.find(category => category.id === categoryId) || null;
+  recipeCategoryEditDialog.value = Boolean(recipeCategoryEditTarget.value);
+}
+
+async function handleRecipeCategoryEdited() {
+  recipeCategoryEditTarget.value = null;
+  await categoryStore.actions.refresh();
+  window.dispatchEvent(new CustomEvent("mealie:organizers-updated"));
 }
 
 function uploadedBookById(bookId: string) {

@@ -13,14 +13,14 @@ services:
       # The production image contains both the Nuxt frontend and the API.
       # Port 3000 can be reserved by Windows/Hyper-V. Keep this installation on
       # a dedicated, configurable host port instead.
-      - "${MEALIE_HOST_PORT:-12000}:9000"
+      - "${MEALIE_HOST_PORT:-9925}:9000"
     volumes:
       - mealie-custom-data:/app/data/
     environment:
       ALLOW_SIGNUP: "false"
       LOG_LEVEL: "DEBUG"
       DB_ENGINE: sqlite
-      BASE_URL: http://localhost:${MEALIE_HOST_PORT:-12000}
+      BASE_URL: http://localhost:${MEALIE_HOST_PORT:-9925}
       TOKEN_TIME: "8760"
       AUTO_BACKUP_ENABLED: "true"
       AUTO_BACKUP_INTERVAL_HOURS: "12"

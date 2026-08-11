@@ -135,6 +135,7 @@ export interface RecipeCategory {
   groupId?: string | null;
   name: string;
   slug: string;
+  isRecipeGroup?: boolean;
 }
 export interface RecipeTag {
   id?: string | null;

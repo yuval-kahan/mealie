@@ -1,7 +1,7 @@
 <template>
   <v-container fluid class="notebook-page pa-0">
-    <div class="notebook-shell">
-      <aside class="notebook-panel notebook-panel--books">
+    <div class="notebook-shell" :class="{ 'notebook-shell--focus': focusMode }">
+      <aside v-if="!focusMode" class="notebook-panel notebook-panel--books">
         <div class="panel-heading">
           <div class="d-flex align-center ga-2 min-w-0">
             <v-icon color="primary">
@@ -23,6 +23,38 @@
           </v-btn>
         </div>
 
+        <div v-if="notebookTocSections.length" class="notebook-toc-panel">
+          <button
+            type="button"
+            class="notebook-toc-toggle"
+            :aria-expanded="!notebookTocCollapsed"
+            @click="toggleNotebookToc"
+          >
+            <v-icon size="18">
+              {{ notebookTocCollapsed ? $globals.icons.chevronRight : $globals.icons.chevronDown }}
+            </v-icon>
+            <strong>{{ $t("notebook.table-of-contents") }}</strong>
+          </button>
+          <v-expand-transition>
+            <div v-show="!notebookTocCollapsed" class="notebook-toc-entries">
+              <section v-for="section in notebookTocSections" :key="section.title">
+                <h3>{{ section.title }}</h3>
+                <button
+                  v-for="entry in section.entries"
+                  :key="entry.nodeId"
+                  type="button"
+                  :class="{ 'notebook-toc-entry--active': selectedNode?.id === entry.nodeId }"
+                  class="notebook-toc-entry"
+                  @click="selectNotebookTocEntry(entry.nodeId)"
+                >
+                  <span>{{ entry.title }}</span>
+                  <small v-if="entry.summary">{{ entry.summary }}</small>
+                </button>
+              </section>
+            </div>
+          </v-expand-transition>
+        </div>
+
         <v-text-field
           v-model="notebookFilter"
           :placeholder="$t('search.search')"
@@ -35,26 +67,37 @@
         />
 
         <div class="panel-scroll">
-          <button
+          <div
             v-for="notebook in filteredNotebooks"
             :key="notebook.id"
-            type="button"
             class="notebook-row"
             :class="{ 'notebook-row--active': activeNotebook?.id === notebook.id }"
-            @click="selectNotebook(notebook.id)"
           >
-            <span class="notebook-color" :style="{ backgroundColor: notebook.color }" />
-            <span class="notebook-row__content">
-              <strong>{{ notebook.title }}</strong>
-              <small>{{ notebook.pageCount }} {{ $t("notebook.page") }}</small>
-            </span>
-            <v-icon v-if="notebook.isPinned" size="18">
-              {{ $globals.icons.pin }}
-            </v-icon>
-            <v-icon v-if="notebook.isFavorite" size="18" color="warning">
-              {{ $globals.icons.star }}
-            </v-icon>
-          </button>
+            <button type="button" class="notebook-row__select" @click="selectNotebook(notebook.id)">
+              <span class="notebook-color" :style="{ backgroundColor: notebook.color }" />
+              <span class="notebook-row__content">
+                <strong>{{ notebook.title }}</strong>
+                <small>{{ notebook.pageCount }} {{ $t("notebook.page") }}</small>
+              </span>
+              <v-icon v-if="notebook.isPinned" size="18">
+                {{ $globals.icons.pin }}
+              </v-icon>
+              <v-icon v-if="notebook.isFavorite" size="18" color="warning">
+                {{ $globals.icons.star }}
+              </v-icon>
+            </button>
+            <v-btn
+              icon
+              size="x-small"
+              variant="text"
+              :title="$t('notebook.open-full-page')"
+              @click.stop="openNotebookInNewTab(notebook.id)"
+            >
+              <v-icon size="18">
+                {{ $globals.icons.openInNew }}
+              </v-icon>
+            </v-btn>
+          </div>
 
           <v-btn
             v-if="ready && !filteredNotebooks.length"
@@ -92,7 +135,7 @@
         </div>
       </aside>
 
-      <aside class="notebook-panel notebook-panel--outline">
+      <aside v-if="!focusMode" class="notebook-panel notebook-panel--outline">
         <div class="panel-heading">
           <h2 class="panel-title">
             {{ $t("notebook.outline") }}
@@ -218,7 +261,11 @@
         </div>
       </aside>
 
-      <main class="notebook-editor-area">
+      <main
+        ref="editorArea"
+        class="notebook-editor-area"
+        @scroll.passive="scheduleReadingPositionSave"
+      >
         <template v-if="selectedNode?.nodeType === 'page'">
           <div class="editor-topline">
             <v-text-field
@@ -232,6 +279,37 @@
             <span class="save-status" :class="{ 'save-status--error': saveState === 'error' }">
               {{ saveStateLabel }}
             </span>
+            <v-btn
+              icon
+              size="small"
+              variant="text"
+              :disabled="saveState === 'saved'"
+              :title="$t('general.save')"
+              @click="flushSave"
+            >
+              <v-icon>{{ $globals.icons.save }}</v-icon>
+            </v-btn>
+            <v-btn
+              icon
+              size="small"
+              variant="text"
+              color="primary"
+              :loading="generatingToc"
+              :disabled="!activeNotebook"
+              :title="$t('notebook.generate-toc-with-ai')"
+              @click="generateToc"
+            >
+              <v-icon>{{ $globals.icons.robot }}</v-icon>
+            </v-btn>
+            <v-btn
+              icon
+              size="small"
+              variant="text"
+              :title="focusMode ? $t('notebook.back-to-notebooks') : $t('notebook.open-full-page')"
+              @click="toggleFocusMode"
+            >
+              <v-icon>{{ focusMode ? $globals.icons.close : $globals.icons.openInNew }}</v-icon>
+            </v-btn>
             <v-btn
               icon
               size="small"
@@ -527,7 +605,7 @@
               aria-multiline="true"
               :data-placeholder="$t('notebook.page-placeholder')"
               @input="editorInput"
-              @click="editorChange"
+              @click="editorClick"
               @change="editorChange"
             />
           </div>
@@ -665,11 +743,14 @@ import type {
   NotebookRevision,
   NotebookSearchResult,
   NotebookSummary,
+  NotebookTOCResponse,
 } from "~/lib/api/types/notebook";
 
 const api = useUserApi();
 const i18n = useI18n();
 const { $globals } = useNuxtApp();
+const route = useRoute();
+const router = useRouter();
 
 useSeoMeta({ title: () => i18n.t("notebook.notebooks") });
 
@@ -681,6 +762,7 @@ const notebookFilter = ref("");
 const noteSearch = ref("");
 const searchResults = ref<NotebookSearchResult[] | null>(null);
 const editor = ref<HTMLElement | null>(null);
+const editorArea = ref<HTMLElement | null>(null);
 const draggedNodeId = ref<string | null>(null);
 
 const notebookDialog = ref(false);
@@ -698,6 +780,8 @@ const editingNode = ref<NotebookNode | null>(null);
 const deletingNode = ref<NotebookNode | null>(null);
 const revisions = ref<NotebookRevision[]>([]);
 const restoringRevision = ref<string | null>(null);
+const generatingToc = ref(false);
+const notebookTocCollapsed = ref(false);
 
 const draftTitle = ref("");
 const draftContent = ref("");
@@ -708,9 +792,25 @@ const saveState = ref<"saved" | "saving" | "error">("saved");
 const blockFormat = ref("p");
 const inlineTextColor = ref("#222222");
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
-let saveInFlight = false;
+let saveInFlight: Promise<boolean> | null = null;
 let savePending = false;
 let loadingDraft = false;
+let readingPositionTimer: ReturnType<typeof setTimeout> | null = null;
+
+const focusMode = computed(() => route.query.focus === "1");
+
+interface NotebookReadingPosition {
+  pageId: string;
+  scrollTop: number;
+  updatedAt: number;
+}
+
+interface NotebookTocEntry {
+  nodeId: string;
+  title: string;
+  sectionTitle: string;
+  summary: string;
+}
 
 interface PageSettings {
   fontFamily: string;
@@ -846,6 +946,31 @@ const visibleTree = computed(() => {
   return output;
 });
 
+const notebookTocSections = computed(() => {
+  const tocNode = activeNotebook.value?.nodes.find(node => node.settings?.generatedToc === true);
+  const rawEntries = tocNode?.settings?.tocEntries;
+  if (!Array.isArray(rawEntries)) return [];
+
+  const grouped = new Map<string, NotebookTocEntry[]>();
+  for (const raw of rawEntries) {
+    if (!raw || typeof raw !== "object") continue;
+    const record = raw as Record<string, unknown>;
+    if (typeof record.nodeId !== "string" || typeof record.title !== "string") continue;
+    const entry: NotebookTocEntry = {
+      nodeId: record.nodeId,
+      title: record.title,
+      sectionTitle: typeof record.sectionTitle === "string" && record.sectionTitle.trim()
+        ? record.sectionTitle.trim()
+        : i18n.t("notebook.pages"),
+      summary: typeof record.summary === "string" ? record.summary : "",
+    };
+    const sectionEntries = grouped.get(entry.sectionTitle) || [];
+    sectionEntries.push(entry);
+    grouped.set(entry.sectionTitle, sectionEntries);
+  }
+  return [...grouped].map(([title, entries]) => ({ title, entries }));
+});
+
 const parentOptions = computed(() => {
   const type = nodeForm.nodeType;
   const allowed = type === "section_group" ? ["section_group"] : type === "section" ? ["section_group"] : ["section", "page"];
@@ -893,16 +1018,141 @@ const editorStyles = computed(() => ({
   "--paragraph-spacing": `${pageSettings.paragraphSpacing}px`,
 }));
 
-onMounted(loadNotebooks);
+onMounted(async () => {
+  document.addEventListener("visibilitychange", saveWhenPageIsHidden);
+  window.addEventListener("scroll", scheduleReadingPositionSave, { passive: true });
+  await loadNotebooks(queryValue(route.query.notebook));
+});
 onBeforeUnmount(() => {
+  saveCurrentReadingPosition();
   if (saveTimer) clearTimeout(saveTimer);
-  if (selectedNode.value?.nodeType === "page" && saveState.value !== "saved") void persistDraft();
+  if (readingPositionTimer) clearTimeout(readingPositionTimer);
+  document.removeEventListener("visibilitychange", saveWhenPageIsHidden);
+  window.removeEventListener("scroll", scheduleReadingPositionSave);
+});
+onBeforeRouteLeave(async () => {
+  saveCurrentReadingPosition();
+  return await flushSave();
 });
 
 watch(() => activeNotebook.value?.id, () => {
   searchResults.value = null;
   noteSearch.value = "";
+  if (import.meta.client && activeNotebook.value?.id) {
+    notebookTocCollapsed.value = window.localStorage.getItem(notebookTocCollapseKey(activeNotebook.value.id)) === "true";
+  }
 });
+
+watch(
+  () => [queryValue(route.query.notebook), queryValue(route.query.page), focusMode.value] as const,
+  async ([notebookId, pageId, focused]) => {
+    if (!focused || !notebookId) return;
+    if (activeNotebook.value?.id !== notebookId) {
+      await selectNotebook(notebookId);
+      return;
+    }
+    if (pageId && selectedNode.value?.id !== pageId) {
+      const target = activeNotebook.value.nodes.find(node => node.id === pageId && node.nodeType === "page");
+      if (target) await selectNode(target);
+    }
+  },
+);
+
+function queryValue(value: unknown) {
+  return typeof value === "string" ? value : null;
+}
+
+function readingPositionKey(notebookId: string) {
+  return `mealie:notebook-reading-position:${notebookId}`;
+}
+
+function notebookTocCollapseKey(notebookId: string) {
+  return `mealie:notebook-toc-collapsed:${notebookId}`;
+}
+
+function toggleNotebookToc() {
+  notebookTocCollapsed.value = !notebookTocCollapsed.value;
+  if (import.meta.client && activeNotebook.value?.id) {
+    window.localStorage.setItem(notebookTocCollapseKey(activeNotebook.value.id), String(notebookTocCollapsed.value));
+  }
+}
+
+async function selectNotebookTocEntry(nodeId: string) {
+  const node = activeNotebook.value?.nodes.find(item => item.id === nodeId);
+  if (node) await selectNode(node);
+}
+
+function storedReadingPosition(notebookId: string): NotebookReadingPosition | null {
+  try {
+    const value = window.localStorage.getItem(readingPositionKey(notebookId));
+    if (!value) return null;
+    const parsed = JSON.parse(value) as Partial<NotebookReadingPosition>;
+    if (typeof parsed.pageId !== "string" || typeof parsed.scrollTop !== "number") return null;
+    return {
+      pageId: parsed.pageId,
+      scrollTop: Math.max(0, parsed.scrollTop),
+      updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : 0,
+    };
+  }
+  catch {
+    return null;
+  }
+}
+
+function setStoredReadingPosition(notebookId: string, pageId: string, scrollTop: number) {
+  const value: NotebookReadingPosition = {
+    pageId,
+    scrollTop: Math.max(0, Math.round(scrollTop)),
+    updatedAt: Date.now(),
+  };
+  try {
+    window.localStorage.setItem(readingPositionKey(notebookId), JSON.stringify(value));
+  }
+  catch {
+    // Reading position is a convenience; notebook saving must still work when storage is unavailable.
+  }
+}
+
+function editorScrollTop() {
+  const area = editorArea.value;
+  if (area && area.scrollHeight > area.clientHeight + 2 && getComputedStyle(area).overflowY !== "visible") {
+    return area.scrollTop;
+  }
+  return window.scrollY;
+}
+
+function saveCurrentReadingPosition() {
+  if (!activeNotebook.value || selectedNode.value?.nodeType !== "page") return;
+  setStoredReadingPosition(activeNotebook.value.id, selectedNode.value.id, editorScrollTop());
+}
+
+function scheduleReadingPositionSave() {
+  if (readingPositionTimer) clearTimeout(readingPositionTimer);
+  readingPositionTimer = setTimeout(() => {
+    readingPositionTimer = null;
+    saveCurrentReadingPosition();
+  }, 180);
+}
+
+async function restoreReadingPosition(notebookId: string, pageId: string, scrollTop: number) {
+  await nextTick();
+  await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+  if (activeNotebook.value?.id !== notebookId || selectedNode.value?.id !== pageId) return;
+  const area = editorArea.value;
+  if (area && area.scrollHeight > area.clientHeight + 2 && getComputedStyle(area).overflowY !== "visible") {
+    area.scrollTop = scrollTop;
+  }
+  else {
+    window.scrollTo({ top: scrollTop, behavior: "auto" });
+  }
+}
+
+function saveWhenPageIsHidden() {
+  if (document.visibilityState === "hidden") {
+    saveCurrentReadingPosition();
+    void flushSave();
+  }
+}
 
 async function loadNotebooks(selectId?: string) {
   const { data, error } = await api.notebooks.getAll();
@@ -917,34 +1167,125 @@ async function loadNotebooks(selectId?: string) {
 }
 
 async function selectNotebook(id: string) {
-  await flushSave();
+  saveCurrentReadingPosition();
+  if (!await flushSave()) return;
+  const previousSelectedNodeId = activeNotebook.value?.id === id ? selectedNode.value?.id : null;
   const { data, error } = await api.notebooks.getOne(id);
   if (error || !data) {
     alert.error(i18n.t("events.something-went-wrong"));
     return;
   }
   activeNotebook.value = data;
-  const preferred = data.nodes.find(node => node.id === selectedNode.value?.id && node.nodeType === "page")
+  selectedNode.value = null;
+  const requestedPageId = queryValue(route.query.page);
+  const readingPosition = storedReadingPosition(id);
+  const preferred = data.nodes.find(node => node.id === requestedPageId && node.nodeType === "page")
+    || data.nodes.find(node => node.id === readingPosition?.pageId && node.nodeType === "page")
+    || data.nodes.find(node => node.id === previousSelectedNodeId && node.nodeType === "page")
     || data.nodes.find(node => node.nodeType === "page" && node.isPinned)
     || data.nodes.find(node => node.nodeType === "page");
-  if (preferred) selectNode(preferred);
+  if (preferred) await selectNode(preferred);
   else selectedNode.value = null;
 }
 
-function selectNode(node: NotebookNode) {
+async function selectNode(node: NotebookNode) {
   if (node.nodeType !== "page") {
-    void toggleNode(node);
+    await toggleNode(node);
     return;
   }
-  void (async () => {
-    await flushSave();
-    selectedNode.value = node;
-    loadDraft(node);
-  })();
+  saveCurrentReadingPosition();
+  if (!await flushSave()) return;
+  const notebook = activeNotebook.value;
+  if (!notebook) return;
+  const readingPosition = storedReadingPosition(notebook.id);
+  const scrollTop = readingPosition?.pageId === node.id ? readingPosition.scrollTop : 0;
+  selectedNode.value = node;
+  await loadDraft(node);
+  setStoredReadingPosition(notebook.id, node.id, scrollTop);
+  await restoreReadingPosition(notebook.id, node.id, scrollTop);
+  if (focusMode.value) {
+    await router.replace({
+      path: route.path,
+      query: { focus: "1", notebook: notebook.id, page: node.id },
+    });
+  }
 }
 
-function loadDraft(node: NotebookNode) {
+async function openNotebookInNewTab(notebookId: string) {
+  const newTab = window.open("about:blank", "_blank");
+  if (activeNotebook.value?.id === notebookId) {
+    saveCurrentReadingPosition();
+    if (!await flushSave()) {
+      newTab?.close();
+      return;
+    }
+  }
+  const readingPosition = storedReadingPosition(notebookId);
+  const pageId = activeNotebook.value?.id === notebookId
+    ? selectedNode.value?.id || readingPosition?.pageId
+    : readingPosition?.pageId;
+  const target = router.resolve({
+    path: route.path,
+    query: { focus: "1", notebook: notebookId, ...(pageId ? { page: pageId } : {}) },
+  }).href;
+  if (newTab) {
+    newTab.opener = null;
+    newTab.location.href = target;
+  }
+  else {
+    await router.push(target);
+  }
+}
+
+async function openNotebookFocus(notebookId: string) {
+  if (!await flushSave()) return;
+  if (activeNotebook.value?.id !== notebookId) {
+    await selectNotebook(notebookId);
+  }
+  if (activeNotebook.value?.id !== notebookId) return;
+  await router.push({
+    path: route.path,
+    query: { focus: "1", notebook: notebookId, page: selectedNode.value?.id },
+  });
+}
+
+async function toggleFocusMode() {
+  if (!await flushSave()) return;
+  if (focusMode.value) {
+    await router.push({ path: route.path });
+    return;
+  }
+  if (activeNotebook.value) await openNotebookFocus(activeNotebook.value.id);
+}
+
+async function generateToc() {
+  const notebook = activeNotebook.value;
+  if (!notebook || generatingToc.value) return;
+  if (!await flushSave()) return;
+  generatingToc.value = true;
+  const { data, error } = await api.notebooks.generateToc(notebook.id, {
+    language: String(i18n.locale.value),
+    pagesPerChunk: 8,
+  });
+  generatingToc.value = false;
+  if (error || !data) {
+    alert.error(i18n.t("notebook.toc-failed"));
+    return;
+  }
+
+  const tocResult: NotebookTOCResponse = data;
+  await selectNotebook(notebook.id);
+  const tocNode = activeNotebook.value?.nodes.find(node => node.id === tocResult.tocNode.id) || tocResult.tocNode;
+  await selectNode(tocNode);
+  alert.success(i18n.t("notebook.toc-created", {
+    chunks: tocResult.chunkCount,
+    providers: tocResult.providerCount,
+  }));
+}
+
+async function loadDraft(node: NotebookNode) {
   loadingDraft = true;
+  savePending = false;
   draftTitle.value = node.title;
   draftContent.value = node.contentHtml || "";
   draftCategories.value = [...(node.categories || [])];
@@ -958,10 +1299,9 @@ function loadDraft(node: NotebookNode) {
       ];
   Object.assign(pageSettings, defaultPageSettings(), node.settings || {});
   saveState.value = "saved";
-  nextTick(() => {
-    if (editor.value) editor.value.innerHTML = draftContent.value;
-    loadingDraft = false;
-  });
+  await nextTick();
+  if (editor.value) editor.value.innerHTML = draftContent.value;
+  loadingDraft = false;
 }
 
 function editorInput() {
@@ -981,65 +1321,90 @@ function editorChange(event: Event) {
   }
 }
 
+function editorClick(event: MouseEvent) {
+  const target = event.target as HTMLElement | null;
+  const tocLink = target?.closest<HTMLAnchorElement>(".notebook-generated-toc a");
+  if (tocLink) {
+    event.preventDefault();
+    const url = new URL(tocLink.href, window.location.origin);
+    void router.push(`${url.pathname}${url.search}`);
+    return;
+  }
+  editorChange(event);
+}
+
 function scheduleSave() {
   if (loadingDraft || !selectedNode.value || selectedNode.value.nodeType !== "page") return;
+  savePending = true;
   saveState.value = "saving";
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => void persistDraft(), 850);
 }
 
-async function flushSave() {
+async function flushSave(): Promise<boolean> {
   if (saveTimer) {
     clearTimeout(saveTimer);
     saveTimer = null;
   }
-  if (selectedNode.value?.nodeType === "page" && saveState.value !== "saved") await persistDraft();
+  if (saveInFlight && !await saveInFlight) return false;
+  if (selectedNode.value?.nodeType === "page" && (savePending || saveState.value !== "saved")) {
+    return await persistDraft();
+  }
+  return true;
 }
 
-async function persistDraft() {
-  const node = selectedNode.value;
-  const notebook = activeNotebook.value;
-  if (!node || !notebook || node.nodeType !== "page") return;
+async function persistDraft(): Promise<boolean> {
   if (saveInFlight) {
     savePending = true;
-    return;
+    return await saveInFlight;
   }
-  saveInFlight = true;
-  savePending = false;
+  savePending = true;
+  saveInFlight = (async () => {
+    while (savePending) {
+      savePending = false;
+      const saved = await persistDraftOnce();
+      if (!saved) {
+        savePending = false;
+        return false;
+      }
+    }
+    return true;
+  })();
+  try {
+    return await saveInFlight;
+  }
+  finally {
+    saveInFlight = null;
+  }
+}
+
+async function persistDraftOnce() {
+  const node = selectedNode.value;
+  const notebook = activeNotebook.value;
+  if (!node || !notebook || node.nodeType !== "page") return true;
   saveState.value = "saving";
-  const expectedVersion = node.contentVersion;
   const payload = {
     title: draftTitle.value.trim() || i18n.t("notebook.starter-page"),
     contentHtml: draftContent.value,
-    tags: draftTags.value,
-    categories: draftCategories.value,
-    highlightCategories: draftHighlightCategories.value,
+    tags: [...draftTags.value],
+    categories: [...draftCategories.value],
+    highlightCategories: draftHighlightCategories.value.map(item => ({ ...item })),
     settings: { ...pageSettings },
-    expectedVersion,
+    expectedVersion: node.contentVersion,
   };
   const result = await api.notebooks.updateNode(notebook.id, node.id, payload);
-  saveInFlight = false;
   if (result.error || !result.data) {
-    const status = result.error?.response?.status;
     saveState.value = "error";
-    if (status === 409) {
-      alert.warning(i18n.t("notebook.conflict"));
-      await selectNotebook(notebook.id);
-    }
-    else {
-      alert.error(i18n.t("notebook.save-failed"));
-    }
+    if (result.error?.response?.status === 409) alert.warning(i18n.t("notebook.conflict"));
+    else alert.error(i18n.t("notebook.save-failed"));
+    return false;
   }
-  else {
-    selectedNode.value = result.data;
-    const index = notebook.nodes.findIndex(item => item.id === result.data?.id);
-    if (index >= 0) notebook.nodes[index] = result.data;
-    saveState.value = "saved";
-  }
-  if (savePending) {
-    savePending = false;
-    await persistDraft();
-  }
+
+  selectedNode.value = result.data;
+  const index = notebook.nodes.findIndex(item => item.id === result.data?.id);
+  if (index >= 0) notebook.nodes[index] = result.data;
+  if (!savePending) saveState.value = "saved";
+  return true;
 }
 
 function exec(command: string, value?: string) {
@@ -1246,7 +1611,7 @@ async function saveNode() {
   }
   nodeDialog.value = false;
   await selectNotebook(notebook.id);
-  if (result.data.nodeType === "page") selectNode(result.data);
+  if (result.data.nodeType === "page") await selectNode(result.data);
 }
 
 async function toggleNode(node: NotebookNode) {
@@ -1349,7 +1714,7 @@ function clearSearchResults() {
 async function openSearchResult(result: NotebookSearchResult) {
   if (activeNotebook.value?.id !== result.notebookId) await selectNotebook(result.notebookId);
   const node = activeNotebook.value?.nodes.find(item => item.id === result.nodeId);
-  if (node) selectNode(node);
+  if (node) await selectNode(node);
   clearSearchResults();
 }
 
@@ -1374,7 +1739,7 @@ async function restoreRevision(revisionId: string) {
     selectedNode.value = data;
     const index = activeNotebook.value.nodes.findIndex(item => item.id === data.id);
     if (index >= 0) activeNotebook.value.nodes[index] = data;
-    loadDraft(data);
+    await loadDraft(data);
     revisionDialog.value = false;
   }
 }
@@ -1395,6 +1760,9 @@ function formatDate(value?: string | null) {
   grid-template-columns: 230px 300px minmax(0, 1fr);
   height: 100%;
   background: rgb(var(--v-theme-background));
+}
+.notebook-shell--focus {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .notebook-panel {
@@ -1427,6 +1795,57 @@ function formatDate(value?: string | null) {
 .panel-search {
   margin: 10px;
 }
+.notebook-toc-panel {
+  margin: 10px 10px 0;
+  overflow: hidden;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 4px;
+}
+.notebook-toc-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border: 0;
+  background: rgba(var(--v-theme-primary), 0.08);
+  color: inherit;
+  cursor: pointer;
+  text-align: start;
+}
+.notebook-toc-entries {
+  max-height: 250px;
+  overflow: auto;
+  padding: 6px;
+}
+.notebook-toc-entries h3 {
+  margin: 6px 4px 3px;
+  font-size: 0.78rem;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+}
+.notebook-toc-entry {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: start;
+}
+.notebook-toc-entry:hover,
+.notebook-toc-entry--active {
+  background: rgba(var(--v-theme-primary), 0.11);
+}
+.notebook-toc-entry small {
+  overflow: hidden;
+  color: rgba(var(--v-theme-on-surface), 0.66);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .panel-scroll {
   min-height: 0;
   flex: 1;
@@ -1445,20 +1864,32 @@ function formatDate(value?: string | null) {
   width: 100%;
   min-height: 54px;
   align-items: center;
-  gap: 9px;
-  padding: 7px 9px;
+  gap: 2px;
+  padding: 2px 4px;
   border: 0;
   border-radius: 4px;
   background: transparent;
   color: inherit;
-  cursor: pointer;
-  text-align: start;
 }
 .notebook-row:hover {
   background: rgba(var(--v-theme-primary), 0.08);
 }
 .notebook-row--active {
   background: rgba(var(--v-theme-primary), 0.13);
+}
+.notebook-row__select {
+  display: flex;
+  min-width: 0;
+  min-height: 48px;
+  flex: 1;
+  align-items: center;
+  gap: 9px;
+  padding: 5px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: start;
 }
 .notebook-color {
   width: 5px;
@@ -1659,7 +2090,7 @@ function formatDate(value?: string | null) {
   padding: 22px;
 }
 .rich-editor {
-  min-height: calc(100vh - 190px);
+  min-height: max(calc(100vh - 190px), 1120px);
   margin: 0 auto;
   padding: 42px 48px;
   border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
@@ -1692,6 +2123,50 @@ function formatDate(value?: string | null) {
 .rich-editor :deep(.notebook-checklist) {
   padding-inline-start: 0;
   list-style: none;
+}
+.rich-editor :deep(.notebook-generated-toc) {
+  display: grid;
+  gap: 24px;
+  padding: 8px 0;
+}
+.rich-editor :deep(.notebook-toc-section) {
+  break-inside: avoid;
+}
+.rich-editor :deep(.notebook-toc-section h2) {
+  margin: 0 0 8px;
+  padding-bottom: 7px;
+  border-bottom: 2px solid rgba(var(--v-theme-primary), 0.32);
+  color: rgb(var(--v-theme-primary));
+  font-size: 1.18em;
+}
+.rich-editor :deep(.notebook-toc-section ol) {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding-inline-start: 28px;
+}
+.rich-editor :deep(.notebook-toc-section li) {
+  padding: 7px 4px;
+  border-bottom: 1px dotted rgba(var(--v-border-color), 0.45);
+}
+.rich-editor :deep(.notebook-toc-section a) {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 18px;
+  color: inherit;
+  text-decoration: none;
+}
+.rich-editor :deep(.notebook-toc-section a:hover strong) {
+  color: rgb(var(--v-theme-primary));
+  text-decoration: underline;
+}
+.rich-editor :deep(.notebook-toc-section small) {
+  max-width: 55%;
+  opacity: 0.65;
+  font-size: 0.82em;
+  font-weight: 400;
+  text-align: end;
 }
 .editor-empty {
   display: flex;

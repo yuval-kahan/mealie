@@ -73,7 +73,9 @@ class RecipeTagPagination(PaginationBase):
 
 
 class RecipeCategory(RecipeTag):
-    pass
+    is_recipe_group: bool = False
+    recipe_group_section: str = "recipes"
+    parent_category_id: UUID4 | None = None
 
 
 class RecipeCategoryPagination(PaginationBase):

@@ -907,7 +907,12 @@
                 <div v-if="bookReadingState(book)" class="cookbook-library__reading mt-3">
                   <div class="cookbook-library__reading-row">
                     <span>{{ $t("cookbook.current-reading-position") }}</span>
-                    <strong>{{ Math.round(bookReadingState(book)?.readingPercent || 0) }}%</strong>
+                    <strong>
+                      {{ $t("cookbook.page-number-and-percent", {
+                        page: bookReadingState(book)?.currentPage || bookReadingState(book)?.currentPageIndex || 0,
+                        percent: Math.round(bookReadingState(book)?.readingPercent || 0),
+                      }) }}
+                    </strong>
                   </div>
                   <v-progress-linear
                     :model-value="bookReadingState(book)?.readingPercent || 0"

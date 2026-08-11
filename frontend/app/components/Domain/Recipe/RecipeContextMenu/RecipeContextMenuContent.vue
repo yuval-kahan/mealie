@@ -127,6 +127,25 @@
         density="compact"
         hide-details
       />
+      <v-divider class="my-4" />
+      <v-select
+        v-model="selectedRecipeGroupIds"
+        :items="recipeGroupLocationOptions"
+        :label="$t('recipe.recipe-categories-and-subcategories')"
+        multiple
+        chips
+        clearable
+        closable-chips
+        density="compact"
+        variant="outlined"
+      />
+      <v-checkbox
+        v-model="keepExistingRecipeGroups"
+        :label="$t('recipe.keep-existing-recipe-locations')"
+        :hint="$t('recipe.keep-existing-recipe-locations-hint')"
+        persistent-hint
+        density="compact"
+      />
       <v-alert
         v-if="!selectedRecipeSections.length"
         type="warning"
@@ -351,6 +370,7 @@ import type { GroupRecipeActionOut, ShoppingListSummary } from "~/lib/api/types/
 import type { RecipeDeletePreview } from "~/lib/api/user/recipes/recipe";
 import type { PlanEntryType } from "~/lib/api/types/meal-plan";
 import { useDownloader } from "~/composables/api/use-downloader";
+import { useCategoryStore } from "~/composables/store/use-category-store";
 
 export interface ContextMenuIncludes {
   delete: boolean;
@@ -474,6 +494,8 @@ const recipeDuplicateDialog = ref(false);
 const recipeRenameDialog = ref(false);
 const recipeSectionDialog = ref(false);
 const selectedRecipeSections = ref<Array<"recipes" | "book" | "sauce">>([]);
+const selectedRecipeGroupIds = ref<string[]>([]);
+const keepExistingRecipeGroups = ref(true);
 const recipeSectionLoading = ref(false);
 const aiEditDialog = ref(false);
 const aiEditInstruction = ref("");
@@ -512,6 +534,22 @@ const auth = useMealieAuth();
 const { $globals } = useNuxtApp();
 const { household } = useHouseholdSelf();
 const { isOwnGroup } = useLoggedInState();
+const categoryStore = useCategoryStore();
+const recipeGroupLocationOptions = computed(() => {
+  const groups = categoryStore.store.value.filter(category => category.isRecipeGroup && category.id);
+  return groups
+    .map((category) => {
+      const parent = groups.find(candidate => candidate.id === category.parentCategoryId);
+      const section = category.recipeGroupSection === "sauce"
+        ? i18n.t("recipe.section-sauce")
+        : i18n.t("recipe.section-recipes");
+      return {
+        title: `${section}: ${parent ? `${parent.name} / ` : ""}${category.name}`,
+        value: category.id!,
+      };
+    })
+    .sort((left, right) => left.title.localeCompare(right.title, i18n.locale.value));
+});
 
 const route = useRoute();
 const groupSlug = computed(() => route.params.groupSlug || auth.user.value?.groupSlug || "");
@@ -886,12 +924,24 @@ async function moveRecipeToSection() {
     const primarySection = selectedRecipeSections.value.includes(currentPrimary as "recipes" | "book" | "sauce")
       ? currentPrimary
       : selectedRecipeSections.value[0];
+    const currentCategories = recipeRef.value.recipeCategory || [];
+    const regularCategories = currentCategories.filter(category => !category.isRecipeGroup);
+    const existingGroups = keepExistingRecipeGroups.value
+      ? currentCategories.filter(category => category.isRecipeGroup)
+      : [];
+    const selectedGroups = categoryStore.store.value.filter(category => selectedRecipeGroupIds.value.includes(category.id || ""));
+    const categoryById = new Map(
+      [...regularCategories, ...existingGroups, ...selectedGroups]
+        .filter(category => category.id)
+        .map(category => [category.id!, category]),
+    );
     const { data, error } = await api.recipes.updateOne(props.slug, {
       ...recipeRef.value,
       recipeSection: primarySection,
       showInRecipes: selectedRecipeSections.value.includes("recipes"),
       showInBook: selectedRecipeSections.value.includes("book"),
       showInSauce: selectedRecipeSections.value.includes("sauce"),
+      recipeCategory: [...categoryById.values()],
     });
     if (error || !data) {
       alert.error(i18n.t("events.something-went-wrong"));
@@ -1222,7 +1272,10 @@ const eventHandlers: { [key: string]: () => void | Promise<any> } = {
     resetImageUpload();
     imageUploadDialog.value = true;
   },
-  section: () => {
+  section: async () => {
+    if (!recipeRef.value) {
+      await refreshRecipe();
+    }
     const recipe = recipeRef.value;
     const hasExplicitMembership = recipe?.showInRecipes !== undefined
       || recipe?.showInBook !== undefined
@@ -1237,6 +1290,11 @@ const eventHandlers: { [key: string]: () => void | Promise<any> } = {
           ...((recipe?.showInSauce ?? props.showInSauce) ? ["sauce" as const] : []),
         ]
       : [(recipe?.recipeSection || props.recipeSection || "recipes") as "recipes" | "book" | "sauce"];
+    selectedRecipeGroupIds.value = (recipe?.recipeCategory || [])
+      .filter(category => category.isRecipeGroup && category.id)
+      .map(category => category.id!);
+    keepExistingRecipeGroups.value = true;
+    await categoryStore.actions.refresh();
     recipeSectionDialog.value = true;
   },
   markDone: markRecipeDone,

@@ -94,6 +94,9 @@ export interface UserExperiencePreferences {
   lockScreen: boolean;
   strikeCompletedRecipeItems: boolean;
   showRecipeItemImages: boolean;
+  recipeGroupCollapseBehavior: "remember" | "collapsed";
+  sauceGroupCollapseBehavior: "remember" | "collapsed";
+  bookGroupCollapseBehavior: "remember" | "collapsed";
 }
 
 export function useUserMealPlanPreferences(): Ref<UserMealPlanPreferences> {
@@ -298,6 +301,9 @@ export function useUserExperiencePreferences(): Ref<UserExperiencePreferences> {
       lockScreen: true,
       strikeCompletedRecipeItems: true,
       showRecipeItemImages: true,
+      recipeGroupCollapseBehavior: "remember" as const,
+      sauceGroupCollapseBehavior: "remember" as const,
+      bookGroupCollapseBehavior: "remember" as const,
     },
     { mergeDefaults: true },
   );

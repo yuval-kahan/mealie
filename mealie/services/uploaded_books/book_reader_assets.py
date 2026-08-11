@@ -754,6 +754,21 @@ def book_reader_script(labels: dict[str, str]) -> str:
       };
       window.addEventListener("mealie:book-position", handleReadingPosition);
 
+      const restoreReadingPosition = () => {
+        if (location.hash || (!state.currentPageIndex && !state.currentPage)) return;
+        const target = document.querySelector(
+          state.currentPageIndex
+            ? `.reading-position[data-page-index="${CSS.escape(String(state.currentPageIndex))}"]`
+            : `.reading-position[data-page-number="${CSS.escape(String(state.currentPage))}"]`
+        );
+        if (!target) return;
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          if (destroyed) return;
+          const top = target.getBoundingClientRect().top + window.scrollY - 64;
+          window.scrollTo({ top: Math.max(0, top), behavior: "instant" });
+        }));
+      };
+
       const applyPanelState = (panel, toggle, key, openLabel, closeLabel) => {
         let collapsed = true;
         try { collapsed = localStorage.getItem(key) !== "false"; } catch (_error) { /* optional */ }
@@ -773,6 +788,7 @@ def book_reader_script(labels: dict[str, str]) -> str:
       const initialize = async () => {
         await loadState();
         if (destroyed) return;
+        restoreReadingPosition();
         state.totalChapters = chapterRows.length;
         applyPreferences();
         syncChapterBoxes();

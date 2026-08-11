@@ -100,11 +100,13 @@ CHUNK_FAILED = "failed"
 
 SUPPORTED_TEXT_EXTRACTION_EXTENSIONS = {
     ".docx",
+    ".csv",
     ".epub",
     ".fb2",
     ".fb2.zip",
     ".htm",
     ".html",
+    ".json",
     ".md",
     ".markdown",
     ".mht",

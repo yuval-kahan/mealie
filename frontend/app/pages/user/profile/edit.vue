@@ -191,6 +191,27 @@
             color="primary"
             persistent-hint
           />
+          <v-select
+            v-model="experiencePreferences.recipeGroupCollapseBehavior"
+            :items="groupCollapseOptions"
+            :label="$t('user.recipe-category-collapse-behavior')"
+            density="comfortable"
+            variant="underlined"
+          />
+          <v-select
+            v-model="experiencePreferences.sauceGroupCollapseBehavior"
+            :items="groupCollapseOptions"
+            :label="$t('user.sauce-category-collapse-behavior')"
+            density="comfortable"
+            variant="underlined"
+          />
+          <v-select
+            v-model="experiencePreferences.bookGroupCollapseBehavior"
+            :items="groupCollapseOptions"
+            :label="$t('user.book-recipe-collapse-behavior')"
+            density="comfortable"
+            variant="underlined"
+          />
           <v-checkbox
             v-model="userCopy.showAnnouncements"
             hide-details
@@ -252,6 +273,10 @@ useSeoMeta({
 const activityPreferences = useUserActivityPreferences();
 const experiencePreferences = useUserExperiencePreferences();
 const activityOptions = getDefaultActivityLabels(i18n);
+const groupCollapseOptions = computed(() => [
+  { title: i18n.t("user.remember-group-state"), value: "remember" },
+  { title: i18n.t("user.always-collapse-groups"), value: "collapsed" },
+]);
 const selectedDefaultActivity = ref(getActivityLabel(i18n, activityPreferences.value.defaultActivity));
 watch(selectedDefaultActivity, () => {
   activityPreferences.value.defaultActivity = getActivityKey(i18n, selectedDefaultActivity.value) ?? ActivityKey.RECIPES;

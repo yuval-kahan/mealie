@@ -135,6 +135,7 @@ const routes = {
   recipesCreateUrlBulkAssets: `${prefix}/recipes/create/url/bulk/assets`,
   recipesCreateFromZip: `${prefix}/recipes/create/zip`,
   recipesCreateFromImage: `${prefix}/recipes/create/image`,
+  recipesCreateFromFile: `${prefix}/recipes/create/file`,
   recipesCreateFromText: `${prefix}/recipes/create/text`,
   recipesCreateFromHtmlOrJson: `${prefix}/recipes/create/html-or-json/stream`,
   recipesCategory: `${prefix}/recipes/category`,
@@ -448,6 +449,23 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
 
   async createOneFromText(payload: CreateRecipeFromText) {
     return await this.requests.post<string>(routes.recipesCreateFromText, payload, { suppressAlert: true });
+  }
+
+  async createManyFromFile(
+    document: File,
+    options: Omit<CreateRecipeFromText, "text"> = {},
+  ) {
+    const formData = new FormData();
+    formData.append("document", document);
+    const query = new URLSearchParams({
+      includeAiTips: String(options.includeAiTips !== false),
+      includeMiseEnPlace: String(options.includeMiseEnPlace !== false),
+      autoImage: String(options.autoImage !== false),
+      includeItemImages: String(options.includeItemImages !== false),
+      recipeSection: options.recipeSection || "recipes",
+    });
+    if (options.translateLanguage) query.set("translateLanguage", options.translateLanguage);
+    return await this.requests.post<string[]>(`${routes.recipesCreateFromFile}?${query}`, formData, { suppressAlert: true });
   }
 
   async ensureItemImages(recipeSlug: string) {

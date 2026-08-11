@@ -44,7 +44,7 @@ from mealie.schema.meal_plan.ai_meal import (
 from mealie.schema.meal_plan.new_meal import PlanEntryType
 from mealie.schema.openai.general import OpenAIText
 from mealie.schema.openai.meal_plan import OpenAIMealPlanResponse
-from mealie.schema.openai.recipe import OpenAIRecipe, OpenAIRecipeTextParse
+from mealie.schema.openai.recipe import OpenAIBookRecipeChunkParse, OpenAIRecipe, OpenAIRecipeTextParse
 from mealie.schema.openai.recipe_search import OpenAIRecipeSearchResponse
 from mealie.schema.recipe.recipe import CreateRecipe, Recipe, RecipeSummary, create_recipe_slug
 from mealie.schema.recipe.recipe_ai_search import RecipeAISearchResponse, RecipeAISearchResult
@@ -679,6 +679,34 @@ class RecipeService(RecipeServiceBase):
         if auto_image:
             await self.attach_best_effort_image(recipe, search_query=recipe.name)
         return recipe
+
+    async def create_many_from_document_text(
+        self,
+        chunks: list[str],
+        translate_language: str | None = None,
+        include_ai_tips: bool = True,
+        include_mise_en_place: bool = True,
+        auto_image: bool = True,
+        recipe_section: Literal["recipes", "sauce"] = "recipes",
+    ) -> list[Recipe]:
+        """Create every complete recipe found in bounded document chunks."""
+
+        openai_recipe_service = OpenAIRecipeService(self.repos, self.user, self.household, self.translator)
+        recipe_data_items = await openai_recipe_service.build_recipes_from_document_chunks(
+            chunks,
+            translate_language=translate_language,
+            include_ai_tips=include_ai_tips,
+            include_mise_en_place=include_mise_en_place,
+            recipe_section=recipe_section,
+        )
+        created: list[Recipe] = []
+        for recipe_data in recipe_data_items[:100]:
+            recipe_data = self._apply_primary_library_membership(recipe_data, recipe_section)
+            recipe = self.create_one(self.apply_ai_recipe_attribution(recipe_data))
+            if auto_image:
+                await self.attach_best_effort_image(recipe, search_query=recipe.name)
+            created.append(recipe)
+        return created
 
     async def attach_best_effort_image(
         self,
@@ -2597,3 +2625,87 @@ class OpenAIRecipeService(RecipeServiceBase):
             raise ValueError("Unable to parse recipe from text") from e
 
         return recipe
+
+    async def build_recipes_from_document_chunks(
+        self,
+        chunks: list[str],
+        translate_language: str | None = None,
+        include_ai_tips: bool = True,
+        include_mise_en_place: bool = True,
+        recipe_section: Literal["recipes", "sauce"] = "recipes",
+    ) -> list[Recipe]:
+        """Parse all complete recipes from a bounded set of document chunks."""
+
+        bounded_chunks = [chunk.strip()[:90_000] for chunk in chunks[:20] if chunk.strip()]
+        if not bounded_chunks:
+            raise exceptions.NotARecipe("The uploaded document does not contain readable text")
+
+        semaphore = asyncio.Semaphore(min(3, len(bounded_chunks)))
+
+        async def parse_chunk(index: int, chunk: str) -> tuple[int, OpenAIBookRecipeChunkParse | Exception]:
+            async with semaphore:
+                try:
+                    openai_service = OpenAIService(self.repos)
+                    if not (openai_service.provider_settings and openai_service.provider_settings.ai_enabled):
+                        raise ValueError("OpenAI services are not available")
+                    prompt = openai_service.get_prompt("recipes.parse-recipe-text")
+                    message = (
+                        "Extract every complete, usable recipe from this document section. Return no partial recipe, "
+                        "table-of-contents entry, advertisement, index item, or invented content. Preserve recipe order."
+                    )
+                    message += self._target_language_instruction(translate_language)
+                    message += self._recipe_section_instruction(recipe_section)
+                    if include_ai_tips:
+                        message += " Add concise practical cooking tips only when they materially help."
+                    if include_mise_en_place:
+                        message += (
+                            " Add food preparation tasks to mise_en_place_food and equipment to "
+                            "mise_en_place_tools, keeping them separate."
+                        )
+                    else:
+                        message += " Do not add mise en place tasks."
+                    message += f"\n\nDocument section {index + 1}:\n{chunk}"
+                    response = await openai_service.get_response(
+                        prompt,
+                        message,
+                        response_schema=OpenAIBookRecipeChunkParse,
+                    )
+                    if not response:
+                        raise ValueError("Received empty response from OpenAI")
+                    return index, response
+                except Exception as error:
+                    return index, error
+
+        results = await asyncio.gather(*(parse_chunk(index, chunk) for index, chunk in enumerate(bounded_chunks)))
+        ordered = sorted(results, key=lambda item: item[0])
+        recipes: list[Recipe] = []
+        seen: set[str] = set()
+        failures = 0
+        for _, result in ordered:
+            if isinstance(result, Exception):
+                failures += 1
+                self.logger.warning("AI document recipe chunk failed: %s", result)
+                continue
+            for openai_recipe in result.recipes:
+                if not include_mise_en_place:
+                    openai_recipe.mise_en_place = None
+                    openai_recipe.mise_en_place_food = []
+                    openai_recipe.mise_en_place_tools = []
+                if not self._has_minimum_recipe_data(openai_recipe):
+                    continue
+                signature_source = "|".join(
+                    [openai_recipe.name, *(ingredient.text for ingredient in openai_recipe.ingredients[:8])]
+                )
+                signature = re.sub(r"[^\w\u0590-\u05ff]+", " ", signature_source.casefold()).strip()
+                if signature in seen:
+                    continue
+                seen.add(signature)
+                recipes.append(self._convert_recipe(openai_recipe))
+                if len(recipes) >= 100:
+                    return recipes
+
+        if not recipes:
+            if failures == len(bounded_chunks):
+                raise RuntimeError("Every AI document chunk failed")
+            raise exceptions.NotARecipe("No complete recipes were found in the uploaded document")
+        return recipes
