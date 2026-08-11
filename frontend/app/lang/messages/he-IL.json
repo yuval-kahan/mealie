@@ -2122,6 +2122,7 @@
     "upload-books-success": "הועלו {count} ספרים",
     "upload-books-partial-success": "הועלו {uploaded} מתוך {total} ספרים",
     "upload-book-failed": "העלאת הספר נכשלה",
+    "upload-book-duplicate": "הקובץ הזה של {name} כבר קיים בספרייה ולא הועלה שוב.",
     "open-book": "פתח ספר",
     "rename-book": "שינוי שם הספר",
     "rename-book-success": "שם הספר עודכן",

@@ -2123,6 +2123,7 @@
     "upload-books-success": "{count} books uploaded",
     "upload-books-partial-success": "{uploaded} of {total} books uploaded",
     "upload-book-failed": "Book upload failed",
+    "upload-book-duplicate": "This exact {name} file is already in your library. It was not uploaded again.",
     "open-book": "Open Book",
     "rename-book": "Rename Book",
     "rename-book-success": "Book name updated",

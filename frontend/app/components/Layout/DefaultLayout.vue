@@ -1797,7 +1797,19 @@ async function uploadBook() {
     const fallback = i18n.t("cookbook.upload-book-failed");
     const detail = (firstError as { response?: { data?: { detail?: unknown }; status?: number } })?.response?.data?.detail;
     const status = (firstError as { response?: { status?: number } })?.response?.status;
-    alert.error(typeof detail === "string" ? detail : status ? `${fallback} (${status})` : fallback);
+    const duplicateDetail = detail && typeof detail === "object"
+      ? detail as { code?: unknown; existingBookName?: unknown }
+      : null;
+    if (status === 409 && duplicateDetail?.code === "uploaded_book_duplicate") {
+      alert.info(i18n.t("cookbook.upload-book-duplicate", {
+        name: typeof duplicateDetail.existingBookName === "string"
+          ? duplicateDetail.existingBookName
+          : i18n.t("cookbook.uploaded-book"),
+      }));
+    }
+    else {
+      alert.error(typeof detail === "string" ? detail : status ? `${fallback} (${status})` : fallback);
+    }
     return;
   }
 

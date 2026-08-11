@@ -268,6 +268,48 @@ def test_book_open_redirect_uses_the_correct_page_fragment(is_translated, extens
     assert response.headers["location"] == f"/api/households/uploaded-books/{book_id}/file{expected_fragment}"
 
 
+def test_book_open_redirect_resumes_the_last_saved_page():
+    controller = object.__new__(UploadedBooksController)
+    book_id = uuid4()
+    book = SimpleNamespace(id=book_id, is_translated_book=True, extension=".html")
+    controller._preferred_reading_book = lambda current_book, _page: current_book
+    controller._get_existing_reading_state = lambda _book: SimpleNamespace(current_page=80, current_page_index=80)
+
+    response = controller._book_open_redirect(book)
+
+    assert response.headers["location"] == f"/api/households/uploaded-books/{book_id}/file?resume=1#page-80"
+
+
+def test_uploaded_book_duplicate_detection_compares_file_contents(tmp_path):
+    controller = object.__new__(UploadedBooksController)
+    uploaded_path = tmp_path.joinpath("upload.pdf")
+    identical_path = tmp_path.joinpath("existing.pdf")
+    different_path = tmp_path.joinpath("different.pdf")
+    uploaded_path.write_bytes(b"same book bytes")
+    identical_path.write_bytes(b"same book bytes")
+    different_path.write_bytes(b"different content")
+    identical = SimpleNamespace(id=uuid4(), name="Existing book")
+    different = SimpleNamespace(id=uuid4(), name="Different book")
+    paths = {identical.id: identical_path, different.id: different_path}
+    controller._book_file_path = lambda candidate: paths[candidate.id]
+
+    duplicate = controller._find_duplicate_uploaded_book(uploaded_path, [different, identical])
+
+    assert duplicate is identical
+
+
+def test_uploaded_book_duplicate_detection_allows_different_files(tmp_path):
+    controller = object.__new__(UploadedBooksController)
+    uploaded_path = tmp_path.joinpath("upload.pdf")
+    existing_path = tmp_path.joinpath("existing.pdf")
+    uploaded_path.write_bytes(b"first edition")
+    existing_path.write_bytes(b"second edition")
+    existing = SimpleNamespace(id=uuid4(), name="Existing book")
+    controller._book_file_path = lambda _candidate: existing_path
+
+    assert controller._find_duplicate_uploaded_book(uploaded_path, [existing]) is None
+
+
 def test_book_recipe_bulk_delete_skips_recipe_ids_from_other_books():
     controller = object.__new__(UploadedBooksController)
     book = SimpleNamespace(extraction_recipes_created=1)

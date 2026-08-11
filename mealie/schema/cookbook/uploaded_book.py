@@ -169,7 +169,7 @@ class UploadedBookReaderHighlight(MealieModel):
 class UploadedBookReadingStateUpdate(MealieModel):
     current_page: int = Field(0, ge=0, le=100000)
     current_page_index: int = Field(0, ge=0, le=100000)
-    scroll_offset: float = Field(0, ge=0, le=1000000)
+    scroll_offset: float = Field(0, ge=0, le=100000000)
     current_chapter_id: str | None = Field(None, max_length=160)
     reading_percent: float = Field(0, ge=0, le=100)
     completed_chapters: list[str] = Field(default_factory=list, max_length=1000)

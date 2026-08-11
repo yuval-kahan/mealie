@@ -391,6 +391,7 @@ def book_reader_script(labels: dict[str, str]) -> str:
       const storageKey = `mealieBookReader:${bookId}`;
       const defaults = {
         currentPage: 0, currentPageIndex: 0, currentChapterId: null, scrollOffset: 0, readingPercent: 0,
+        clientSavedAt: 0,
         completedChapters: [], totalChapters: 0, notes: [], highlights: [],
         preferences: {
           fontSize: 18, fontFamily: "serif", lineHeight: 1.75, wordSpacing: 0, pageWidth: 980,
@@ -416,6 +417,9 @@ def book_reader_script(labels: dict[str, str]) -> str:
       let scrollTimer = 0;
       let aiHoverRanges = [];
       let destroyed = false;
+      let stateReady = false;
+      let lastExitPersistAt = 0;
+      let lastExitScrollOffset = -1;
 
       const clamp = (value, min, max, fallback) => {
         const parsed = Number(value);
@@ -424,14 +428,21 @@ def book_reader_script(labels: dict[str, str]) -> str:
       const uniqueStrings = (values, max = 1000) => [...new Set(
         Array.isArray(values) ? values.filter(value => typeof value === "string" && value.length <= 160) : []
       )].slice(0, max);
+      const stateTimestamp = (value) => {
+        const localTimestamp = Number(value?.clientSavedAt || 0);
+        if (Number.isFinite(localTimestamp) && localTimestamp > 0) return localTimestamp;
+        const serverTimestamp = Date.parse(value?.updatedAt ?? value?.updated_at ?? "");
+        return Number.isFinite(serverTimestamp) ? serverTimestamp : 0;
+      };
       const normalizeState = (value) => ({
         ...structuredClone(defaults),
         ...(value && typeof value === "object" ? value : {}),
         currentPage: clamp(value?.currentPage ?? value?.current_page, 0, 100000, 0),
         currentPageIndex: clamp(value?.currentPageIndex ?? value?.current_page_index, 0, 100000, 0),
         currentChapterId: value?.currentChapterId ?? value?.current_chapter_id ?? null,
-        scrollOffset: clamp(value?.scrollOffset ?? value?.scroll_offset, 0, 1000000, 0),
+        scrollOffset: clamp(value?.scrollOffset ?? value?.scroll_offset, 0, 100000000, 0),
         readingPercent: clamp(value?.readingPercent ?? value?.reading_percent, 0, 100, 0),
+        clientSavedAt: stateTimestamp(value),
         completedChapters: uniqueStrings(value?.completedChapters ?? value?.completed_chapters),
         totalChapters: clamp(value?.totalChapters ?? value?.total_chapters, 0, 1000, chapterRows.length),
         notes: (Array.isArray(value?.notes) ? value.notes : []).slice(0, 500),
@@ -445,7 +456,8 @@ def book_reader_script(labels: dict[str, str]) -> str:
         try { return normalizeState(JSON.parse(localStorage.getItem(storageKey) || "null")); }
         catch (_error) { return structuredClone(defaults); }
       };
-      const writeLocal = () => {
+      const writeLocal = (touch = true) => {
+        if (touch) state.clientSavedAt = Date.now();
         try { localStorage.setItem(storageKey, JSON.stringify(state)); }
         catch (_error) { /* private mode or quota limits are non-fatal */ }
       };
@@ -476,6 +488,9 @@ def book_reader_script(labels: dict[str, str]) -> str:
             body: JSON.stringify(payload()), signal: controller.signal,
           });
           if (!response.ok) throw new Error(String(response.status));
+          const savedState = await response.json();
+          state.clientSavedAt = stateTimestamp(savedState) || state.clientSavedAt;
+          writeLocal(false);
           warning.hidden = true;
         }
         catch (error) {
@@ -491,12 +506,16 @@ def book_reader_script(labels: dict[str, str]) -> str:
         saveTimer = window.setTimeout(saveNow, 550);
       };
       const loadState = async () => {
-        state = readLocal();
+        const localState = readLocal();
+        state = localState;
         const controller = new AbortController();
         try {
           requestController = controller;
           const response = await fetch(endpoint, { credentials: "same-origin", signal: controller.signal });
-          if (response.ok) state = normalizeState(await response.json());
+          if (response.ok) {
+            const serverState = normalizeState(await response.json());
+            state = serverState.clientSavedAt >= localState.clientSavedAt ? serverState : localState;
+          }
         }
         catch (_error) { /* local state remains available offline */ }
         finally {
@@ -748,6 +767,7 @@ def book_reader_script(labels: dict[str, str]) -> str:
       };
       const makeId = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
       const handleReadingPosition = (event) => {
+        if (!stateReady) return;
         const detail = event.detail || {};
         state.currentPage = clamp(detail.pageNumber, 0, 100000, 0);
         state.currentPageIndex = clamp(detail.pageIndex, 0, 100000, 0);
@@ -757,26 +777,54 @@ def book_reader_script(labels: dict[str, str]) -> str:
       };
       window.addEventListener("mealie:book-position", handleReadingPosition);
       const handleReaderScroll = () => {
+        if (!stateReady) return;
         window.clearTimeout(scrollTimer);
         scrollTimer = window.setTimeout(() => {
-          state.scrollOffset = clamp(window.scrollY, 0, 1000000, 0);
+          state.scrollOffset = clamp(window.scrollY, 0, 100000000, 0);
           scheduleSave();
         }, 180);
       };
       window.addEventListener("scroll", handleReaderScroll, { passive: true });
 
       const restoreReadingPosition = () => {
-        if (location.hash || (!state.currentPageIndex && !state.currentPage && !state.scrollOffset)) return;
+        const automaticResume = new URLSearchParams(location.search).get("resume") === "1";
+        if ((location.hash && !automaticResume) || (!state.currentPageIndex && !state.currentPage && !state.scrollOffset)) return;
         const target = document.querySelector(
           state.currentPageIndex
             ? `.reading-position[data-page-index="${CSS.escape(String(state.currentPageIndex))}"]`
             : `.reading-position[data-page-number="${CSS.escape(String(state.currentPage))}"]`
         );
-        requestAnimationFrame(() => requestAnimationFrame(() => {
+        const restore = () => {
           if (destroyed) return;
-          const top = state.scrollOffset || (target ? target.getBoundingClientRect().top + window.scrollY - 64 : 0);
+          const targetTop = target ? target.getBoundingClientRect().top + window.scrollY - 64 : 0;
+          const top = state.scrollOffset || targetTop;
           window.scrollTo({ top: Math.max(0, top), behavior: "instant" });
-        }));
+        };
+        requestAnimationFrame(() => requestAnimationFrame(restore));
+        if (document.readyState !== "complete") window.addEventListener("load", restore, { once: true });
+      };
+
+      const persistForPageExit = () => {
+        if (!stateReady) return;
+        const now = Date.now();
+        const currentScrollOffset = clamp(window.scrollY, 0, 100000000, 0);
+        if (now - lastExitPersistAt < 1000 && currentScrollOffset === lastExitScrollOffset) return;
+        lastExitPersistAt = now;
+        lastExitScrollOffset = currentScrollOffset;
+        window.clearTimeout(saveTimer);
+        window.clearTimeout(scrollTimer);
+        state.scrollOffset = currentScrollOffset;
+        writeLocal();
+        requestController?.abort();
+        requestController = null;
+        try {
+          void fetch(endpoint, {
+            method: "PUT", credentials: "same-origin", keepalive: true,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload()),
+          }).catch(() => { /* the local copy remains authoritative until the server catches up */ });
+        }
+        catch (_error) { /* page teardown can reject keepalive requests; local state is retained */ }
       };
 
       const applyPanelState = (panel, toggle, key, openLabel, closeLabel) => {
@@ -804,6 +852,7 @@ def book_reader_script(labels: dict[str, str]) -> str:
         syncChapterBoxes();
         renderAnnotations();
         applyHighlights();
+        stateReady = true;
         chapterBoxes.forEach(box => box.addEventListener("change", () => handleChapterChange(box)));
         bindPreference("readerFontSize", "fontSize");
         bindPreference("readerFontFamily", "fontFamily", String);
@@ -857,15 +906,17 @@ def book_reader_script(labels: dict[str, str]) -> str:
         });
         document.addEventListener("selectionchange", captureSelection, { passive: true });
         document.addEventListener("mousemove", handleAiHover, { passive: true });
+        document.addEventListener("visibilitychange", handleVisibilityChange);
         if (chapterRows.length && !state.totalChapters) scheduleSave();
       };
 
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === "hidden" && !destroyed) persistForPageExit();
+      };
+
       window.addEventListener("pagehide", (event) => {
-        window.clearTimeout(saveTimer);
+        persistForPageExit();
         window.clearTimeout(annotationTimer);
-        window.clearTimeout(scrollTimer);
-        writeLocal();
-        requestController?.abort();
         aiRequestController?.abort();
         if (hoverFrame) cancelAnimationFrame(hoverFrame);
         if (!event.persisted) {
@@ -874,6 +925,7 @@ def book_reader_script(labels: dict[str, str]) -> str:
           window.removeEventListener("scroll", handleReaderScroll);
           document.removeEventListener("selectionchange", captureSelection);
           document.removeEventListener("mousemove", handleAiHover);
+          document.removeEventListener("visibilitychange", handleVisibilityChange);
         }
       });
       void initialize();

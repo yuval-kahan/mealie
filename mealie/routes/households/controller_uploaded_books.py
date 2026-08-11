@@ -157,6 +157,47 @@ class UploadedBooksController(BasePublicController):
 
         return path
 
+    @staticmethod
+    def _book_files_are_identical(left: Path, right: Path) -> bool:
+        try:
+            if left.stat().st_size != right.stat().st_size:
+                return False
+            with left.open("rb") as left_file, right.open("rb") as right_file:
+                while True:
+                    left_chunk = left_file.read(1024 * 1024)
+                    right_chunk = right_file.read(1024 * 1024)
+                    if left_chunk != right_chunk:
+                        return False
+                    if not left_chunk:
+                        return True
+        except OSError:
+            return False
+
+    def _duplicate_uploaded_book_candidates(self, extension: str, size: int) -> list[UploadedBook]:
+        return list(
+            self.session.execute(
+                select(UploadedBook).where(
+                    UploadedBook.group_id == self.group_id,
+                    UploadedBook.household_id == self.household_id,
+                    UploadedBook.extension == extension,
+                    sa.or_(UploadedBook.size == size, UploadedBook.size == 0),
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    def _find_duplicate_uploaded_book(
+        self,
+        path: Path,
+        candidates: list[UploadedBook],
+    ) -> UploadedBook | None:
+        for candidate in candidates:
+            candidate_path = self._book_file_path(candidate)
+            if candidate_path.is_file() and self._book_files_are_identical(path, candidate_path):
+                return candidate
+        return None
+
     def _assert_book_not_processing(self, book: UploadedBook) -> None:
         if book.extraction_status in {"processing", "retrying"}:
             raise HTTPException(status.HTTP_409_CONFLICT, detail="Book extraction is already running")
@@ -331,6 +372,14 @@ class UploadedBooksController(BasePublicController):
             self.session.refresh(state)
         return state
 
+    def _get_existing_reading_state(self, book: UploadedBook) -> UploadedBookReadingState | None:
+        return self.session.execute(
+            select(UploadedBookReadingState).where(
+                UploadedBookReadingState.book_id == book.id,
+                UploadedBookReadingState.user_id == self.user.id,
+            )
+        ).scalar_one_or_none()
+
     def _preferred_reading_book(self, book: UploadedBook, page: int | None = None) -> UploadedBook:
         if book.is_translated_book or not book.translated_book_id:
             return book
@@ -359,9 +408,16 @@ class UploadedBooksController(BasePublicController):
         return translated_book
 
     def _book_open_redirect(self, book: UploadedBook, page: int | None = None) -> RedirectResponse:
+        automatic_resume = page is None
         target_book = self._preferred_reading_book(book, page)
+        if page is None:
+            reading_state = self._get_existing_reading_state(target_book)
+            if reading_state is not None:
+                page = reading_state.current_page or reading_state.current_page_index or None
         target_url = f"/api/households/uploaded-books/{target_book.id}/file"
         if page is not None:
+            if automatic_resume:
+                target_url += "?resume=1"
             if target_book.is_translated_book and target_book.extension in {".htm", ".html"}:
                 target_url += f"#page-{page}"
             elif target_book.extension == ".pdf":
@@ -1105,14 +1161,31 @@ class UploadedBooksController(BasePublicController):
         try:
             size = await asyncio.to_thread(copy_upload)
         except Exception:
-            target_path.unlink(missing_ok=True)
+            shutil.rmtree(target_dir, ignore_errors=True)
             raise
         finally:
             await file.close()
 
         if size == 0:
-            target_path.unlink(missing_ok=True)
+            shutil.rmtree(target_dir, ignore_errors=True)
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Uploaded file is empty")
+
+        duplicate_candidates = self._duplicate_uploaded_book_candidates(extension, size)
+        duplicate_book = await asyncio.to_thread(
+            self._find_duplicate_uploaded_book,
+            target_path,
+            duplicate_candidates,
+        )
+        if duplicate_book is not None:
+            shutil.rmtree(target_dir, ignore_errors=True)
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "uploaded_book_duplicate",
+                    "existingBookId": str(duplicate_book.id),
+                    "existingBookName": duplicate_book.name,
+                },
+            )
 
         book_name = (name or get_book_stem(original_file_name, extension) or "Uploaded book").strip()[:255]
         if not book_name:
@@ -1145,7 +1218,7 @@ class UploadedBooksController(BasePublicController):
             self.session.refresh(book)
         except Exception:
             self.session.rollback()
-            target_path.unlink(missing_ok=True)
+            shutil.rmtree(target_dir, ignore_errors=True)
             raise
 
         if classify_with_ai:
