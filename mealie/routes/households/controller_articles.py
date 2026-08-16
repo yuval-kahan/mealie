@@ -27,6 +27,7 @@ from mealie.schema.household.article import (
 from mealie.schema.household.group_shopping_list import ShoppingListAddRecipeParamsBulk, ShoppingListCreate
 from mealie.schema.openai.article import OpenAIArticle, OpenAIArticleSearchResponse
 from mealie.schema.recipe import Recipe
+from mealie.schema.recipe.recipe import RecipeCategory
 from mealie.schema.response import PaginationQuery
 from mealie.schema.response.responses import ErrorResponse
 from mealie.services.household_services.shopping_lists import ShoppingListService
@@ -325,6 +326,21 @@ class ArticlesController(BaseUserController):
                 detail=ErrorResponse.respond("OpenAI services are not enabled"),
             )
 
+        recipe_group_category = None
+        if data.recipe_group_category_id:
+            category = self.repos.categories.get_one(data.recipe_group_category_id)
+            if (
+                category is None
+                or category.group_id != self.group_id
+                or not category.is_recipe_group
+                or (category.recipe_group_section or "recipes") != data.recipe_section
+            ):
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    detail=ErrorResponse.respond("The selected recipe category is not available"),
+                )
+            recipe_group_category = RecipeCategory.model_validate(category)
+
         response, url = await self._parse_article_ai(data)
         content_kind = (response.content_kind or "other").strip() or "other"
         has_recipe = response.contains_recipe or content_kind in {"recipe", "article_with_recipe"}
@@ -353,12 +369,20 @@ class ArticlesController(BaseUserController):
                         data.include_ai_tips,
                         data.include_mise_en_place,
                         auto_image=not data.image_url,
+                        recipe_section=data.recipe_section,
                     )
                     recipe = recipe_service.apply_source_metadata(
                         recipe,
                         source_title=data.source_title,
                         source_url=data.source_url,
                     )
+                    if recipe_group_category:
+                        recipe.recipe_category = [
+                            category
+                            for category in (recipe.recipe_category or [])
+                            if not category.is_recipe_group
+                        ] + [recipe_group_category]
+                        recipe = recipe_service.update_one(recipe.slug, recipe)
                     if data.image_url:
                         await recipe_service.attach_best_effort_image(
                             recipe,

@@ -1,6 +1,7 @@
 const STORAGE_KEYS = {
   mealieUrl: "mealieUrl",
   extractMode: "extractMode",
+  recipeGroupCategoryId: "recipeGroupCategoryId",
   interfaceLanguage: "interfaceLanguage",
   translateLanguage: "translateLanguage",
   websiteType: "websiteType",
@@ -27,6 +28,7 @@ const LEGACY_DEFAULT_MEALIE_URL = "http://localhost:3000";
 const DEFAULT_SETTINGS = {
   mealieUrl: "http://localhost:9925",
   extractMode: "auto",
+  recipeGroupCategoryId: "",
   interfaceLanguage: "auto",
   translateLanguage: "he-IL",
   websiteType: "auto",
@@ -62,6 +64,8 @@ const extensionI18n = globalThis.MealieExtensionI18n;
 const elements = {
   mealieUrl: document.getElementById("mealieUrl"),
   extractMode: document.getElementById("extractMode"),
+  recipeGroupField: document.getElementById("recipeGroupField"),
+  recipeGroupCategory: document.getElementById("recipeGroupCategory"),
   interfaceLanguage: document.getElementById("interfaceLanguage"),
   translateLanguage: document.getElementById("translateLanguage"),
   websiteType: document.getElementById("websiteType"),
@@ -103,6 +107,8 @@ let statusCheckTimer = null;
 let statusCheckController = null;
 let statusCheckRunId = 0;
 let translator = null;
+let recipeGroupCategories = [];
+let selectedRecipeGroupCategoryId = "";
 
 init();
 
@@ -117,6 +123,7 @@ async function init() {
   [
     elements.mealieUrl,
     elements.extractMode,
+    elements.recipeGroupCategory,
     elements.interfaceLanguage,
     elements.translateLanguage,
     elements.websiteType,
@@ -151,6 +158,9 @@ async function init() {
   elements.saveVideoSettings.addEventListener("click", handleSaveVideoSettings);
   elements.connectMealie.addEventListener("click", handleConnectMealie);
   elements.extractMode.addEventListener("change", updateModeText);
+  elements.recipeGroupCategory.addEventListener("change", () => {
+    selectedRecipeGroupCategoryId = elements.recipeGroupCategory.value;
+  });
   elements.interfaceLanguage.addEventListener("change", handleInterfaceLanguageChange);
   elements.mealieUrl.addEventListener("input", scheduleMealieStatusCheck);
   elements.mealieUrl.addEventListener("change", checkMealieStatus);
@@ -225,6 +235,7 @@ function languageDisplayName(code, displayNames) {
 function applySettings(settings) {
   elements.mealieUrl.value = settings.mealieUrl || DEFAULT_SETTINGS.mealieUrl;
   elements.extractMode.value = settings.extractMode || DEFAULT_SETTINGS.extractMode;
+  selectedRecipeGroupCategoryId = settings.recipeGroupCategoryId || "";
   elements.interfaceLanguage.value = settings.interfaceLanguage || DEFAULT_SETTINGS.interfaceLanguage;
   elements.translateLanguage.value = settings.translateLanguage || DEFAULT_SETTINGS.translateLanguage;
   if (!elements.translateLanguage.value) {
@@ -283,6 +294,7 @@ function currentSettings() {
   return {
     mealieUrl: normalizeBaseUrl(elements.mealieUrl.value || DEFAULT_SETTINGS.mealieUrl),
     extractMode: elements.extractMode.value || DEFAULT_SETTINGS.extractMode,
+    recipeGroupCategoryId: elements.recipeGroupCategory.value || selectedRecipeGroupCategoryId || "",
     interfaceLanguage: elements.interfaceLanguage.value || DEFAULT_SETTINGS.interfaceLanguage,
     translateLanguage: elements.translateLanguage.value,
     websiteType: elements.websiteType.value || DEFAULT_SETTINGS.websiteType,
@@ -307,6 +319,7 @@ function currentSettings() {
 
 function updateModeText() {
   const mode = elements.extractMode.value;
+  renderRecipeGroupCategories();
   if (mode === "article") {
     elements.sendToMealie.textContent = translator.t("actions.send-article");
     return;
@@ -320,6 +333,56 @@ function updateModeText() {
     return;
   }
   elements.sendToMealie.textContent = translator.t("actions.send-auto");
+}
+
+function categoryValue(category, snakeName, camelName, fallback = null) {
+  return category?.[snakeName] ?? category?.[camelName] ?? fallback;
+}
+
+function renderRecipeGroupCategories() {
+  const mode = elements.extractMode.value;
+  const section = mode === "sauce" ? "sauce" : "recipes";
+  elements.recipeGroupField.hidden = mode === "article";
+
+  const byId = new Map(recipeGroupCategories.map(category => [String(category.id), category]));
+  const options = recipeGroupCategories
+    .filter(category => categoryValue(category, "recipe_group_section", "recipeGroupSection", "recipes") === section)
+    .map((category) => {
+      const parentId = categoryValue(category, "parent_category_id", "parentCategoryId");
+      const parent = parentId ? byId.get(String(parentId)) : null;
+      const option = document.createElement("option");
+      option.value = String(category.id);
+      option.textContent = parent ? `${parent.name} / ${category.name}` : category.name;
+      return option;
+    });
+  const empty = document.createElement("option");
+  empty.value = "";
+  empty.textContent = translator.t("settings.no-recipe-category");
+  elements.recipeGroupCategory.replaceChildren(empty, ...options);
+
+  const selectedExists = options.some(option => option.value === selectedRecipeGroupCategoryId);
+  elements.recipeGroupCategory.value = selectedExists ? selectedRecipeGroupCategoryId : "";
+  if (!selectedExists && selectedRecipeGroupCategoryId) {
+    selectedRecipeGroupCategoryId = "";
+    void saveSettingsFromForm();
+  }
+}
+
+async function loadRecipeGroupCategories(settings, authToken, signal) {
+  try {
+    const response = await fetch(`${settings.mealieUrl}/api/organizers/categories/recipe-groups`, {
+      credentials: "include",
+      headers: authHeaders(authToken),
+      signal,
+    });
+    recipeGroupCategories = response.ok ? await safeJson(response) || [] : [];
+  }
+  catch (error) {
+    if (error?.name !== "AbortError") {
+      recipeGroupCategories = [];
+    }
+  }
+  renderRecipeGroupCategories();
 }
 
 function normalizeBaseUrl(value) {
@@ -477,6 +540,11 @@ async function checkMealieStatus() {
 
     if (!statusAiEnabled(payload)) {
       setStatus(aiProviderStatusMessage(payload), "error");
+      return false;
+    }
+
+    await loadRecipeGroupCategories(settings, authToken, controller.signal);
+    if (controller.signal.aborted || runId !== statusCheckRunId) {
       return false;
     }
 
@@ -935,6 +1003,7 @@ async function createRecipeFromBrowserPage(settings, extraction) {
       create_shopping_list: settings.createShoppingList,
       organize_shopping_list_with_ai: settings.organizeShoppingList,
       recipe_section: settings.extractMode === "sauce" ? "sauce" : "recipes",
+      recipe_group_category_id: settings.recipeGroupCategoryId || null,
     }),
   });
 
@@ -973,6 +1042,8 @@ async function createArticleFromBrowserPage(settings, extraction) {
       include_ai_tips: settings.includeAiTips,
       include_mise_en_place: settings.includeMiseEnPlace !== false,
       include_item_images: settings.includeItemImages !== false,
+      recipe_section: settings.extractMode === "sauce" ? "sauce" : "recipes",
+      recipe_group_category_id: settings.recipeGroupCategoryId || null,
     }),
   });
 

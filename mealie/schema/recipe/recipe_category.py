@@ -1,3 +1,4 @@
+from humps.main import camelize
 from pydantic import UUID4, ConfigDict
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.interfaces import LoaderOption
@@ -18,24 +19,25 @@ class CategoryIn(OrganizerIn):
 
 class CategorySave(CategoryIn):
     group_id: UUID4
+    slug: str | None = None
 
 
 class CategoryBase(CategoryIn):
     id: UUID4
     group_id: UUID4 | None = None
     slug: str
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(alias_generator=camelize, populate_by_name=True, from_attributes=True)
 
 
 class CategoryOut(CategoryBase):
     slug: str
     group_id: UUID4
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(alias_generator=camelize, populate_by_name=True, from_attributes=True)
 
 
 class RecipeCategoryResponse(CategoryBase):
     recipes: "list[RecipeSummary]" = []
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(alias_generator=camelize, populate_by_name=True, from_attributes=True)
 
 
 class TagIn(OrganizerIn):

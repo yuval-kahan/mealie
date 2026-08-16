@@ -17,7 +17,12 @@ from mealie.services._base_service import BaseService
 from mealie.services.openai import OpenAIService
 
 from .book_cover_service import UploadedBookCoverService
-from .book_library_categories import BOOK_LIBRARY_CATEGORIES, resolve_library_category_name
+from .book_library_categories import (
+    BOOK_LIBRARY_CATEGORIES,
+    BOOK_LIBRARY_SUBCATEGORIES,
+    resolve_library_category_name,
+    resolve_library_subcategory_name,
+)
 
 
 class UploadedBookClassifier(BaseService):
@@ -164,6 +169,8 @@ class UploadedBookClassifier(BaseService):
                 "matches, so verify title/author alignment and ignore unrelated records. "
                 "Set library_category to exactly one of these Hebrew category names: "
                 f"{json.dumps(BOOK_LIBRARY_CATEGORIES, ensure_ascii=False)}.\n"
+                "Set library_subcategory to exactly one child of the selected category from this map: "
+                f"{json.dumps(BOOK_LIBRARY_SUBCATEGORIES, ensure_ascii=False)}.\n"
                 f"{json.dumps(catalog_metadata, ensure_ascii=False)}"
             )
             response = await openai_service.get_response(
@@ -184,14 +191,24 @@ class UploadedBookClassifier(BaseService):
             book.classification_error = None
             if book.category_id is None:
                 category_name = resolve_library_category_name(response.model_dump())
-                category = self.repos.session.execute(
+                parent = self.repos.session.execute(
                     sa.select(UploadedBookCategory).where(
                         UploadedBookCategory.group_id == book.group_id,
                         UploadedBookCategory.parent_category_id.is_(None),
                         UploadedBookCategory.name == category_name,
                     )
                 ).scalar_one_or_none()
-                if category is not None:
+                category = parent
+                if parent is not None:
+                    subcategory_name = resolve_library_subcategory_name(response.model_dump(), category_name)
+                    if subcategory_name:
+                        category = self.repos.session.execute(
+                            sa.select(UploadedBookCategory).where(
+                                UploadedBookCategory.group_id == book.group_id,
+                                UploadedBookCategory.parent_category_id == parent.id,
+                                UploadedBookCategory.name == subcategory_name,
+                            )
+                        ).scalar_one_or_none() or parent
                     book.category_id = category.id
             try:
                 await UploadedBookCoverService(self.repos).ensure_cover(book, uploaded_books_root)

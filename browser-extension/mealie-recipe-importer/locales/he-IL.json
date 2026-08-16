@@ -32,6 +32,8 @@
   "settings": {
     "mealie-url": "כתובת Mealie",
     "extract-mode": "מה לחלץ",
+    "recipe-category": "קטגוריה / תת־קטגוריה למתכון",
+    "no-recipe-category": "ללא קטגוריה אישית",
     "interface-language": "שפת ממשק",
     "automatic-language": "אוטומטי (שפת אתר Mealie, ולאחר מכן שפת הדפדפן)",
     "translation-language": "שפת תרגום",

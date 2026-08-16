@@ -1346,3 +1346,10 @@
 - בדיקת חפיפה נוספת מצאה מתכון שחצה גבול של 10 עמודים והשלימה עוד הכנות שהמודל דילג עליהן בריצה הראשונה. הכפילויות שנוצרו רק מהרצות האימות החוזרות נוקו דרך שירות המחיקה של Mealie, והספירה הסופית אומתה מול 73 הרשומות באינדקס הספר.
 
 ה-build עובר, אך קיימות אזהרות קיימות של הפרויקט לגבי chunk size / circular re-export / Vuetify CSS minify. האזהרות אינן קשורות ישירות לשינויים של ה-fork ולא עצרו את ה-build.
+
+## Latest stability fixes
+
+- Gemini requests now rotate through all configured API keys when a key is denied, rate-limited, temporarily unavailable, or the provider returns a retryable server error. The active key index is logged without exposing the key value, and non-Gemini providers keep their existing single-key behavior.
+- Recipe-library category creation now prevents duplicate names in the same scope and generates collision-safe slugs for different categories that would otherwise produce the same transliterated slug. This fixes category creation failures caused by SQLite's unique `(slug, group_id)` constraint.
+- Uploaded-book category selectors now attach their menus to the document body with an explicit stacking order and bounded height. Book-category assignment, replacement, and parent-category selectors remain visible inside dialogs and are scrollable without requiring browser zoom changes.
+- Static resource review was performed for these changes only. No live RAM/CPU sampling or load test was run. Python syntax checks, Docker production build, container health checks, and HTTP smoke checks passed.

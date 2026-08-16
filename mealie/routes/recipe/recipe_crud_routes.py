@@ -60,6 +60,7 @@ from mealie.schema.recipe import Recipe, ScrapeRecipe, ScrapeRecipeData
 from mealie.schema.recipe.recipe import (
     CreateRecipe,
     CreateRecipeByUrlBulk,
+    RecipeCategory,
     RecipeLastMade,
     RecipeSummary,
 )
@@ -209,6 +210,7 @@ class CreateRecipeFromBrowserPage(CreateRecipeFromText):
     image_url: str | None = Field(None, max_length=4000)
     create_shopping_list: bool = True
     organize_shopping_list_with_ai: bool = True
+    recipe_group_category_id: UUID4 | None = None
 
 
 class CreateRecipeAIShoppingList(MealieModel):
@@ -958,6 +960,21 @@ class RecipeController(BaseRecipeController):
                 detail=ErrorResponse.respond("Recipe text cannot be empty"),
             )
 
+        recipe_group_category = None
+        if data.recipe_group_category_id:
+            category = self.repos.categories.get_one(data.recipe_group_category_id)
+            if (
+                category is None
+                or category.group_id != self.group_id
+                or not category.is_recipe_group
+                or (category.recipe_group_section or "recipes") != data.recipe_section
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail=ErrorResponse.respond("The selected recipe category is not available"),
+                )
+            recipe_group_category = RecipeCategory.model_validate(category)
+
         try:
             recipe = await self.service.create_from_text(
                 recipe_text,
@@ -972,6 +989,13 @@ class RecipeController(BaseRecipeController):
                 source_title=data.source_title,
                 source_url=data.source_url,
             )
+            if recipe_group_category:
+                recipe.recipe_category = [
+                    category
+                    for category in (recipe.recipe_category or [])
+                    if not category.is_recipe_group
+                ] + [recipe_group_category]
+                recipe = self.service.update_one(recipe.slug, recipe)
             if data.include_item_images:
                 await self._ensure_recipe_item_images(recipe)
         except exceptions.NotARecipe as e:

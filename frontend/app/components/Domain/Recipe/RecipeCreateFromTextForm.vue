@@ -288,6 +288,7 @@ import { useNewRecipeOptions } from "~/composables/use-new-recipe-options";
 import { useRecipeCreatePreferences } from "~/composables/use-users/preferences";
 import { alert } from "~/composables/use-toast";
 import { validators } from "~/composables/use-validators";
+import type { RecipeCategory } from "~/lib/api/types/recipe";
 import type { VForm } from "~/types/auto-forms";
 
 type CreateMode = "text" | "url" | "image" | "file";
@@ -346,7 +347,7 @@ const pendingExtensionRequestCancellations = new Set<() => void>();
 const { attachVideoToRecipe } = useRecipeVideoAsset();
 
 onMounted(() => {
-  void categories.actions.refresh();
+  void refreshRecipeOrganizers();
 });
 
 onBeforeUnmount(() => {
@@ -387,7 +388,8 @@ const recipeGroupAssignmentMode = ref<"existing" | "new">("existing");
 const letAiNameRecipeGroup = ref(false);
 const newRecipeGroupName = ref("");
 const newRecipeGroupParentId = ref<string | null>(null);
-const recipeGroupCategories = computed(() => categories.store.value
+const allRecipeGroupCategories = ref<RecipeCategory[]>([]);
+const recipeGroupCategories = computed(() => allRecipeGroupCategories.value
   .filter(category => category.isRecipeGroup
     && (category.recipeGroupSection || "recipes") === recipeSection.value
     && category.id));
@@ -820,10 +822,15 @@ async function createRecipeFromUrlViaExtension(url: string): Promise<ExtensionRe
 }
 
 async function refreshRecipeOrganizers() {
-  await Promise.allSettled([
+  const [, , recipeGroupsResult] = await Promise.allSettled([
     categories.actions.refresh(),
     tags.actions.refresh(),
+    api.categories.getRecipeGroups(),
   ]);
+
+  if (recipeGroupsResult.status === "fulfilled" && !recipeGroupsResult.value.error) {
+    allRecipeGroupCategories.value = recipeGroupsResult.value.data || [];
+  }
 
   if (import.meta.client) {
     window.dispatchEvent(new CustomEvent("mealie:organizers-updated"));
@@ -836,7 +843,7 @@ async function resolveRecipeGroup(recipeSlugs: string[]) {
   }
 
   if (recipeGroupAssignmentMode.value === "existing") {
-    return categories.store.value.find(category => category.id === selectedRecipeGroupId.value) || null;
+    return allRecipeGroupCategories.value.find(category => category.id === selectedRecipeGroupId.value) || null;
   }
 
   let targetName = newRecipeGroupName.value.trim();
@@ -850,8 +857,8 @@ async function resolveRecipeGroup(recipeSlugs: string[]) {
   }
 
   const normalized = targetName.toLocaleLowerCase();
-  const existing = categories.store.value.find(category => category.isRecipeGroup
-    && category.recipeGroupSection === recipeSection.value
+  const existing = allRecipeGroupCategories.value.find(category => category.isRecipeGroup
+    && (category.recipeGroupSection || "recipes") === recipeSection.value
     && (category.parentCategoryId || null) === newRecipeGroupParentId.value
     && category.name.trim().toLocaleLowerCase() === normalized);
   if (existing) {
@@ -868,6 +875,7 @@ async function resolveRecipeGroup(recipeSlugs: string[]) {
   if (!created) {
     throw new Error(i18n.t("recipe.ai-recipe-category-assign-failed"));
   }
+  await refreshRecipeOrganizers();
   return created;
 }
 

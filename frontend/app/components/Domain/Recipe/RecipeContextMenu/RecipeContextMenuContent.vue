@@ -365,7 +365,7 @@ import { useHouseholdSelf } from "~/composables/use-households";
 import { alert } from "~/composables/use-toast";
 import { usePlanTypeOptions } from "~/composables/use-group-mealplan";
 import { useRecipeCopy } from "~/composables/recipes/use-recipe-copy";
-import type { Recipe } from "~/lib/api/types/recipe";
+import type { Recipe, RecipeCategory } from "~/lib/api/types/recipe";
 import type { GroupRecipeActionOut, ShoppingListSummary } from "~/lib/api/types/household";
 import type { RecipeDeletePreview } from "~/lib/api/user/recipes/recipe";
 import type { PlanEntryType } from "~/lib/api/types/meal-plan";
@@ -495,6 +495,7 @@ const recipeRenameDialog = ref(false);
 const recipeSectionDialog = ref(false);
 const selectedRecipeSections = ref<Array<"recipes" | "book" | "sauce">>([]);
 const selectedRecipeGroupIds = ref<string[]>([]);
+const recipeLocationCategories = ref<RecipeCategory[]>([]);
 const keepExistingRecipeGroups = ref(true);
 const recipeSectionLoading = ref(false);
 const aiEditDialog = ref(false);
@@ -535,20 +536,61 @@ const { $globals } = useNuxtApp();
 const { household } = useHouseholdSelf();
 const { isOwnGroup } = useLoggedInState();
 const categoryStore = useCategoryStore();
+
+type RecipeLibrarySection = "recipes" | "book" | "sauce";
+
+function recipeGroupSection(category: { recipeGroupSection?: string | null }): RecipeLibrarySection {
+  if (category.recipeGroupSection === "book" || category.recipeGroupSection === "sauce") {
+    return category.recipeGroupSection;
+  }
+  return "recipes";
+}
+
+function recipeSectionLabel(section: RecipeLibrarySection) {
+  if (section === "book") return i18n.t("recipe.section-book");
+  if (section === "sauce") return i18n.t("recipe.section-sauce");
+  return i18n.t("recipe.section-recipes");
+}
+
+const availableRecipeLocationCategories = computed(() => {
+  return recipeLocationCategories.value.length
+    ? recipeLocationCategories.value
+    : categoryStore.store.value;
+});
+
+function recipeGroupPath(category: RecipeCategory, groupsById: Map<string, RecipeCategory>) {
+  const names = [category.name];
+  const visited = new Set<string>();
+  let parentId = category.parentCategoryId;
+  while (parentId && !visited.has(parentId)) {
+    visited.add(parentId);
+    const parent = groupsById.get(parentId);
+    if (!parent) break;
+    names.unshift(parent.name);
+    parentId = parent.parentCategoryId;
+  }
+  return names.join(" / ");
+}
+
 const recipeGroupLocationOptions = computed(() => {
-  const groups = categoryStore.store.value.filter(category => category.isRecipeGroup && category.id);
+  const groups = availableRecipeLocationCategories.value.filter(category => category.isRecipeGroup && category.id);
+  const groupsById = new Map(groups.map(category => [category.id!, category]));
   return groups
     .map((category) => {
-      const parent = groups.find(candidate => candidate.id === category.parentCategoryId);
-      const section = category.recipeGroupSection === "sauce"
-        ? i18n.t("recipe.section-sauce")
-        : i18n.t("recipe.section-recipes");
+      const section = recipeSectionLabel(recipeGroupSection(category));
       return {
-        title: `${section}: ${parent ? `${parent.name} / ` : ""}${category.name}`,
+        title: `${section}: ${recipeGroupPath(category, groupsById)}`,
         value: category.id!,
       };
     })
     .sort((left, right) => left.title.localeCompare(right.title, i18n.locale.value));
+});
+
+watch(selectedRecipeGroupIds, (ids) => {
+  const requiredSections = availableRecipeLocationCategories.value
+    .filter(category => ids.includes(category.id || ""))
+    .map(recipeGroupSection);
+  selectedRecipeSections.value = [...new Set([...selectedRecipeSections.value, ...requiredSections])];
 });
 
 const route = useRoute();
@@ -911,7 +953,7 @@ async function renameRecipe() {
 }
 
 async function moveRecipeToSection() {
-  if (recipeSectionLoading.value || !selectedRecipeSections.value.length) return;
+  if (recipeSectionLoading.value) return;
   recipeSectionLoading.value = true;
   try {
     if (!recipeRef.value) await refreshRecipe();
@@ -920,16 +962,22 @@ async function moveRecipeToSection() {
       return;
     }
 
+    const selectedGroups = availableRecipeLocationCategories.value.filter(category => selectedRecipeGroupIds.value.includes(category.id || ""));
+    const effectiveSections = [...new Set([
+      ...selectedRecipeSections.value,
+      ...selectedGroups.map(recipeGroupSection),
+    ])];
+    if (!effectiveSections.length) return;
+
     const currentPrimary = recipeRef.value.recipeSection || props.recipeSection || "recipes";
-    const primarySection = selectedRecipeSections.value.includes(currentPrimary as "recipes" | "book" | "sauce")
+    const primarySection = effectiveSections.includes(currentPrimary as RecipeLibrarySection)
       ? currentPrimary
-      : selectedRecipeSections.value[0];
+      : effectiveSections[0];
     const currentCategories = recipeRef.value.recipeCategory || [];
     const regularCategories = currentCategories.filter(category => !category.isRecipeGroup);
     const existingGroups = keepExistingRecipeGroups.value
       ? currentCategories.filter(category => category.isRecipeGroup)
       : [];
-    const selectedGroups = categoryStore.store.value.filter(category => selectedRecipeGroupIds.value.includes(category.id || ""));
     const categoryById = new Map(
       [...regularCategories, ...existingGroups, ...selectedGroups]
         .filter(category => category.id)
@@ -938,9 +986,9 @@ async function moveRecipeToSection() {
     const { data, error } = await api.recipes.updateOne(props.slug, {
       ...recipeRef.value,
       recipeSection: primarySection,
-      showInRecipes: selectedRecipeSections.value.includes("recipes"),
-      showInBook: selectedRecipeSections.value.includes("book"),
-      showInSauce: selectedRecipeSections.value.includes("sauce"),
+      showInRecipes: effectiveSections.includes("recipes"),
+      showInBook: effectiveSections.includes("book"),
+      showInSauce: effectiveSections.includes("sauce"),
       recipeCategory: [...categoryById.values()],
     });
     if (error || !data) {
@@ -1276,6 +1324,14 @@ const eventHandlers: { [key: string]: () => void | Promise<any> } = {
     if (!recipeRef.value) {
       await refreshRecipe();
     }
+    const { data: recipeGroups, error: categoryError } = await api.categories.getRecipeGroups();
+    if (!categoryError && recipeGroups) {
+      recipeLocationCategories.value = recipeGroups;
+    }
+    else {
+      await categoryStore.actions.refresh();
+      recipeLocationCategories.value = [...categoryStore.store.value];
+    }
     const recipe = recipeRef.value;
     const hasExplicitMembership = recipe?.showInRecipes !== undefined
       || recipe?.showInBook !== undefined
@@ -1294,7 +1350,6 @@ const eventHandlers: { [key: string]: () => void | Promise<any> } = {
       .filter(category => category.isRecipeGroup && category.id)
       .map(category => category.id!);
     keepExistingRecipeGroups.value = true;
-    await categoryStore.actions.refresh();
     recipeSectionDialog.value = true;
   },
   markDone: markRecipeDone,

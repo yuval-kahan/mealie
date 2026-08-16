@@ -40,6 +40,7 @@
 <script setup lang="ts">
 import { useUserApi } from "~/composables/api";
 import { useCategoryStore, useTagStore, useToolStore } from "~/composables/store";
+import type { RecipeCategory } from "~/lib/api/types/recipe";
 import { type RecipeOrganizer, Organizer } from "~/lib/api/types/non-generated";
 
 const { $globals } = useNuxtApp();
@@ -82,13 +83,18 @@ const i18n = useI18n();
 const name = ref("");
 const onHand = ref(false);
 const selectedParentCategoryId = ref<string | null>(null);
+const allRecipeGroupCategories = ref<RecipeCategory[]>([]);
 
 watch(
   dialog,
-  (val: boolean) => {
+  async (val: boolean) => {
     if (val) {
       name.value = props.editCategory?.name || "";
       selectedParentCategoryId.value = props.editCategory?.parentCategoryId || props.parentCategoryId || null;
+      if (props.itemType === Organizer.Category && props.recipeGroup) {
+        const { data, error } = await userApi.categories.getRecipeGroups();
+        allRecipeGroupCategories.value = !error && data ? data : [...categoryStore.store.value];
+      }
     }
     else {
       name.value = "";
@@ -100,9 +106,12 @@ watch(
 const userApi = useUserApi();
 const categoryStore = useCategoryStore();
 const effectiveRecipeGroupSection = computed(() => props.editCategory?.recipeGroupSection || props.recipeGroupSection || "recipes");
-const parentCategoryOptions = computed(() => categoryStore.store.value
+const availableRecipeGroupCategories = computed(() => allRecipeGroupCategories.value.length
+  ? allRecipeGroupCategories.value
+  : categoryStore.store.value);
+const parentCategoryOptions = computed(() => availableRecipeGroupCategories.value
   .filter(item => item.isRecipeGroup
-    && item.recipeGroupSection === effectiveRecipeGroupSection.value
+    && (item.recipeGroupSection || "recipes") === effectiveRecipeGroupSection.value
     && item.id
     && item.id !== props.editCategory?.id
     && !item.parentCategoryId)
@@ -162,13 +171,15 @@ async function select() {
         recipeGroupSection: effectiveRecipeGroupSection.value,
         parentCategoryId: selectedParentCategoryId.value,
       });
+      const { data } = await userApi.categories.getRecipeGroups();
+      if (data) allRecipeGroupCategories.value = data;
       emit(CREATED_ITEM_EVENT, updatedItem || props.editCategory);
       dialog.value = false;
       return;
     }
     const existing = props.itemType === Organizer.Category && props.recipeGroup
-      ? categoryStore.store.value.find(item => item.name.trim().toLocaleLowerCase() === normalizedName.toLocaleLowerCase()
-        && item.recipeGroupSection === effectiveRecipeGroupSection.value
+      ? availableRecipeGroupCategories.value.find(item => item.name.trim().toLocaleLowerCase() === normalizedName.toLocaleLowerCase()
+        && (item.recipeGroupSection || "recipes") === effectiveRecipeGroupSection.value
         && (item.parentCategoryId || null) === selectedParentCategoryId.value)
       : null;
     if (existing) {
@@ -193,6 +204,10 @@ async function select() {
       recipeGroupSection: effectiveRecipeGroupSection.value,
       parentCategoryId: selectedParentCategoryId.value,
     });
+    if (props.itemType === Organizer.Category && props.recipeGroup) {
+      const { data } = await userApi.categories.getRecipeGroups();
+      if (data) allRecipeGroupCategories.value = data;
+    }
     emit(CREATED_ITEM_EVENT, newItem);
   }
   dialog.value = false;

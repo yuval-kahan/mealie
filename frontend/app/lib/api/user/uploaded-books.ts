@@ -11,6 +11,7 @@ import type {
   UploadedBookRecipeCatalogImportRequest,
   UploadedBookRecipeCatalogRequest,
   UploadedBookRecipeSummary,
+  UploadedBookRecipeSource,
   UploadedBookReadingState,
   UploadedBookReadingStateUpdate,
   UploadedBookManualTranslationPageRequest,
@@ -24,6 +25,7 @@ const routes = {
   uploadedBookCategories: `${prefix}/households/uploaded-books/categories`,
   uploadedBookCategory: (id: string) => `${prefix}/households/uploaded-books/categories/${id}`,
   uploadedBook: (id: string) => `${prefix}/households/uploaded-books/${id}`,
+  uploadedBookRecipeSource: (id: string) => `${prefix}/households/uploaded-books/recipe-sources/${id}`,
   extractRecipes: (id: string) => `${prefix}/households/uploaded-books/${id}/extract-recipes`,
   recipeCatalog: (id: string) => `${prefix}/households/uploaded-books/${id}/recipe-catalog`,
   importRecipeCatalog: (id: string) => `${prefix}/households/uploaded-books/${id}/recipe-catalog/import`,
@@ -58,6 +60,13 @@ export class UploadedBooksAPI extends BaseAPI {
 
   async rename(id: string, name: string) {
     return await this.update(id, { name });
+  }
+
+  async renameRecipeSource(id: string, name: string, previousName?: string | null) {
+    return await this.requests.patch<UploadedBookRecipeSource, { name: string; previousName?: string | null }>(
+      routes.uploadedBookRecipeSource(id),
+      { name, previousName },
+    );
   }
 
   async upload(file: File, name: string | null = null, classifyWithAi = true, categoryId: string | null = null) {
@@ -177,8 +186,11 @@ export class UploadedBooksAPI extends BaseAPI {
     return await this.requests.delete<unknown>(`${routes.uploadedBook(id)}?${query.toString()}`);
   }
 
-  async getRecipes(id: string) {
-    return await this.requests.get<UploadedBookRecipeSummary[]>(routes.uploadedBookRecipes(id));
+  async getRecipes(id: string, sourceName?: string | null) {
+    const query = sourceName?.trim()
+      ? `?source_name=${encodeURIComponent(sourceName.trim())}`
+      : "";
+    return await this.requests.get<UploadedBookRecipeSummary[]>(`${routes.uploadedBookRecipes(id)}${query}`);
   }
 
   async getReadingStates() {

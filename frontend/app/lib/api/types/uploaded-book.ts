@@ -162,6 +162,13 @@ export interface UploadedBookRecipeSummary {
   source?: string | null;
 }
 
+export interface UploadedBookRecipeSource {
+  id: string;
+  name: string;
+  updatedRecipes: number;
+  bookExists: boolean;
+}
+
 export interface UploadedBookRecipeDeleteResponse {
   deletedCount: number;
   deletedShoppingListCount: number;
@@ -173,6 +180,8 @@ export interface UploadedBookRecipeDeleteResponse {
 
 export interface UploadedBookRecipeDeleteRequest {
   recipeIds: string[];
+  sourceName?: string | null;
+  deleteAll?: boolean;
   deleteRecipes: boolean;
   deleteShoppingLists: boolean;
 }

@@ -2,6 +2,7 @@ import json
 from datetime import datetime
 from typing import Literal
 
+from humps.main import camelize
 from pydantic import UUID4, ConfigDict, Field, computed_field, model_validator
 
 from mealie.schema._mealie import MealieModel
@@ -85,6 +86,27 @@ class UploadedBookUpdate(MealieModel):
         return self
 
 
+class UploadedBookRecipeSourceUpdate(MealieModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    previous_name: str | None = Field(default=None, max_length=255)
+
+    @model_validator(mode="after")
+    def normalize_name(self):
+        self.name = self.name.strip()
+        if not self.name:
+            raise ValueError("Book source name cannot be empty")
+        if self.previous_name is not None:
+            self.previous_name = self.previous_name.strip() or None
+        return self
+
+
+class UploadedBookRecipeSourceOut(MealieModel):
+    id: UUID4
+    name: str
+    updated_recipes: int = 0
+    book_exists: bool = False
+
+
 class UploadedBookCategoryCreate(MealieModel):
     name: str = Field(..., min_length=1, max_length=160)
     parent_category_id: UUID4 | None = None
@@ -123,7 +145,7 @@ class UploadedBookCategoryOut(MealieModel):
     created_at: datetime | None = None
     updated_at: datetime | None = UpdatedAtField(default=None)
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(alias_generator=camelize, populate_by_name=True, from_attributes=True)
 
 
 class UploadedBookReaderPreferences(MealieModel):
@@ -283,11 +305,15 @@ class UploadedBookRecipeSummary(MealieModel):
 
 class UploadedBookRecipeDeleteRequest(MealieModel):
     recipe_ids: list[UUID4] = Field(default_factory=list, max_length=5000)
+    source_name: str | None = Field(default=None, max_length=255)
+    delete_all: bool = False
     delete_recipes: bool = True
     delete_shopping_lists: bool = True
 
     @model_validator(mode="after")
     def validate_delete_targets(self):
+        if self.source_name is not None:
+            self.source_name = self.source_name.strip() or None
         if not self.delete_recipes and not self.delete_shopping_lists:
             raise ValueError("At least one delete target must be selected")
         return self

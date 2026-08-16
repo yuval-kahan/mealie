@@ -11,6 +11,8 @@
   "settings": {
     "mealie-url": "Mealie address",
     "extract-mode": "What to extract",
+    "recipe-category": "Recipe category / subcategory",
+    "no-recipe-category": "No custom category",
     "interface-language": "Interface language",
     "automatic-language": "Automatic (Mealie site language, then browser language)",
     "translation-language": "Translation language",

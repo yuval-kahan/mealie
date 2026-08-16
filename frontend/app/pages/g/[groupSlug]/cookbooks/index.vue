@@ -138,6 +138,7 @@
           :items="topLevelBookCategoryOptions"
           item-title="title"
           item-value="value"
+          :menu-props="{ location: 'bottom', zIndex: 3000, maxHeight: 320, attach: 'body' }"
           variant="outlined"
           clearable
           :disabled="Boolean(bookCategoryEditing?.parentCategoryId)"
@@ -234,6 +235,7 @@
           :items="bookCategoryReplacementOptions"
           item-title="title"
           item-value="value"
+          :menu-props="{ location: 'bottom', zIndex: 3000, maxHeight: 320, attach: 'body' }"
           variant="outlined"
           :label="$t('cookbook.reassign-books-to')"
         />
@@ -259,6 +261,7 @@
           :items="bookCategoryOptions"
           item-title="title"
           item-value="value"
+          :menu-props="{ location: 'bottom', zIndex: 3000, maxHeight: 320, attach: 'body' }"
           variant="outlined"
           :label="$t('cookbook.book-category')"
         />
@@ -942,7 +945,7 @@
         />
 
         <BaseListPagination
-          v-if="filteredUploadedBooks.length"
+          v-if="filteredUploadedBooks.length && bookLibraryViewMode === 'focus'"
           v-model:page="uploadedBookPage"
           v-model:items-per-page="uploadedBooksPerPage"
           :total-items="uploadedBookTotal"
@@ -951,6 +954,256 @@
         <v-alert v-if="!uploadedBooksLoading && !filteredUploadedBooks.length" type="info" variant="tonal">
           {{ $t("cookbook.no-library-books") }}
         </v-alert>
+        <div v-else-if="bookLibraryViewMode === 'headings'" class="cookbook-map-layout">
+          <main class="cookbook-map-content" :dir="i18n.locale.value === 'he-IL' ? 'rtl' : 'ltr'">
+            <template v-for="section in bookLibraryMapSections" :key="section.id">
+              <section
+                v-show="isBookMapSectionVisible(section)"
+                :id="bookMapSectionAnchor(section.id)"
+                class="cookbook-map-section"
+                :class="{ 'cookbook-map-section--child': section.level === 2 }"
+              >
+                <div class="cookbook-map-section__header">
+                  <button
+                    type="button"
+                    class="cookbook-map-section__toggle"
+                    :aria-expanded="isBookMapSectionOpen(section)"
+                    @click="toggleBookMapSection(section)"
+                  >
+                    <v-icon
+                      :icon="isBookMapSectionOpen(section) ? $globals.icons.chevronDown : $globals.icons.chevronRight"
+                      size="22"
+                    />
+                    <span>{{ section.ordinal }}. {{ section.title }}</span>
+                    <span class="cookbook-map-count">({{ section.total }})</span>
+                  </button>
+                  <div v-if="section.category && !section.category.isProtected" class="cookbook-map-section__actions">
+                    <v-btn
+                      v-if="section.level === 1"
+                      icon
+                      size="x-small"
+                      variant="text"
+                      :title="$t('cookbook.create-book-subcategory')"
+                      @click="openCreateBookCategory(section.id)"
+                    >
+                      <v-icon :icon="$globals.icons.add" />
+                    </v-btn>
+                    <v-btn
+                      icon
+                      size="x-small"
+                      variant="text"
+                      :title="$t('general.edit')"
+                      @click="openEditBookCategory(section.category)"
+                    >
+                      <v-icon :icon="$globals.icons.edit" />
+                    </v-btn>
+                    <v-btn
+                      icon
+                      size="x-small"
+                      variant="text"
+                      color="error"
+                      :title="$t('general.delete')"
+                      @click="confirmDeleteBookCategory(section.category)"
+                    >
+                      <v-icon :icon="$globals.icons.delete" />
+                    </v-btn>
+                  </div>
+                </div>
+
+                <v-expand-transition>
+                  <div v-show="isBookMapSectionOpen(section)" class="cookbook-map-books">
+                    <article v-for="book in section.books" :key="book.id" class="cookbook-map-book">
+                      <div class="cookbook-map-book__title-row">
+                        <v-icon :icon="bookIcon(book)" size="18" />
+                        <button
+                          type="button"
+                          class="cookbook-map-book__title"
+                          :title="$t('cookbook.open-book-new-tab')"
+                          @click="openUploadedBook(book)"
+                        >
+                          {{ bookLogicalTitle(book) }}
+                        </button>
+                        <span v-if="bookClassification(book)?.author_or_chef" class="cookbook-map-book__author">
+                          — {{ bookClassification(book)?.author_or_chef }}
+                        </span>
+                        <div class="cookbook-map-book__variants">
+                          <v-btn
+                            v-for="variant in bookVariants(book)"
+                            :key="variant.id"
+                            size="x-small"
+                            variant="tonal"
+                            :color="variant.id === book.id ? 'primary' : undefined"
+                            :prepend-icon="variant.isTranslatedBook ? $globals.icons.translate : bookIcon(variant)"
+                            @click="openUploadedBookVariant(variant)"
+                          >
+                            {{ bookVariantLabel(variant) }}
+                          </v-btn>
+                        </div>
+                      </div>
+
+                      <div v-if="bookLibraryShowDetails" class="cookbook-map-book__details">
+                        <div v-if="bookLabels(book).length" class="cookbook-map-book__labels">
+                          <v-chip
+                            v-for="label in bookLabels(book).slice(0, 10)"
+                            :key="label"
+                            size="x-small"
+                            variant="tonal"
+                          >
+                            {{ label }}
+                          </v-chip>
+                        </div>
+                        <p v-if="bookClassification(book)?.summary" class="mb-0">
+                          <strong>{{ $t("cookbook.about-book") }}:</strong>
+                          {{ bookClassification(book)?.summary }}
+                        </p>
+                        <div class="cookbook-map-book__progress">
+                          <span v-if="bookReadingState(book)">
+                            {{ $t("cookbook.page-number-and-percent", {
+                              page: bookReadingState(book)?.currentPage || bookReadingState(book)?.currentPageIndex || 0,
+                              percent: Math.round(bookReadingState(book)?.readingPercent || 0),
+                            }) }}
+                          </span>
+                          <span v-if="book.isTranslatedBook && bookTranslationAudit(book)">
+                            {{ $t("cookbook.translation-completeness") }}: {{ bookTranslationPercent(book) }}%
+                          </span>
+                        </div>
+                      </div>
+
+                      <div class="cookbook-map-book__actions">
+                        <v-btn
+                          size="small"
+                          variant="text"
+                          color="primary"
+                          :prepend-icon="$globals.icons.openInNew"
+                          @click="openUploadedBook(book)"
+                        >
+                          {{ $t("cookbook.open-book") }}
+                        </v-btn>
+                        <v-btn icon size="x-small" variant="text" :title="$t('cookbook.rename-book')" @click="openBookRenameDialog(book)">
+                          <v-icon :icon="$globals.icons.edit" />
+                        </v-btn>
+                        <v-btn icon size="x-small" variant="text" :title="$t('cookbook.assign-book-category')" @click="openBookCategoryAssignment(book)">
+                          <v-icon :icon="$globals.icons.categories" />
+                        </v-btn>
+                        <v-btn
+                          icon
+                          size="x-small"
+                          variant="text"
+                          :title="$t('cookbook.edit-book-cover')"
+                          @click="openBookCoverDialog(book)"
+                        >
+                          <v-icon :icon="$globals.icons.fileImage" />
+                        </v-btn>
+                        <v-btn
+                          v-if="isGeneratedBook(book)"
+                          icon
+                          size="x-small"
+                          variant="text"
+                          :loading="refreshingBookIds.has(book.id)"
+                          :title="$t('cookbook.refresh-ai-book')"
+                          @click="refreshAIBook(book)"
+                        >
+                          <v-icon :icon="$globals.icons.refresh" />
+                        </v-btn>
+                        <v-btn
+                          v-else
+                          icon
+                          size="x-small"
+                          variant="text"
+                          :loading="book.classificationStatus === 'processing'"
+                          :title="$t('cookbook.organize-book-with-ai')"
+                          @click="classifyUploadedBook(book)"
+                        >
+                          <v-icon :icon="$globals.icons.robot" />
+                        </v-btn>
+                        <v-btn
+                          v-if="!isGeneratedBook(book) && !book.isTranslatedBook"
+                          icon
+                          size="x-small"
+                          variant="text"
+                          :disabled="book.translationStatus === 'processing' || book.translationStatus === 'retrying'"
+                          :title="$t('cookbook.translate-book-with-ai')"
+                          @click="openBookTranslationDialog(book)"
+                        >
+                          <v-icon :icon="$globals.icons.translate" />
+                        </v-btn>
+                        <v-btn
+                          v-if="!isGeneratedBook(book)"
+                          icon
+                          size="x-small"
+                          variant="text"
+                          :disabled="book.extractionStatus === 'processing' || book.extractionStatus === 'retrying'"
+                          :title="$t('cookbook.extract-recipes-with-ai')"
+                          @click="openBookExtractionDialog(book)"
+                        >
+                          <v-icon :icon="$globals.icons.potSteam" />
+                        </v-btn>
+                        <v-btn
+                          v-if="!isGeneratedBook(book)"
+                          icon
+                          size="x-small"
+                          variant="text"
+                          :title="$t('cookbook.choose-recipes-from-book')"
+                          @click="openBookRecipeCatalogDialog(book)"
+                        >
+                          <v-icon :icon="$globals.icons.formatListCheck" />
+                        </v-btn>
+                        <v-btn
+                          v-if="!isGeneratedBook(book)"
+                          icon
+                          size="x-small"
+                          variant="text"
+                          color="warning"
+                          :title="$t('cookbook.delete-book-recipes')"
+                          @click="openBookRecipeDeleteDialog(book)"
+                        >
+                          <v-icon :icon="$globals.icons.broom" />
+                        </v-btn>
+                        <v-btn
+                          icon
+                          size="x-small"
+                          variant="text"
+                          color="error"
+                          :title="$t('cookbook.delete-book')"
+                          @click="confirmUploadedBookDelete(book)"
+                        >
+                          <v-icon :icon="$globals.icons.delete" />
+                        </v-btn>
+                      </div>
+                    </article>
+                  </div>
+                </v-expand-transition>
+              </section>
+            </template>
+          </main>
+
+          <aside class="cookbook-map-toc" :dir="i18n.locale.value === 'he-IL' ? 'rtl' : 'ltr'">
+            <h3 class="text-h6 mb-3">
+              {{ $t("cookbook.library-map") }}
+            </h3>
+            <v-checkbox
+              v-model="bookLibraryShowDetails"
+              :label="$t('cookbook.show-book-details')"
+              density="compact"
+              color="primary"
+              hide-details
+              class="mb-3"
+            />
+            <nav class="cookbook-map-toc__list" :aria-label="$t('cookbook.library-table-of-contents')">
+              <button
+                v-for="section in bookLibraryMapSections"
+                :key="section.id"
+                type="button"
+                class="cookbook-map-toc__item"
+                :class="{ 'cookbook-map-toc__item--child': section.level === 2 }"
+                @click="scrollToBookMapSection(section.id)"
+              >
+                <span>{{ section.ordinal }}. {{ section.title }}</span>
+                <span>({{ section.total }})</span>
+              </button>
+            </nav>
+          </aside>
+        </div>
         <div v-else class="cookbook-library__grid">
           <template v-for="(book, bookIndex) in paginatedUploadedBooks" :key="book.id">
             <div
@@ -1080,7 +1333,14 @@
                   </v-avatar>
                 </template>
                 <v-card-title class="text-subtitle-1 text-wrap">
-                  {{ bookLogicalTitle(book) }}
+                  <button
+                    type="button"
+                    class="cookbook-map-book__title"
+                    :title="$t('cookbook.open-book-new-tab')"
+                    @click="openUploadedBook(book)"
+                  >
+                    {{ bookLogicalTitle(book) }}
+                  </button>
                 </v-card-title>
                 <v-card-subtitle>
                   {{ bookCategoryPath(book) }}
@@ -1263,7 +1523,7 @@
                   <v-icon :icon="$globals.icons.formatListCheck" />
                 </v-btn>
                 <v-btn
-                  v-if="bookRecipeSource(book)?.extractionRecipesCreated"
+                  v-if="!isGeneratedBook(book)"
                   icon
                   variant="text"
                   color="warning"
@@ -1297,6 +1557,7 @@ import type {
   UploadedBookDeletePreview,
   UploadedBookReadingState,
   UploadedBookRecipeCatalog,
+  UploadedBookRecipeSource,
 } from "~/lib/api/types/uploaded-book";
 import { useUserApi } from "~/composables/api/api-client";
 import { alert } from "~/composables/use-toast";
@@ -1369,6 +1630,11 @@ const bookLibraryOpenCategoryPreferences = useLocalStorage<Record<string, string
   {},
   { deep: true },
 );
+const bookLibraryDetailsPreferences = useLocalStorage<Record<string, boolean>>(
+  "mealie-book-library-map-details",
+  {},
+  { deep: true },
+);
 const bookLibraryPreferenceKey = computed(() => `${auth.user.value?.id || "anonymous"}:uploaded-books`);
 const bookLibraryViewMode = computed<BookLibraryViewMode>({
   get() {
@@ -1396,12 +1662,24 @@ const bookLibraryExpansionMode = computed<BookLibraryExpansionMode>({
     };
   },
 });
+const bookLibraryShowDetails = computed<boolean>({
+  get() {
+    return bookLibraryDetailsPreferences.value[bookLibraryPreferenceKey.value] ?? true;
+  },
+  set(value) {
+    bookLibraryDetailsPreferences.value = {
+      ...bookLibraryDetailsPreferences.value,
+      [bookLibraryPreferenceKey.value]: value,
+    };
+  },
+});
 const rememberedOpenBookCategoryIds = computed<Set<string>>({
   get() {
     return new Set(bookLibraryOpenCategoryPreferences.value[bookLibraryPreferenceKey.value] || []);
   },
   set(value) {
     const validIds = new Set(uploadedBookCategories.value.map(category => category.id));
+    validIds.add("uncategorized");
     bookLibraryOpenCategoryPreferences.value = {
       ...bookLibraryOpenCategoryPreferences.value,
       [bookLibraryPreferenceKey.value]: [...value].filter(id => validIds.has(id)).slice(0, 200),
@@ -1839,6 +2117,123 @@ const sortedUploadedBooks = computed(() => {
     (order.get(bookCategoryId(left) || "") ?? Number.MAX_SAFE_INTEGER)
     - (order.get(bookCategoryId(right) || "") ?? Number.MAX_SAFE_INTEGER));
 });
+
+interface BookLibraryMapSection {
+  id: string;
+  title: string;
+  category: UploadedBookCategory | null;
+  parentId: string | null;
+  level: 1 | 2;
+  ordinal: string;
+  books: UploadedBook[];
+  total: number;
+}
+
+const bookLibraryMapSections = computed<BookLibraryMapSection[]>(() => {
+  const booksByCategory = new Map<string, UploadedBook[]>();
+  for (const book of sortedUploadedBooks.value) {
+    const categoryId = bookCategoryId(book) || "uncategorized";
+    const items = booksByCategory.get(categoryId) || [];
+    items.push(book);
+    booksByCategory.set(categoryId, items);
+  }
+
+  const roots = orderedUploadedBookCategories.value.filter(category => !category.parentCategoryId);
+  const childrenByRoot = new Map<string, UploadedBookCategory[]>();
+  for (const category of orderedUploadedBookCategories.value.filter(category => category.parentCategoryId)) {
+    const children = childrenByRoot.get(category.parentCategoryId!) || [];
+    children.push(category);
+    childrenByRoot.set(category.parentCategoryId!, children);
+  }
+
+  const sections: BookLibraryMapSection[] = [];
+  let visibleRootIndex = 0;
+  for (const root of roots) {
+    const children = childrenByRoot.get(root.id) || [];
+    const directBooks = booksByCategory.get(root.id) || [];
+    const childBookCount = children.reduce((total, child) => total + (booksByCategory.get(child.id)?.length || 0), 0);
+    const total = directBooks.length + childBookCount;
+    if (!total) continue;
+    visibleRootIndex += 1;
+    sections.push({
+      id: root.id,
+      title: root.name,
+      category: root,
+      parentId: null,
+      level: 1,
+      ordinal: String(visibleRootIndex),
+      books: directBooks,
+      total,
+    });
+    let visibleChildIndex = 0;
+    for (const child of children) {
+      const childBooks = booksByCategory.get(child.id) || [];
+      if (!childBooks.length) continue;
+      visibleChildIndex += 1;
+      sections.push({
+        id: child.id,
+        title: child.name,
+        category: child,
+        parentId: root.id,
+        level: 2,
+        ordinal: `${visibleRootIndex}.${visibleChildIndex}`,
+        books: childBooks,
+        total: childBooks.length,
+      });
+    }
+  }
+
+  const uncategorizedBooks = booksByCategory.get("uncategorized") || [];
+  if (uncategorizedBooks.length) {
+    visibleRootIndex += 1;
+    sections.push({
+      id: "uncategorized",
+      title: i18n.t("cookbook.uncategorized-books"),
+      category: null,
+      parentId: null,
+      level: 1,
+      ordinal: String(visibleRootIndex),
+      books: uncategorizedBooks,
+      total: uncategorizedBooks.length,
+    });
+  }
+  return sections;
+});
+
+function bookMapSectionAnchor(sectionId: string) {
+  return `book-map-${sectionId}`;
+}
+
+function isBookMapSectionOpen(section: BookLibraryMapSection) {
+  if (bookLibraryExpansionMode.value === "expanded") return true;
+  if (bookLibraryExpansionMode.value === "collapsed") return false;
+  if (!(bookLibraryPreferenceKey.value in bookLibraryOpenCategoryPreferences.value)) return true;
+  return rememberedOpenBookCategoryIds.value.has(section.id);
+}
+
+function isBookMapSectionVisible(section: BookLibraryMapSection) {
+  if (!section.parentId) return true;
+  const parent = bookLibraryMapSections.value.find(candidate => candidate.id === section.parentId);
+  return parent ? isBookMapSectionOpen(parent) : true;
+}
+
+function toggleBookMapSection(section: BookLibraryMapSection) {
+  if (bookLibraryExpansionMode.value !== "remember") return;
+  const hasStoredState = bookLibraryPreferenceKey.value in bookLibraryOpenCategoryPreferences.value;
+  const next = hasStoredState
+    ? new Set(rememberedOpenBookCategoryIds.value)
+    : new Set([...uploadedBookCategories.value.map(category => category.id), "uncategorized"]);
+  if (next.has(section.id)) next.delete(section.id);
+  else next.add(section.id);
+  rememberedOpenBookCategoryIds.value = next;
+}
+
+function scrollToBookMapSection(sectionId: string) {
+  document.getElementById(bookMapSectionAnchor(sectionId))?.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+  });
+}
 const {
   page: uploadedBookPage,
   itemsPerPage: uploadedBooksPerPage,
@@ -2223,19 +2618,8 @@ function openBookRenameDialog(book: UploadedBook) {
   bookRenameDialog.value = true;
 }
 
-async function handleBookRenamed(book: UploadedBook) {
-  const target = bookRenameTarget.value;
+async function handleBookRenamed(_book: UploadedBookRecipeSource) {
   bookRenameTarget.value = null;
-  if (!target) {
-    await loadUploadedBooks();
-    return;
-  }
-  const additionalRoots = bookVariants(target).filter(variant =>
-    !variant.isTranslatedBook && variant.id !== book.id,
-  );
-  for (const variant of additionalRoots) {
-    await api.uploadedBooks.rename(variant.id, book.name);
-  }
   await loadUploadedBooks();
 }
 
@@ -2645,6 +3029,208 @@ onBeforeUnmount(() => {
   outline: none;
 }
 
+.cookbook-map-layout {
+  align-items: start;
+  direction: ltr;
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 310px);
+}
+
+.cookbook-map-content {
+  min-width: 0;
+}
+
+.cookbook-map-section {
+  scroll-margin-top: 80px;
+}
+
+.cookbook-map-section + .cookbook-map-section {
+  margin-top: 14px;
+}
+
+.cookbook-map-section--child {
+  margin-inline-start: 24px;
+}
+
+.cookbook-map-section__header {
+  align-items: center;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 8px;
+  display: flex;
+  gap: 6px;
+  min-height: 54px;
+  padding-inline: 8px;
+}
+
+.cookbook-map-section--child .cookbook-map-section__header {
+  border: 0;
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 0;
+  min-height: 46px;
+}
+
+.cookbook-map-section__toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: rgb(var(--v-theme-on-surface));
+  cursor: pointer;
+  display: flex;
+  flex: 1;
+  font: inherit;
+  font-size: 1.12rem;
+  font-weight: 700;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 2px;
+  text-align: start;
+}
+
+.cookbook-map-section--child .cookbook-map-section__toggle {
+  font-size: 1rem;
+}
+
+.cookbook-map-section__toggle:hover,
+.cookbook-map-section__toggle:focus-visible {
+  color: rgb(var(--v-theme-primary));
+  outline: none;
+}
+
+.cookbook-map-count {
+  color: rgb(var(--v-theme-primary));
+  font-size: 0.9em;
+  white-space: nowrap;
+}
+
+.cookbook-map-section__actions,
+.cookbook-map-book__actions,
+.cookbook-map-book__variants,
+.cookbook-map-book__labels,
+.cookbook-map-book__progress {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cookbook-map-books {
+  padding: 10px 8px 2px;
+}
+
+.cookbook-map-book {
+  border-bottom: 1px dashed rgba(var(--v-border-color), var(--v-border-opacity));
+  padding: 9px 4px 12px;
+}
+
+.cookbook-map-book:last-child {
+  border-bottom: 0;
+}
+
+.cookbook-map-book__title-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.cookbook-map-book__title {
+  background: transparent;
+  border: 0;
+  color: rgb(var(--v-theme-primary));
+  cursor: pointer;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  padding: 0;
+  text-align: start;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.cookbook-map-book__title:hover,
+.cookbook-map-book__title:focus-visible {
+  color: rgb(var(--v-theme-secondary));
+  outline: none;
+}
+
+.cookbook-map-book__author {
+  color: rgba(var(--v-theme-on-surface), 0.76);
+}
+
+.cookbook-map-book__variants {
+  margin-inline-start: auto;
+}
+
+.cookbook-map-book__details {
+  border-inline-start: 3px solid rgba(var(--v-theme-primary), 0.55);
+  color: rgba(var(--v-theme-on-surface), 0.8);
+  display: grid;
+  font-size: 0.88rem;
+  gap: 7px;
+  margin-block: 8px;
+  padding-inline-start: 10px;
+}
+
+.cookbook-map-book__progress {
+  color: rgba(var(--v-theme-on-surface), 0.67);
+  font-size: 0.78rem;
+  justify-content: space-between;
+}
+
+.cookbook-map-book__actions {
+  margin-top: 5px;
+}
+
+.cookbook-map-toc {
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 8px;
+  max-height: calc(100vh - 88px);
+  overflow: hidden;
+  padding: 16px;
+  position: sticky;
+  top: 72px;
+}
+
+.cookbook-map-toc__list {
+  display: grid;
+  max-height: calc(100vh - 210px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.cookbook-map-toc__item {
+  align-items: start;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.7));
+  color: rgb(var(--v-theme-on-surface));
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 9px 4px;
+  text-align: start;
+}
+
+.cookbook-map-toc__item--child {
+  font-size: 0.82rem;
+  font-weight: 500;
+  padding-inline-start: 22px;
+}
+
+.cookbook-map-toc__item:hover,
+.cookbook-map-toc__item:focus-visible {
+  background: rgba(var(--v-theme-primary), 0.08);
+  color: rgb(var(--v-theme-primary));
+  outline: none;
+}
+
 .book-recipe-catalog__search {
   align-items: stretch;
   display: grid;
@@ -2841,6 +3427,25 @@ onBeforeUnmount(() => {
 
   .cookbook-library__filters {
     grid-template-columns: 1fr;
+  }
+
+  .cookbook-map-layout {
+    direction: inherit;
+    grid-template-columns: 1fr;
+  }
+
+  .cookbook-map-toc {
+    max-height: min(46vh, 440px);
+    order: -1;
+    position: static;
+  }
+
+  .cookbook-map-toc__list {
+    max-height: min(32vh, 310px);
+  }
+
+  .cookbook-map-section--child {
+    margin-inline-start: 10px;
   }
 }
 </style>

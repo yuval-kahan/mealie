@@ -145,8 +145,9 @@ class OpenAIService(BaseService):
 
         super().__init__()
 
-    def get_client(self, provider: AIProviderOut) -> AsyncOpenAI:
-        api_key = self._first_api_key(provider.api_key) if self._is_gemini_provider_data(provider) else provider.api_key
+    def get_client(self, provider: AIProviderOut, api_key: str | None = None) -> AsyncOpenAI:
+        if api_key is None:
+            api_key = self._first_api_key(provider.api_key) if self._is_gemini_provider_data(provider) else provider.api_key
         return AsyncOpenAI(
             base_url=provider.base_url or None,
             api_key=api_key,
@@ -179,6 +180,16 @@ class OpenAIService(BaseService):
     @classmethod
     def _first_api_key(cls, api_key: str) -> str:
         return cls._split_api_keys(api_key)[0] if api_key else ""
+
+    @staticmethod
+    def _should_retry_gemini_request(error: Exception) -> bool:
+        """Move to the next configured Gemini key for transient or key-scoped failures."""
+        if isinstance(error, (openai.RateLimitError, openai.APIConnectionError)):
+            return True
+        if isinstance(error, openai.APIStatusError):
+            status_code = getattr(error, "status_code", None)
+            return status_code in {401, 403, 408, 409, 429} or (status_code is not None and status_code >= 500)
+        return False
 
     @staticmethod
     def _append_api_path(base_url: str, path: str) -> str:
@@ -417,9 +428,14 @@ class OpenAIService(BaseService):
         return "\n".join(content_parts)
 
     async def _get_raw_response(
-        self, prompt: str, content: list[dict], response_schema: type[T], provider: AIProviderOut
+        self,
+        prompt: str,
+        content: list[dict],
+        response_schema: type[T],
+        provider: AIProviderOut,
+        api_key: str | None = None,
     ) -> ChatCompletion:
-        client = self.get_client(provider)
+        client = self.get_client(provider, api_key=api_key)
         try:
             return await client.chat.completions.parse(
                 messages=[
@@ -526,12 +542,41 @@ class OpenAIService(BaseService):
             if self._is_anthropic_provider(provider):
                 return await self._get_anthropic_response(prompt, user_messages, response_schema, provider)
 
-            response = await self._get_raw_response(prompt, user_messages, response_schema, provider)
-            if not response.choices:
-                return None
+            api_keys = self._split_api_keys(provider.api_key) if self._is_gemini_provider_data(provider) else [provider.api_key]
+            last_error: Exception | None = None
+            for key_index, api_key in enumerate(api_keys):
+                try:
+                    response = await self._get_raw_response(
+                        prompt,
+                        user_messages,
+                        response_schema,
+                        provider,
+                        api_key=api_key,
+                    )
+                    if not response.choices:
+                        return None
 
-            response_text = response.choices[0].message.content
-            return response_schema.parse_openai_response(response_text)
+                    response_text = response.choices[0].message.content
+                    if not response_text:
+                        return None
+                    return response_schema.parse_openai_response(response_text)
+                except Exception as error:
+                    last_error = error
+                    if (
+                        not self._is_gemini_provider_data(provider)
+                        or key_index >= len(api_keys) - 1
+                        or not self._should_retry_gemini_request(error)
+                    ):
+                        raise
+                    logger.warning(
+                        "Gemini request failed with configured API key #%d; trying the next key.",
+                        key_index + 1,
+                        exc_info=True,
+                    )
+
+            if last_error:
+                raise last_error
+            return None
         except openai.RateLimitError as e:
             raise exceptions.RateLimitError(str(e)) from e
         except Exception as e:

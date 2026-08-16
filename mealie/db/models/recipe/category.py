@@ -96,11 +96,12 @@ class Category(SqlAlchemyBase, BaseMixins):
         is_recipe_group=False,
         recipe_group_section="recipes",
         parent_category_id=None,
+        slug=None,
         **_,
     ) -> None:
         self.group_id = group_id
         self.name = name.strip()
-        self.slug = slugify(name)
+        self.slug = slugify(slug or self.name)
         self.is_recipe_group = bool(is_recipe_group)
         self.recipe_group_section = (recipe_group_section or "recipes").strip()[:64]
         self.parent_category_id = parent_category_id

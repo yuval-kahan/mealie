@@ -1490,6 +1490,8 @@ class UploadedBookRecipeExtractor(BaseService):
         recipe.extras = {
             **(recipe.extras or {}),
             "uploadedBookSourceId": str(book.id),
+            "uploadedBookSourceName": book.name,
+            "uploadedBookOriginalFileName": book.original_file_name,
             "uploadedBookSourcePageStart": page_start,
             "uploadedBookSourcePageEnd": page_end,
         }
@@ -1992,14 +1994,14 @@ class UploadedBookRecipeExtractor(BaseService):
         organize_shopping_lists_with_ai: bool = True,
         allow_duplicate_recipes: bool = False,
     ) -> None:
-        if not await self._claim_job("extraction", book_id):
-            self.logger.info(f"Uploaded book extraction job {book_id} is already running")
+        requested_book = self._get_book(book_id)
+        book = self._catalog_source_book(requested_book)
+        source_book_id = book.id
+        if not await self._claim_job("extraction", source_book_id):
+            self.logger.info(f"Uploaded book extraction job {source_book_id} is already running")
             return
 
-        book: UploadedBook | None = None
-
         try:
-            book = self._get_book(book_id)
             path = self._book_file_path(book, uploaded_books_root)
             if not path.exists():
                 raise ValueError("Uploaded book file is missing")
@@ -2223,21 +2225,77 @@ class UploadedBookRecipeExtractor(BaseService):
                 return
 
             failed_chunks = sum(1 for state in chunk_states.values() if state.get("status") == CHUNK_FAILED)
-            await self.enrich_book_recipes(
+            enrichment_error: str | None = None
+            try:
+                await self.enrich_book_recipes(
+                    book,
+                    auto_recipe_images=auto_recipe_images,
+                    include_item_images=include_item_images,
+                    include_ai_tips=include_ai_tips,
+                    create_shopping_lists=create_shopping_lists,
+                    organize_shopping_lists_with_ai=organize_shopping_lists_with_ai,
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:
+                # Recipe extraction is the durable result. Images, tags and
+                # shopping lists are best-effort enrichment and must not turn
+                # already saved recipes into a failed extraction job.
+                self.repos.session.rollback()
+                book = self._get_book(source_book_id)
+                enrichment_error = self._short_error(error)
+                self.logger.exception(
+                    "Recipe enrichment failed after extracting recipes from uploaded book %s",
+                    source_book_id,
+                )
+
+            failed_ranges = [
+                {
+                    "start_page": state.get("startPage"),
+                    "end_page": state.get("endPage"),
+                    "error": str(state.get("error") or "")[:220],
+                }
+                for state in chunk_states.values()
+                if state.get("status") == CHUNK_FAILED
+            ]
+            self._update_book_metadata(
                 book,
-                auto_recipe_images=auto_recipe_images,
-                include_item_images=include_item_images,
-                include_ai_tips=include_ai_tips,
-                create_shopping_lists=create_shopping_lists,
-                organize_shopping_lists_with_ai=organize_shopping_lists_with_ai,
+                extraction_audit={
+                    "source_book_id": str(source_book_id),
+                    "source_book_name": book.name,
+                    "used_original_book": True,
+                    "total_chunks": len(chunk_states),
+                    "completed_chunks": sum(
+                        1 for state in chunk_states.values() if state.get("status") == CHUNK_COMPLETED
+                    ),
+                    "failed_ranges": failed_ranges,
+                    "recipes_found": sum(
+                        self._state_int(state, "recipesFound") for state in chunk_states.values()
+                    ),
+                    "recipes_created": sum(
+                        self._state_int(state, "recipesCreated") for state in chunk_states.values()
+                    ),
+                    "enrichment_error": enrichment_error,
+                    "completed_at": datetime.now(UTC).isoformat(),
+                },
             )
-            book.extraction_status = EXTRACTION_PARTIAL_FAILED if failed_chunks else EXTRACTION_COMPLETED
+            book.extraction_status = (
+                EXTRACTION_PARTIAL_FAILED
+                if failed_chunks or enrichment_error
+                else EXTRACTION_COMPLETED
+            )
             book.extraction_completed_at = get_utc_now()
             self._save_progress(book, chunk_states, book.extraction_status)
+            if enrichment_error:
+                chunk_error = self._chunk_error_summary(chunk_states)
+                book.extraction_error = "\n".join(
+                    part for part in (chunk_error, f"Recipe enrichment: {enrichment_error}") if part
+                )[-1000:]
+                self._save_book(book)
 
         except Exception as e:
             self.repos.session.rollback()
-            self.logger.error(f"Failed to extract recipes from uploaded book {book_id}")
+            self.logger.error(f"Failed to extract recipes from uploaded book {source_book_id}")
             self.logger.exception(e)
             if book is not None:
                 if self._is_extraction_cancelled(book):
@@ -2245,7 +2303,7 @@ class UploadedBookRecipeExtractor(BaseService):
                 else:
                     self._set_failed(book, str(e))
         finally:
-            await self._release_job("extraction", book_id)
+            await self._release_job("extraction", source_book_id)
 
 
 class UploadedBookTranslator(UploadedBookRecipeExtractor):
@@ -4638,23 +4696,35 @@ class UploadedBookTranslator(UploadedBookRecipeExtractor):
         create_shopping_lists: bool = True,
         organize_shopping_lists_with_ai: bool = True,
     ) -> None:
-        if extract_recipes and not resume:
+        if extract_recipes:
             extractor = UploadedBookRecipeExtractor(self.repos, self.user, self.household, self.translator)
-            await extractor.extract_recipes(
-                book_id,
-                uploaded_books_root,
-                pages_per_chunk,
-                target_language,
-                resume=False,
-                page_start=page_start,
-                page_end=page_end,
-                auto_recipe_images=auto_recipe_images,
-                include_item_images=include_item_images,
-                include_ai_tips=include_ai_tips,
-                create_shopping_lists=create_shopping_lists,
-                organize_shopping_lists_with_ai=organize_shopping_lists_with_ai,
-                allow_duplicate_recipes=False,
-            )
+            try:
+                await extractor.extract_recipes(
+                    book_id,
+                    uploaded_books_root,
+                    pages_per_chunk,
+                    target_language,
+                    resume=resume,
+                    page_start=page_start,
+                    page_end=page_end,
+                    auto_recipe_images=auto_recipe_images,
+                    include_item_images=include_item_images,
+                    include_ai_tips=include_ai_tips,
+                    create_shopping_lists=create_shopping_lists,
+                    organize_shopping_lists_with_ai=organize_shopping_lists_with_ai,
+                    allow_duplicate_recipes=False,
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                # Translation is an independent requested result. Keep going
+                # after an extraction failure; the extraction job retains its
+                # own failed/partial status and can be resumed separately.
+                self.repos.session.rollback()
+                self.logger.exception(
+                    "Recipe extraction failed before translating uploaded book %s; continuing with translation",
+                    book_id,
+                )
         await self.translate_book(
             book_id,
             uploaded_books_root,

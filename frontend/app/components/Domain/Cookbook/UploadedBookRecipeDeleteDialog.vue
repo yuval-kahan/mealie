@@ -149,6 +149,15 @@ const dialog = computed({
 });
 const loading = computed(() => loadingRecipes.value || deletingRecipes.value);
 const deleteSubmitText = computed(() => {
+  if (
+    deleteRecipes.value
+    && recipes.value.length > 0
+    && selectedRecipeIds.value.length === recipes.value.length
+  ) {
+    return deleteShoppingLists.value
+      ? i18n.t("cookbook.delete-all-book-recipes-and-shopping-lists")
+      : i18n.t("cookbook.delete-all-book-recipes");
+  }
   const targets: string[] = [];
   if (deleteRecipes.value) {
     targets.push(i18n.t("general.recipes"));
@@ -187,7 +196,7 @@ async function loadRecipes() {
   loadingRecipes.value = true;
   loadError.value = "";
   try {
-    const { data, error } = await api.uploadedBooks.getRecipes(props.book.id);
+    const { data, error } = await api.uploadedBooks.getRecipes(props.book.id, props.book.name);
     if (requestId !== loadRequestId) {
       return;
     }
@@ -215,8 +224,11 @@ async function deleteSelectedRecipes() {
   }
   deletingRecipes.value = true;
   const bookId = props.book.id;
+  const deletingAll = recipes.value.length > 0 && selectedRecipeIds.value.length === recipes.value.length;
   const { data, error } = await api.uploadedBooks.deleteRecipes(bookId, {
-    recipeIds: selectedRecipeIds.value,
+    recipeIds: deletingAll ? [] : selectedRecipeIds.value,
+    sourceName: props.book.name,
+    deleteAll: deletingAll,
     deleteRecipes: deleteRecipes.value,
     deleteShoppingLists: deleteShoppingLists.value,
   }).finally(() => {

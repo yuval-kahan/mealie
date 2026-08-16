@@ -38,6 +38,8 @@ from mealie.schema.cookbook.uploaded_book import (
     UploadedBookRecipeDeleteRequest,
     UploadedBookRecipeDeleteResponse,
     UploadedBookRecipeSummary,
+    UploadedBookRecipeSourceOut,
+    UploadedBookRecipeSourceUpdate,
     UploadedBookTranslateRequest,
     UploadedBookUpdate,
 )
@@ -56,6 +58,8 @@ from mealie.services.uploaded_books import (
 )
 from mealie.services.uploaded_books.book_library_categories import (
     BOOK_LIBRARY_CATEGORIES,
+    BOOK_LIBRARY_CATEGORY_ALIASES,
+    BOOK_LIBRARY_SUBCATEGORIES,
     UNCATEGORIZED_BOOK_CATEGORY,
 )
 from mealie.services.uploaded_books.book_recipe_extractor import (
@@ -261,34 +265,78 @@ class UploadedBooksController(BasePublicController):
                 )
             ).scalars().all()
         )
-        initial_seed = not categories
-        existing_names = {
-            category.name.strip().casefold()
+        changed = False
+        roots_by_name = {
+            category.name.strip().casefold(): category
             for category in categories
             if category.parent_category_id is None
         }
-        changed = False
-        seed_names = (
-            (*BOOK_LIBRARY_CATEGORIES, UNCATEGORIZED_BOOK_CATEGORY)
-            if initial_seed
-            else (UNCATEGORIZED_BOOK_CATEGORY,)
-        )
-        for position, name in enumerate(seed_names, start=1):
-            if name.casefold() in existing_names:
+        for old_name, new_name in BOOK_LIBRARY_CATEGORY_ALIASES.items():
+            old = roots_by_name.get(old_name.casefold())
+            if old is None or new_name.casefold() in roots_by_name:
                 continue
-            category = UploadedBookCategory(
-                group_id=self.group_id,
-                household_id=self.household_id,
-                name=name,
-                position=position,
-                is_system=name == UNCATEGORIZED_BOOK_CATEGORY,
-                is_protected=name == UNCATEGORIZED_BOOK_CATEGORY,
-                session=self.session,
-            )
-            self.session.add(category)
-            categories.append(category)
-            existing_names.add(name.casefold())
+            roots_by_name.pop(old_name.casefold())
+            old.name = new_name
+            roots_by_name[new_name.casefold()] = old
+            self.session.add(old)
             changed = True
+
+        # Seed the detailed map once. Existing positions and later user edits
+        # are intentionally left alone instead of being reset on every read.
+        seeded_map = any(category.is_system and not category.is_protected for category in categories)
+        seed_full_map = not seeded_map
+        root_names = (*BOOK_LIBRARY_CATEGORIES, UNCATEGORIZED_BOOK_CATEGORY)
+        for position, name in enumerate(root_names, start=1):
+            category = roots_by_name.get(name.casefold())
+            if category is None:
+                if not seed_full_map and name != UNCATEGORIZED_BOOK_CATEGORY:
+                    continue
+                category = UploadedBookCategory(
+                    group_id=self.group_id,
+                    household_id=self.household_id,
+                    name=name,
+                    position=position,
+                    is_system=True,
+                    is_protected=name == UNCATEGORIZED_BOOK_CATEGORY,
+                    session=self.session,
+                )
+                self.session.add(category)
+                categories.append(category)
+                roots_by_name[name.casefold()] = category
+                changed = True
+            elif seed_full_map and name != UNCATEGORIZED_BOOK_CATEGORY and not category.is_system:
+                category.is_system = True
+                self.session.add(category)
+                changed = True
+
+        if changed:
+            self.session.flush()
+
+        children_by_parent_and_name = {
+            (category.parent_category_id, category.name.strip().casefold()): category
+            for category in categories
+            if category.parent_category_id is not None
+        }
+        for root_name, child_names in BOOK_LIBRARY_SUBCATEGORIES.items():
+            parent = roots_by_name.get(root_name.casefold())
+            if parent is None or not seed_full_map:
+                continue
+            for position, child_name in enumerate(child_names, start=1):
+                key = (parent.id, child_name.casefold())
+                child = children_by_parent_and_name.get(key)
+                if child is None:
+                    child = UploadedBookCategory(
+                        group_id=self.group_id,
+                        household_id=self.household_id,
+                        name=child_name,
+                        parent_category_id=parent.id,
+                        position=position,
+                        session=self.session,
+                    )
+                    self.session.add(child)
+                    categories.append(child)
+                    children_by_parent_and_name[key] = child
+                    changed = True
         if changed:
             self.session.commit()
             categories = list(
@@ -469,22 +517,13 @@ class UploadedBooksController(BasePublicController):
                 ApiExtras.value == str(book_id),
             )
         )
-        link_filters = [linked_by_extra]
-        normalized_source_prefix = (source_prefix or "").strip().lower()
-        if normalized_source_prefix:
-            link_filters.append(
-                sa.func.lower(sa.func.coalesce(RecipeModel.source, "")).startswith(
-                    normalized_source_prefix,
-                    autoescape=True,
-                )
-            )
-        return list(
+        linked_recipes = list(
             self.session.execute(
                 select(RecipeModel)
                 .where(
                     RecipeModel.group_id == self.group_id,
                     RecipeModel.household_id == self.household_id,
-                    sa.or_(*link_filters),
+                    linked_by_extra,
                 )
                 .order_by(RecipeModel.name)
             )
@@ -493,8 +532,99 @@ class UploadedBooksController(BasePublicController):
             .all()
         )
 
+        # Recipes created before stable source IDs existed can only be
+        # recovered from their source text. Include only recipes that do not
+        # already belong to another stable source ID. This also handles mixed
+        # libraries where some recipes were extracted before the ID metadata
+        # was introduced and others were extracted afterwards.
+        normalized_source_prefix = (source_prefix or "").strip().lower()
+        if not normalized_source_prefix:
+            return linked_recipes
+        has_stable_source_id = RecipeModel.extras.any(
+            ApiExtras.key_name == "uploadedBookSourceId"
+        )
+        legacy_recipes = list(
+            self.session.execute(
+                select(RecipeModel)
+                .where(
+                    RecipeModel.group_id == self.group_id,
+                    RecipeModel.household_id == self.household_id,
+                    ~has_stable_source_id,
+                    sa.func.lower(sa.func.coalesce(RecipeModel.source, "")).startswith(
+                        normalized_source_prefix,
+                        autoescape=True,
+                    ),
+                )
+                .order_by(RecipeModel.name)
+            )
+            .scalars()
+            .unique()
+            .all()
+        )
+        recipes_by_id = {recipe.id: recipe for recipe in linked_recipes}
+        recipes_by_id.update({recipe.id: recipe for recipe in legacy_recipes})
+        return sorted(recipes_by_id.values(), key=lambda recipe: (recipe.name or "").casefold())
+
     def _book_recipe_models(self, book: UploadedBook) -> list[RecipeModel]:
-        return self._book_recipe_models_by_id(book.id, book.name)
+        return self._book_family_recipe_models(book)
+
+    @staticmethod
+    def _recipe_extra_value(recipe: RecipeModel, key: str) -> str | None:
+        for extra in recipe.extras:
+            if extra.key_name == key:
+                return extra.value
+        return None
+
+    @staticmethod
+    def _set_recipe_extra(recipe: RecipeModel, key: str, value: str) -> None:
+        for extra in recipe.extras:
+            if extra.key_name == key:
+                extra.value = value
+                return
+        recipe.extras.append(ApiExtras(key, value))
+
+    def _book_family(self, book: UploadedBook) -> list[UploadedBook]:
+        root_id = book.translated_from_book_id or book.id
+        return list(
+            self.session.execute(
+                select(UploadedBook).where(
+                    UploadedBook.group_id == self.group_id,
+                    sa.or_(UploadedBook.id == root_id, UploadedBook.translated_from_book_id == root_id),
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    def _book_family_recipe_models(self, book: UploadedBook) -> list[RecipeModel]:
+        variants = self._book_family(book)
+        recipes_by_id: dict[UUID4, RecipeModel] = {}
+        for variant in variants:
+            for recipe in self._book_recipe_models_by_id(variant.id, variant.name):
+                recipes_by_id[recipe.id] = recipe
+        return list(recipes_by_id.values())
+
+    def _persist_recipe_source_identity(
+        self,
+        recipes: list[RecipeModel],
+        source_id: UUID4,
+        source_name: str,
+        previous_names: set[str] | None = None,
+        original_file_name: str | None = None,
+    ) -> None:
+        normalized_name = source_name.strip()
+        old_names = {name.strip() for name in (previous_names or set()) if name.strip()}
+        for recipe in recipes:
+            self._set_recipe_extra(recipe, "uploadedBookSourceId", str(source_id))
+            self._set_recipe_extra(recipe, "uploadedBookSourceName", normalized_name)
+            if original_file_name:
+                self._set_recipe_extra(recipe, "uploadedBookOriginalFileName", original_file_name)
+            source = (recipe.source or "").strip()
+            for old_name in sorted(old_names, key=len, reverse=True):
+                if source.casefold().startswith(old_name.casefold()):
+                    recipe.source = f"{normalized_name}{source[len(old_name):]}"
+                    break
+            self.session.add(recipe)
 
     def _books_to_delete(self, book: UploadedBook) -> list[UploadedBook]:
         books_by_id = {book.id: book}
@@ -520,6 +650,7 @@ class UploadedBooksController(BasePublicController):
     def _book_delete_preview(self, book: UploadedBook) -> UploadedBookDeletePreview:
         recipes = self._book_recipe_models(book)
         recipe_ids = {str(recipe.id) for recipe in recipes}
+        family_ids = {str(item.id) for item in self._book_family(book)}
         linked_list_ids = self.session.execute(
             select(ShoppingListExtras.shopping_list_id)
             .join(ShoppingList, ShoppingList.id == ShoppingListExtras.shopping_list_id)
@@ -528,7 +659,7 @@ class UploadedBooksController(BasePublicController):
                 sa.or_(
                     sa.and_(
                         ShoppingListExtras.key_name == "aiCreatedFromUploadedBookId",
-                        ShoppingListExtras.value == str(book.id),
+                        ShoppingListExtras.value.in_(family_ids),
                     ),
                     sa.and_(
                         ShoppingListExtras.key_name == "aiCreatedFromRecipeId",
@@ -716,6 +847,55 @@ class UploadedBooksController(BasePublicController):
         self.session.delete(category)
         self.session.commit()
 
+    @router.patch("/recipe-sources/{book_id}", response_model=UploadedBookRecipeSourceOut)
+    def update_recipe_source(
+        self,
+        book_id: UUID4,
+        data: UploadedBookRecipeSourceUpdate,
+    ) -> UploadedBookRecipeSourceOut:
+        book = self._get_book(book_id)
+        if book:
+            root_id = book.translated_from_book_id or book.id
+            variants = self._book_family(book)
+            previous_names = {variant.name for variant in variants}
+            recipes = self._book_family_recipe_models(book)
+            original = next((variant for variant in variants if variant.id == root_id), book)
+            for variant in variants:
+                variant.name = (
+                    f"{data.name} ({variant.translation_language})"
+                    if variant.is_translated_book and variant.translation_language
+                    else data.name
+                )
+                self.session.add(variant)
+            self._persist_recipe_source_identity(
+                recipes,
+                root_id,
+                data.name,
+                previous_names,
+                original.original_file_name,
+            )
+        else:
+            root_id = book_id
+            recipes = self._book_recipe_models_by_id(book_id, data.previous_name)
+            if not recipes:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Uploaded cookbook recipe source was not found")
+            previous_names = {
+                value
+                for recipe in recipes
+                if (value := self._recipe_extra_value(recipe, "uploadedBookSourceName"))
+            }
+            if data.previous_name:
+                previous_names.add(data.previous_name)
+            self._persist_recipe_source_identity(recipes, root_id, data.name, previous_names)
+
+        self.session.commit()
+        return UploadedBookRecipeSourceOut(
+            id=root_id,
+            name=data.name,
+            updated_recipes=len(recipes),
+            book_exists=book is not None,
+        )
+
     @router.patch("/{book_id}", response_model=UploadedBookOut)
     def update_book(self, book_id: UUID4, data: UploadedBookUpdate) -> UploadedBookOut:
         book = self._get_book_or_404(book_id)
@@ -727,6 +907,8 @@ class UploadedBooksController(BasePublicController):
             )
         ).scalars().all()
         if data.name is not None:
+            previous_names = {variant.name for variant in variants}
+            linked_recipes = self._book_family_recipe_models(book)
             for variant in variants:
                 variant.name = (
                     f"{data.name} ({variant.translation_language})"
@@ -734,6 +916,14 @@ class UploadedBooksController(BasePublicController):
                     else data.name
                 )
                 self.session.add(variant)
+            original = next((variant for variant in variants if variant.id == root_id), book)
+            self._persist_recipe_source_identity(
+                linked_recipes,
+                root_id,
+                data.name,
+                previous_names,
+                original.original_file_name,
+            )
         if "category_id" in data.model_fields_set:
             if data.category_id is not None:
                 self._get_book_category_or_404(data.category_id)
@@ -1106,6 +1296,18 @@ class UploadedBooksController(BasePublicController):
             )
             RecipeService(self.repos, self.user, self.household, self.translator).delete_many(recipe_slugs)
 
+        if not delete_recipes:
+            family = self._book_family(book)
+            root_id = book.translated_from_book_id or book.id
+            original = next((item for item in family if item.id == root_id), book)
+            self._persist_recipe_source_identity(
+                self._book_family_recipe_models(book),
+                root_id,
+                original.name,
+                {item.name for item in family},
+                original.original_file_name,
+            )
+
         deleted_book_ids = {item.id for item in books_to_delete}
         book_dirs = [self._book_dir_path(item) for item in books_to_delete]
 
@@ -1228,9 +1430,13 @@ class UploadedBooksController(BasePublicController):
         return UploadedBookOut.model_validate(book)
 
     @router.get("/{book_id}/recipes", response_model=list[UploadedBookRecipeSummary])
-    def get_extracted_book_recipes(self, book_id: UUID4) -> list[UploadedBookRecipeSummary]:
+    def get_extracted_book_recipes(
+        self,
+        book_id: UUID4,
+        source_name: str | None = None,
+    ) -> list[UploadedBookRecipeSummary]:
         book = self._get_book(book_id)
-        recipes = self._book_recipe_models(book) if book else self._book_recipe_models_by_id(book_id)
+        recipes = self._book_recipe_models(book) if book else self._book_recipe_models_by_id(book_id, source_name)
         return [UploadedBookRecipeSummary.model_validate(recipe) for recipe in recipes]
 
     @router.post("/{book_id}/recipes/delete", response_model=UploadedBookRecipeDeleteResponse)
@@ -1242,10 +1448,17 @@ class UploadedBooksController(BasePublicController):
         book = self._get_book(book_id)
         if book:
             self._assert_book_not_processing(book)
+        book_recipes = (
+            self._book_recipe_models(book)
+            if book
+            else self._book_recipe_models_by_id(book_id, payload.source_name)
+        )
         requested_ids = set(payload.recipe_ids)
-        book_recipes = self._book_recipe_models(book) if book else self._book_recipe_models_by_id(book_id)
-        selected_recipes = [recipe for recipe in book_recipes if recipe.id in requested_ids]
-        skipped_count = len(requested_ids) - len(selected_recipes)
+        selected_recipes = book_recipes if payload.delete_all else [
+            recipe for recipe in book_recipes if recipe.id in requested_ids
+        ]
+        skipped_count = 0 if payload.delete_all else len(requested_ids) - len(selected_recipes)
+        selected_recipe_uuid_ids = [recipe.id for recipe in selected_recipes]
         selected_recipe_ids = {str(recipe.id) for recipe in selected_recipes}
 
         shopping_service = None
@@ -1257,15 +1470,8 @@ class UploadedBooksController(BasePublicController):
                 .join(ShoppingList, ShoppingList.id == ShoppingListExtras.shopping_list_id)
                 .where(
                     ShoppingList.group_id == self.group_id,
-                    ShoppingListExtras.key_name == "aiCreatedFromUploadedBookId",
-                    ShoppingListExtras.value == str(book_id),
-                    sa.exists(
-                        select(ShoppingListExtras.id).where(
-                            ShoppingListExtras.shopping_list_id == ShoppingList.id,
-                            ShoppingListExtras.key_name == "aiCreatedFromRecipeId",
-                            ShoppingListExtras.value.in_(selected_recipe_ids),
-                        )
-                    ),
+                    ShoppingListExtras.key_name == "aiCreatedFromRecipeId",
+                    ShoppingListExtras.value.in_(selected_recipe_ids),
                 )
                 .distinct()
             ).scalars().all()
@@ -1282,8 +1488,9 @@ class UploadedBooksController(BasePublicController):
         if payload.delete_recipes:
             remaining_count = max(0, len(book_recipes) - len(selected_recipes))
             if book:
-                book.extraction_recipes_created = remaining_count
-                self.session.add(book)
+                for variant in self._book_family(book):
+                    variant.extraction_recipes_created = remaining_count
+                    self.session.add(variant)
                 self.session.commit()
 
         return UploadedBookRecipeDeleteResponse(
@@ -1291,7 +1498,7 @@ class UploadedBooksController(BasePublicController):
             deleted_shopping_list_count=len(deleted_shopping_lists),
             remaining_count=remaining_count,
             skipped_count=skipped_count,
-            deleted_recipe_ids=[recipe.id for recipe in selected_recipes] if payload.delete_recipes else [],
+            deleted_recipe_ids=selected_recipe_uuid_ids if payload.delete_recipes else [],
             deleted_shopping_list_ids=[shopping_list.id for shopping_list in deleted_shopping_lists],
         )
 

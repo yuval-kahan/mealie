@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import UUID4, ConfigDict, Field
 
@@ -55,6 +56,8 @@ class ArticleBrowserPageRequest(ArticleAIRequest):
     source_url: str | None = Field(None, max_length=2000)
     source_title: str | None = Field(None, max_length=255)
     image_url: str | None = Field(None, max_length=4000)
+    recipe_section: Literal["recipes", "sauce"] = "recipes"
+    recipe_group_category_id: UUID4 | None = None
 
 
 class ArticleBrowserPageResponse(MealieModel):

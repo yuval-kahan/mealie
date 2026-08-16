@@ -33,6 +33,21 @@
       @deleted="handleBookRecipesDeleted"
     />
     <BaseDialog
+      v-model="recipeCategoryDeleteDialog"
+      :title="$t('recipe.delete-recipe-category')"
+      :icon="$globals.icons.delete"
+      color="error"
+      :loading="recipeCategoryDeleteLoading"
+      :submit-text="$t('general.delete')"
+      :submit-icon="$globals.icons.delete"
+      can-submit
+      @submit="deleteRecipeCategory"
+    >
+      <v-card-text>
+        <p>{{ $t("recipe.delete-recipe-category-description", { category: recipeCategoryDeleteTarget?.name || "" }) }}</p>
+      </v-card-text>
+    </BaseDialog>
+    <BaseDialog
       v-model="bulkDeleteDialog"
       :title="$t('recipe.delete-selected-recipes', { count: selectedRecipeSlugs.size })"
       color="error"
@@ -300,13 +315,12 @@
             </button>
             <div v-if="group.bookId" class="recipe-book-group-actions">
               <v-btn
-                v-if="uploadedBookById(group.bookId)"
                 icon
                 size="small"
                 variant="text"
                 :title="$t('cookbook.rename-book')"
                 :aria-label="$t('cookbook.rename-book')"
-                @click="openBookRenameDialog(group.bookId)"
+                @click="openBookRenameDialog(group.bookId, group.sourceName || group.title)"
               >
                 <v-icon>{{ $globals.icons.edit }}</v-icon>
               </v-btn>
@@ -317,7 +331,7 @@
                 color="warning"
                 :title="$t('cookbook.delete-book-recipes')"
                 :aria-label="$t('cookbook.delete-book-recipes')"
-                @click="openBookRecipeDeleteDialog(group.bookId, group.title)"
+                @click="openBookRecipeDeleteDialog(group.bookId, group.sourceName || group.title)"
               >
                 <v-icon>{{ $globals.icons.broom }}</v-icon>
               </v-btn>
@@ -332,6 +346,17 @@
                 @click="openRecipeCategoryEditDialog(group.categoryId)"
               >
                 <v-icon>{{ $globals.icons.edit }}</v-icon>
+              </v-btn>
+              <v-btn
+                icon
+                size="small"
+                variant="text"
+                color="error"
+                :title="$t('recipe.delete-recipe-category')"
+                :aria-label="$t('recipe.delete-recipe-category')"
+                @click="openRecipeCategoryDeleteDialog(group.categoryId)"
+              >
+                <v-icon>{{ $globals.icons.delete }}</v-icon>
               </v-btn>
             </div>
           </div>
@@ -436,11 +461,11 @@ import RecipeCard from "./RecipeCard.vue";
 import RecipeCardMobile from "./RecipeCardMobile.vue";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import { useLazyRecipes } from "~/composables/recipes";
-import type { Recipe } from "~/lib/api/types/recipe";
+import type { Recipe, RecipeCategory } from "~/lib/api/types/recipe";
 import { useUserExperiencePreferences, useUserSortPreferences } from "~/composables/use-users/preferences";
 import type { RecipeSearchQuery } from "~/lib/api/user/recipes/recipe";
 import { useUserApi } from "~/composables/api/api-client";
-import type { UploadedBook } from "~/lib/api/types/uploaded-book";
+import type { UploadedBook, UploadedBookRecipeSource } from "~/lib/api/types/uploaded-book";
 import { usePersistedListPageSize } from "~/composables/use-list-pagination";
 import { alert } from "~/composables/use-toast";
 import { useCategoryStore } from "~/composables/store/use-category-store";
@@ -498,6 +523,7 @@ const { isOwnGroup, groupSlug } = useLoggedInState();
 const i18n = useI18n();
 const api = useUserApi();
 const categoryStore = useCategoryStore();
+const recipeLocationCategories = ref<RecipeCategory[]>([]);
 const uploadedBooks = ref<UploadedBook[]>([]);
 const expandedRecipeGroups = ref<Set<string>>(new Set());
 const aiCookbookRoute = computed(() => `/g/${groupSlug.value}/cookbooks?generate=true`);
@@ -521,8 +547,11 @@ const recipeCategoryEditTarget = ref<{
   recipeGroupSection?: string | null;
   parentCategoryId?: string | null;
 } | null>(null);
+const recipeCategoryDeleteDialog = ref(false);
+const recipeCategoryDeleteLoading = ref(false);
+const recipeCategoryDeleteTarget = ref<{ id: string; name: string } | null>(null);
 const bookRenameDialog = ref(false);
-const bookRenameTarget = ref<UploadedBook | null>(null);
+const bookRenameTarget = ref<{ id: string; name: string } | null>(null);
 const bookRecipeDeleteDialog = ref(false);
 const bookRecipeDeleteTarget = ref<{ id: string; name: string } | null>(null);
 const bulkDeleteMode = ref(false);
@@ -545,10 +574,11 @@ interface RecipeDisplayGroup {
   bookId: string | null;
   categoryId: string | null;
   title: string;
+  sourceName: string | null;
   recipes: Recipe[];
 }
 
-const recipeGroupCategories = computed(() => categoryStore.store.value.filter(category => category.isRecipeGroup
+const recipeGroupCategories = computed(() => recipeLocationCategories.value.filter(category => category.isRecipeGroup
   && (category.recipeGroupSection || "recipes") === props.section));
 const recipeGroupCategoryNames = computed(() => new Map(recipeGroupCategories.value
   .filter(category => category.id)
@@ -556,7 +586,7 @@ const recipeGroupCategoryNames = computed(() => new Map(recipeGroupCategories.va
 
 const recipeGroups = computed<RecipeDisplayGroup[]>(() => {
   if (!props.groupByBook && !props.groupByCategory) {
-    return [{ key: "all", bookId: null, categoryId: null, title: props.title || "", recipes: props.recipes }];
+    return [{ key: "all", bookId: null, categoryId: null, title: props.title || "", sourceName: null, recipes: props.recipes }];
   }
 
   if (props.groupByCategory && recipeGroupCategories.value.length) {
@@ -569,6 +599,7 @@ const recipeGroups = computed<RecipeDisplayGroup[]>(() => {
           ? `${recipeGroupCategoryNames.value.get(category.parentCategoryId) || i18n.t("recipe.recipe-category")} / ${category.name}`
           : category.name,
       }),
+      sourceName: null,
       recipes: [] as Recipe[],
     })).sort((left, right) => left.title.localeCompare(right.title));
     const groupsById = new Map(groups.filter(group => group.categoryId).map(group => [group.categoryId!, group]));
@@ -592,6 +623,7 @@ const recipeGroups = computed<RecipeDisplayGroup[]>(() => {
         bookId: null,
         categoryId: null,
         title: i18n.t("recipe.recipes-without-custom-category"),
+        sourceName: null,
         recipes: ungrouped,
       });
     }
@@ -599,7 +631,7 @@ const recipeGroups = computed<RecipeDisplayGroup[]>(() => {
   }
 
   if (!props.groupByBook) {
-    return [{ key: "all", bookId: null, categoryId: null, title: props.title || "", recipes: props.recipes }];
+    return [{ key: "all", bookId: null, categoryId: null, title: props.title || "", sourceName: null, recipes: props.recipes }];
   }
 
   const bookNames = new Map(uploadedBooks.value.map(book => [book.id, book.name]));
@@ -615,13 +647,18 @@ const recipeGroups = computed<RecipeDisplayGroup[]>(() => {
     }
     let group = groups.get(bookId);
     if (!group) {
+      const storedSourceName = typeof recipe.extras?.uploadedBookSourceName === "string"
+        ? recipe.extras.uploadedBookSourceName.trim()
+        : "";
+      const sourceName = storedSourceName || bookNames.get(bookId) || recipe.source?.split(/,\s*(?:pages?|עמ(?:וד|ודים)?)/i)[0]?.trim() || i18n.t("cookbook.cookbook");
       group = {
         key: `book:${bookId}`,
         bookId,
         categoryId: null,
         title: i18n.t("recipe.recipes-from-book", {
-          book: bookNames.get(bookId) || i18n.t("cookbook.cookbook"),
+          book: sourceName,
         }),
+        sourceName,
         recipes: [],
       };
       groups.set(bookId, group);
@@ -636,6 +673,7 @@ const recipeGroups = computed<RecipeDisplayGroup[]>(() => {
       bookId: null,
       categoryId: null,
       title: i18n.t("recipe.recipes-not-from-book"),
+      sourceName: null,
       recipes: unlinked,
     });
   }
@@ -750,7 +788,7 @@ onMounted(async () => {
     void loadUploadedBooks();
   }
   if (isOwnGroup.value && props.groupByCategory) {
-    await categoryStore.actions.refresh();
+    await loadRecipeGroupCategories();
   }
   loading.value = true;
   try {
@@ -765,6 +803,16 @@ onMounted(async () => {
     loading.value = false;
   }
 });
+
+async function loadRecipeGroupCategories() {
+  const { data, error } = await api.categories.getRecipeGroups();
+  if (!error && data) {
+    recipeLocationCategories.value = data;
+    return;
+  }
+  await categoryStore.actions.refresh();
+  recipeLocationCategories.value = [...categoryStore.store.value];
+}
 
 async function loadUploadedBooks() {
   try {
@@ -802,7 +850,7 @@ function groupIcon(group: RecipeDisplayGroup) {
 }
 
 async function handleRecipeCategoryCreated() {
-  await categoryStore.actions.refresh();
+  await loadRecipeGroupCategories();
   window.dispatchEvent(new CustomEvent("mealie:organizers-updated"));
 }
 
@@ -811,9 +859,38 @@ function openRecipeCategoryEditDialog(categoryId: string) {
   recipeCategoryEditDialog.value = Boolean(recipeCategoryEditTarget.value);
 }
 
+function openRecipeCategoryDeleteDialog(categoryId: string) {
+  const category = recipeGroupCategories.value.find(item => item.id === categoryId);
+  if (!category?.id) return;
+  recipeCategoryDeleteTarget.value = { id: category.id, name: category.name };
+  recipeCategoryDeleteDialog.value = true;
+}
+
+async function deleteRecipeCategory() {
+  const target = recipeCategoryDeleteTarget.value;
+  if (!target || recipeCategoryDeleteLoading.value) return;
+  recipeCategoryDeleteLoading.value = true;
+  try {
+    const { error } = await api.categories.deleteOne(target.id);
+    if (error) {
+      alert.error(i18n.t("recipe.delete-recipe-category-failed"));
+      return;
+    }
+    recipeCategoryDeleteDialog.value = false;
+    recipeCategoryDeleteTarget.value = null;
+    await loadRecipeGroupCategories();
+    window.dispatchEvent(new CustomEvent("mealie:organizers-updated"));
+    await loadRecipePage();
+    alert.success(i18n.t("recipe.delete-recipe-category-success"));
+  }
+  finally {
+    recipeCategoryDeleteLoading.value = false;
+  }
+}
+
 async function handleRecipeCategoryEdited() {
   recipeCategoryEditTarget.value = null;
-  await categoryStore.actions.refresh();
+  await loadRecipeGroupCategories();
   window.dispatchEvent(new CustomEvent("mealie:organizers-updated"));
 }
 
@@ -821,9 +898,10 @@ function uploadedBookById(bookId: string) {
   return uploadedBooks.value.find(book => book.id === bookId) || null;
 }
 
-function openBookRenameDialog(bookId: string) {
-  bookRenameTarget.value = uploadedBookById(bookId);
-  bookRenameDialog.value = Boolean(bookRenameTarget.value);
+function openBookRenameDialog(bookId: string, sourceName: string) {
+  const book = uploadedBookById(bookId);
+  bookRenameTarget.value = book || { id: bookId, name: sourceName };
+  bookRenameDialog.value = true;
 }
 
 function openBookRecipeDeleteDialog(bookId: string, fallbackName: string) {
@@ -831,10 +909,11 @@ function openBookRecipeDeleteDialog(bookId: string, fallbackName: string) {
   bookRecipeDeleteDialog.value = true;
 }
 
-function handleBookRenamed(book: UploadedBook) {
+function handleBookRenamed(book: UploadedBookRecipeSource) {
   const index = uploadedBooks.value.findIndex(item => item.id === book.id);
-  if (index >= 0) uploadedBooks.value[index] = book;
+  if (index >= 0) uploadedBooks.value[index].name = book.name;
   bookRenameTarget.value = null;
+  void loadRecipePage();
 }
 
 async function handleBookRecipesDeleted(bookId: string, _deletedCount: number, remainingCount: number) {

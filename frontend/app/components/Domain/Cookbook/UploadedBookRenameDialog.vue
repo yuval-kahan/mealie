@@ -26,19 +26,19 @@
 </template>
 
 <script setup lang="ts">
-import type { UploadedBook } from "~/lib/api/types/uploaded-book";
+import type { UploadedBookRecipeSource } from "~/lib/api/types/uploaded-book";
 import { useUserApi } from "~/composables/api/api-client";
 import { alert } from "~/composables/use-toast";
 
 interface Props {
   modelValue: boolean;
-  book: UploadedBook | null;
+  book: { id: string; name: string } | null;
 }
 
 const props = defineProps<Props>();
 const emit = defineEmits<{
   "update:modelValue": [value: boolean];
-  "renamed": [book: UploadedBook];
+  "renamed": [book: UploadedBookRecipeSource];
 }>();
 
 const api = useUserApi();
@@ -63,7 +63,11 @@ async function save() {
   if (!props.book || !normalizedName.value || normalizedName.value === props.book.name || saving.value) return;
   saving.value = true;
   try {
-    const { data, error } = await api.uploadedBooks.rename(props.book.id, normalizedName.value);
+    const { data, error } = await api.uploadedBooks.renameRecipeSource(
+      props.book.id,
+      normalizedName.value,
+      props.book.name,
+    );
     if (error || !data) {
       alert.error(i18n.t("cookbook.rename-book-failed"));
       return;
