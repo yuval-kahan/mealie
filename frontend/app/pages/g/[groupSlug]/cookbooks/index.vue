@@ -256,15 +256,46 @@
         <p v-if="bookCategoryAssignmentTarget" class="font-weight-medium mb-4">
           {{ bookCategoryAssignmentTarget.name }}
         </p>
-        <v-select
-          v-model="bookCategoryAssignmentId"
-          :items="bookCategoryOptions"
-          item-title="title"
-          item-value="value"
-          :menu-props="{ location: 'bottom', zIndex: 3000, maxHeight: 320, attach: 'body' }"
-          variant="outlined"
-          :label="$t('cookbook.book-category')"
-        />
+        <div class="book-category-picker">
+          <label class="book-category-picker__label" for="book-category-assignment-select">
+            {{ $t("cookbook.book-category") }}
+          </label>
+          <button
+            id="book-category-assignment-select"
+            type="button"
+            class="book-category-picker__trigger"
+            :aria-expanded="bookCategoryAssignmentMenuOpen"
+            aria-haspopup="listbox"
+            @click="bookCategoryAssignmentMenuOpen = !bookCategoryAssignmentMenuOpen"
+          >
+            <span class="book-category-picker__value">
+              {{ selectedBookCategoryAssignmentTitle || $t("cookbook.book-category") }}
+            </span>
+            <v-icon
+              :icon="bookCategoryAssignmentMenuOpen ? $globals.icons.chevronDown : $globals.icons.chevronRight"
+              size="20"
+            />
+          </button>
+          <div
+            v-if="bookCategoryAssignmentMenuOpen"
+            class="book-category-picker__menu"
+            role="listbox"
+            :aria-label="$t('cookbook.book-category')"
+          >
+            <button
+              v-for="option in bookCategoryOptions"
+              :key="option.value"
+              type="button"
+              class="book-category-picker__option"
+              :class="{ 'book-category-picker__option--selected': option.value === bookCategoryAssignmentId }"
+              role="option"
+              :aria-selected="option.value === bookCategoryAssignmentId"
+              @click="selectBookCategoryAssignment(option.value)"
+            >
+              {{ option.title }}
+            </button>
+          </div>
+        </div>
       </v-card-text>
     </BaseDialog>
 
@@ -1750,6 +1781,7 @@ const bookCategoryAssignmentDialog = ref(false);
 const bookCategoryAssigning = ref(false);
 const bookCategoryAssignmentTarget = ref<UploadedBook | null>(null);
 const bookCategoryAssignmentId = ref<string | null>(null);
+const bookCategoryAssignmentMenuOpen = ref(false);
 const uploadedBookDeleteDialog = ref(false);
 const bookCoverDialog = ref(false);
 const bookCoverSaving = ref(false);
@@ -1939,6 +1971,10 @@ const bookCategoryOptions = computed(() => {
       value: category.id,
     };
   });
+});
+
+const selectedBookCategoryAssignmentTitle = computed(() => {
+  return bookCategoryOptions.value.find(option => option.value === bookCategoryAssignmentId.value)?.title || "";
 });
 const bookCategoryFilterOptions = computed(() => [
   { title: i18n.t("cookbook.all-book-categories"), value: "all" },
@@ -2398,7 +2434,13 @@ function openBookCategoryAssignment(book: UploadedBook) {
   bookCategoryAssignmentId.value = bookCategoryId(book)
     || uploadedBookCategories.value.find(category => category.isProtected)?.id
     || null;
+  bookCategoryAssignmentMenuOpen.value = false;
   bookCategoryAssignmentDialog.value = true;
+}
+
+function selectBookCategoryAssignment(categoryId: string) {
+  bookCategoryAssignmentId.value = categoryId;
+  bookCategoryAssignmentMenuOpen.value = false;
 }
 
 async function assignBookCategory() {
@@ -2968,6 +3010,85 @@ onBeforeUnmount(() => {
 
 .book-category-manager__row--child {
   padding-inline-start: 28px;
+}
+
+.book-category-picker {
+  position: relative;
+}
+
+.book-category-picker__label {
+  background: rgb(var(--v-theme-surface));
+  color: rgba(var(--v-theme-on-surface), 0.72);
+  display: inline-block;
+  font-size: 0.75rem;
+  inset-inline-start: 12px;
+  padding-inline: 4px;
+  position: absolute;
+  top: -7px;
+  z-index: 1;
+}
+
+.book-category-picker__trigger {
+  align-items: center;
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 4px;
+  color: rgb(var(--v-theme-on-surface));
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 8px;
+  justify-content: space-between;
+  min-height: 56px;
+  padding: 10px 14px;
+  text-align: start;
+  width: 100%;
+}
+
+.book-category-picker__trigger:hover,
+.book-category-picker__trigger:focus-visible {
+  border-color: rgb(var(--v-theme-primary));
+  outline: 2px solid rgba(var(--v-theme-primary), 0.2);
+  outline-offset: 1px;
+}
+
+.book-category-picker__value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.book-category-picker__menu {
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 4px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+  display: grid;
+  margin-top: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px 0;
+  position: relative;
+  z-index: 10;
+}
+
+.book-category-picker__option {
+  background: transparent;
+  border: 0;
+  color: rgb(var(--v-theme-on-surface));
+  cursor: pointer;
+  font: inherit;
+  min-height: 44px;
+  padding: 9px 14px;
+  text-align: start;
+  width: 100%;
+}
+
+.book-category-picker__option:hover,
+.book-category-picker__option:focus-visible,
+.book-category-picker__option--selected {
+  background: rgba(var(--v-theme-primary), 0.12);
+  color: rgb(var(--v-theme-primary));
+  outline: none;
 }
 
 .cookbook-library {
