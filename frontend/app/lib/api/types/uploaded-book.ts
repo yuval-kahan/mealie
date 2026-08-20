@@ -16,6 +16,7 @@ export interface UploadedBook {
     volume_number?: number;
     volume_count?: number;
     included_recipe_slugs?: string[];
+    recipe_catalog_candidates?: UploadedBookRecipeCandidate[];
     generation_config?: AICookbookGenerateRequest;
     classification?: UploadedBookClassification;
     translation_audit?: UploadedBookTranslationAudit;
@@ -102,6 +103,7 @@ export interface UploadedBookRecipeCatalogRequest {
   query?: string;
   targetLanguage?: string;
   refresh?: boolean;
+  internetOnly?: boolean;
 }
 
 export interface UploadedBookRecipeCandidate {
@@ -109,8 +111,10 @@ export interface UploadedBookRecipeCandidate {
   title: string;
   sourceTitle: string;
   chapter?: string | null;
-  pageStart: number;
-  pageEnd: number;
+  source?: "book" | "internet";
+  sourceUrl?: string | null;
+  pageStart?: number | null;
+  pageEnd?: number | null;
   reason?: string | null;
   importedRecipeSlug?: string | null;
 }
@@ -118,7 +122,7 @@ export interface UploadedBookRecipeCandidate {
 export interface UploadedBookRecipeCatalog {
   bookId: string;
   query: string;
-  source: "contents" | "headings" | "full_text" | "hybrid";
+  source: "contents" | "headings" | "full_text" | "hybrid" | "internet";
   candidates: UploadedBookRecipeCandidate[];
   generatedAt?: string | null;
   usedAi: boolean;

@@ -250,6 +250,7 @@ const providerPresets: ProviderPreset[] = [
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/",
     hint: "Uses Google's OpenAI-compatible Gemini endpoint with a Gemini API key.",
     models: [
+      { title: "Gemini 3.7 Flash - חדש ומומלץ (חינם במכסה + בתשלום: $0.75 קלט / $3.75 פלט)", value: "gemini-3.7-flash" },
       { title: "Gemini 3.5 Flash - חינם + בתשלום ($1.50 קלט / $9 פלט) - מומלץ", value: "gemini-3.5-flash" },
       { title: "Gemini Flash Latest - חינם + בתשלום (המודל Flash הנוכחי)", value: "gemini-flash-latest" },
       { title: "Gemini 3.1 Pro Preview - בתשלום בלבד ($2 קלט / $12 פלט)", value: "gemini-3.1-pro-preview" },

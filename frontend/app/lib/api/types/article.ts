@@ -31,6 +31,7 @@ export interface ArticleAIRequest {
   text?: string | null;
   url?: string | null;
   translateLanguage?: string | null;
+  categoryAssignmentMode?: "auto" | "manual";
   createRecipeIfPresent?: boolean;
   createShoppingList?: boolean;
   organizeShoppingListWithAi?: boolean;

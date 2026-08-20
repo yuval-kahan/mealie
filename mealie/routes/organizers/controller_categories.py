@@ -1,6 +1,6 @@
 from functools import cached_property
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from humps.main import camelize
 from pydantic import UUID4, ConfigDict, field_validator
 from slugify import slugify
@@ -138,16 +138,37 @@ class RecipeCategoryController(BaseCrudController):
     def update_one(self, item_id: UUID4, update_data: CategoryIn):
         """Updates an existing Tag in the database"""
         self.checks.can_organize()
+        current = self.mixins.get_one(item_id)
+        category_name = update_data.name.strip()
+        if not category_name:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Category name cannot be empty")
+
+        update_data.name = category_name
         if "is_recipe_group" not in update_data.model_fields_set:
-            current = self.mixins.get_one(item_id)
             update_data.is_recipe_group = bool(current.is_recipe_group)
-        else:
-            current = self.mixins.get_one(item_id)
         if "recipe_group_section" not in update_data.model_fields_set:
             update_data.recipe_group_section = current.recipe_group_section or "recipes"
         if "parent_category_id" not in update_data.model_fields_set:
             update_data.parent_category_id = current.parent_category_id
+
+        # Category slugs are unique per group. A rename must go through the
+        # same collision-safe slug allocation as category creation, otherwise
+        # renaming one category to an existing slug fails with a generic 400.
+        existing_categories = self.repos.categories.get_all()
+        used_slugs = {
+            existing_category.slug
+            for existing_category in existing_categories
+            if existing_category.id != current.id and existing_category.slug
+        }
+        base_slug = slugify(category_name) or "category"
+        unique_slug = base_slug
+        suffix = 2
+        while unique_slug in used_slugs:
+            unique_slug = f"{base_slug}-{suffix}"
+            suffix += 1
+
         save_data = mapper.cast(update_data, CategorySave, group_id=self.group_id)
+        save_data.slug = unique_slug
         category = self.mixins.update_one(save_data, item_id)
 
         if category:

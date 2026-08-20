@@ -11,6 +11,7 @@
   "settings": {
     "mealie-url": "Mealie address",
     "extract-mode": "What to extract",
+    "category-assignment-mode": "Category assignment",
     "recipe-category": "Recipe category / subcategory",
     "no-recipe-category": "No custom category",
     "interface-language": "Interface language",
@@ -29,6 +30,10 @@
     "recipe": "Extract recipe",
     "sauce": "Extract sauce only",
     "article": "Extract article"
+  },
+  "category-assignment": {
+    "auto": "Automatic (AI)",
+    "manual": "Manual (uncategorized)"
   },
   "options": {
     "create-shopping-list": "Also create an automatic shopping list",

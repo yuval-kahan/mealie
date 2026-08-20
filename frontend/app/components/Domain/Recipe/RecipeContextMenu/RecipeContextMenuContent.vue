@@ -128,17 +128,44 @@
         hide-details
       />
       <v-divider class="my-4" />
-      <v-select
-        v-model="selectedRecipeGroupIds"
-        :items="recipeGroupLocationOptions"
-        :label="$t('recipe.recipe-categories-and-subcategories')"
-        multiple
-        chips
-        clearable
-        closable-chips
+      <v-text-field
+        v-model="recipeGroupLocationSearch"
+        class="mb-3"
         density="compact"
         variant="outlined"
+        hide-details
+        clearable
+        :prepend-inner-icon="$globals.icons.search"
+        :label="$t('search.search')"
       />
+      <div class="recipe-group-location-picker">
+        <v-chip-group v-if="selectedRecipeGroupLocationOptions.length" class="mb-2" column>
+          <v-chip
+            v-for="option in selectedRecipeGroupLocationOptions"
+            :key="option.value"
+            closable
+            size="small"
+            @click:close="removeRecipeGroupId(option.value)"
+          >
+            {{ option.title }}
+          </v-chip>
+        </v-chip-group>
+        <div class="recipe-group-location-results" role="listbox" :aria-label="$t('recipe.recipe-categories-and-subcategories')">
+          <v-checkbox
+            v-for="option in filteredRecipeGroupLocationOptions"
+            :key="option.value"
+            v-model="selectedRecipeGroupIds"
+            class="recipe-group-location-option"
+            :value="option.value"
+            :label="option.title"
+            density="compact"
+            hide-details
+          />
+          <p v-if="!filteredRecipeGroupLocationOptions.length" class="recipe-group-location-empty text-medium-emphasis">
+            {{ $t("search.no-results") }}
+          </p>
+        </div>
+      </div>
       <v-checkbox
         v-model="keepExistingRecipeGroups"
         :label="$t('recipe.keep-existing-recipe-locations')"
@@ -371,6 +398,7 @@ import type { RecipeDeletePreview } from "~/lib/api/user/recipes/recipe";
 import type { PlanEntryType } from "~/lib/api/types/meal-plan";
 import { useDownloader } from "~/composables/api/use-downloader";
 import { useCategoryStore } from "~/composables/store/use-category-store";
+import { normalizeFilter } from "~/composables/use-utils";
 
 export interface ContextMenuIncludes {
   delete: boolean;
@@ -495,9 +523,32 @@ const recipeRenameDialog = ref(false);
 const recipeSectionDialog = ref(false);
 const selectedRecipeSections = ref<Array<"recipes" | "book" | "sauce">>([]);
 const selectedRecipeGroupIds = ref<string[]>([]);
+const initialRecipeGroupIds = ref<string[]>([]);
+const recipeGroupLocationSearch = ref("");
 const recipeLocationCategories = ref<RecipeCategory[]>([]);
-const keepExistingRecipeGroups = ref(true);
+const keepExistingRecipeGroups = ref(false);
 const recipeSectionLoading = ref(false);
+const KEEP_EXISTING_RECIPE_GROUPS_STORAGE_KEY = "mealie.recipe.keep-existing-recipe-groups";
+
+function loadKeepExistingRecipeGroupsPreference() {
+  if (!import.meta.client) return false;
+  try {
+    return window.localStorage.getItem(KEEP_EXISTING_RECIPE_GROUPS_STORAGE_KEY) === "true";
+  }
+  catch {
+    return false;
+  }
+}
+
+function saveKeepExistingRecipeGroupsPreference(value: boolean) {
+  if (!import.meta.client) return;
+  try {
+    window.localStorage.setItem(KEEP_EXISTING_RECIPE_GROUPS_STORAGE_KEY, String(value));
+  }
+  catch {
+    // Ignore storage restrictions; the transfer itself should still succeed.
+  }
+}
 const aiEditDialog = ref(false);
 const aiEditInstruction = ref("");
 const aiEditDraft = ref<Recipe | null>(null);
@@ -552,6 +603,18 @@ function recipeSectionLabel(section: RecipeLibrarySection) {
   return i18n.t("recipe.section-recipes");
 }
 
+const RECIPE_UNCATEGORIZED_PREFIX = "__mealie_recipe_uncategorized__:";
+type RecipeLocationOption = {
+  title: string;
+  value: string;
+  section: RecipeLibrarySection;
+  isUncategorized?: boolean;
+};
+
+function recipeUncategorizedValue(section: RecipeLibrarySection) {
+  return `${RECIPE_UNCATEGORIZED_PREFIX}${section}`;
+}
+
 const availableRecipeLocationCategories = computed(() => {
   return recipeLocationCategories.value.length
     ? recipeLocationCategories.value
@@ -573,24 +636,76 @@ function recipeGroupPath(category: RecipeCategory, groupsById: Map<string, Recip
 }
 
 const recipeGroupLocationOptions = computed(() => {
-  const groups = availableRecipeLocationCategories.value.filter(category => category.isRecipeGroup && category.id);
+  const categoriesById = new Map<string, RecipeCategory>();
+  for (const category of [
+    ...availableRecipeLocationCategories.value,
+    ...(recipeRef.value?.recipeCategory || []),
+  ]) {
+    if (category.id && category.isRecipeGroup) categoriesById.set(category.id, category);
+  }
+  const groups = [...categoriesById.values()];
   const groupsById = new Map(groups.map(category => [category.id!, category]));
-  return groups
+  const groupOptions: RecipeLocationOption[] = groups
     .map((category) => {
-      const section = recipeSectionLabel(recipeGroupSection(category));
+      const section = recipeGroupSection(category);
       return {
-        title: `${section}: ${recipeGroupPath(category, groupsById)}`,
+        title: `${recipeSectionLabel(section)}: ${recipeGroupPath(category, groupsById)}`,
         value: category.id!,
+        section,
       };
-    })
+    });
+  const uncategorizedOptions: RecipeLocationOption[] = (["recipes", "book", "sauce"] as const).map(section => ({
+    title: `${recipeSectionLabel(section)}: ${i18n.t("recipe.no-category")}`,
+    value: recipeUncategorizedValue(section),
+    section,
+    isUncategorized: true,
+  }));
+  return [...uncategorizedOptions, ...groupOptions]
     .sort((left, right) => left.title.localeCompare(right.title, i18n.locale.value));
 });
 
+const filteredRecipeGroupLocationOptions = computed(() => {
+  const query = recipeGroupLocationSearch.value.trim();
+  return recipeGroupLocationOptions.value.filter((option) => {
+    if (!selectedRecipeSections.value.includes(option.section)) return false;
+    return !query || normalizeFilter(option.title, query);
+  });
+});
+
+const selectedRecipeGroupLocationOptions = computed(() => {
+  const selectedIds = new Set(selectedRecipeGroupIds.value);
+  return recipeGroupLocationOptions.value.filter(
+    option => selectedIds.has(option.value) && selectedRecipeSections.value.includes(option.section),
+  );
+});
+
+function removeRecipeGroupId(id: string) {
+  selectedRecipeGroupIds.value = selectedRecipeGroupIds.value.filter(selectedId => selectedId !== id);
+}
+
+function haveSameValues(left: string[], right: string[]) {
+  return left.length === right.length && left.every(value => right.includes(value));
+}
+
 watch(selectedRecipeGroupIds, (ids) => {
-  const requiredSections = availableRecipeLocationCategories.value
-    .filter(category => ids.includes(category.id || ""))
-    .map(recipeGroupSection);
-  selectedRecipeSections.value = [...new Set([...selectedRecipeSections.value, ...requiredSections])];
+  const requiredSections = recipeGroupLocationOptions.value
+    .filter(option => ids.includes(option.value))
+    .map(option => option.section);
+  const nextSections = [...new Set([...selectedRecipeSections.value, ...requiredSections])];
+  if (!haveSameValues(selectedRecipeSections.value, nextSections)) {
+    selectedRecipeSections.value = nextSections;
+  }
+});
+
+watch(selectedRecipeSections, (sections) => {
+  const visibleSections = new Set(sections);
+  const nextGroupIds = selectedRecipeGroupIds.value.filter((id) => {
+    const option = recipeGroupLocationOptions.value.find(item => item.value === id);
+    return option ? visibleSections.has(option.section) : false;
+  });
+  if (!haveSameValues(selectedRecipeGroupIds.value, nextGroupIds)) {
+    selectedRecipeGroupIds.value = nextGroupIds;
+  }
 });
 
 const route = useRoute();
@@ -956,15 +1071,46 @@ async function moveRecipeToSection() {
   if (recipeSectionLoading.value) return;
   recipeSectionLoading.value = true;
   try {
-    if (!recipeRef.value) await refreshRecipe();
+    // Cards contain a summary that can be stale. Always submit from a fresh
+    // recipe so an older category list cannot overwrite the user's choice.
+    await refreshRecipe();
     if (!recipeRef.value) {
       alert.error(i18n.t("events.something-went-wrong"));
       return;
     }
 
-    const selectedGroups = availableRecipeLocationCategories.value.filter(category => selectedRecipeGroupIds.value.includes(category.id || ""));
+    // The checked locations are the final selection. When the keep-existing
+    // option is off, this replaces all previous recipe groups; when it is on,
+    // the previous groups are preserved in addition to the new selection.
+    const selectedLocationIds = [...new Set(selectedRecipeGroupIds.value.filter(Boolean))];
+    const selectedLocationOptions = recipeGroupLocationOptions.value.filter(option => selectedLocationIds.includes(option.value));
+    const selectedActualGroupIds = selectedLocationOptions
+      .filter(option => !option.isUncategorized)
+      .map(option => option.value);
+    const initialGroupIds = new Set(initialRecipeGroupIds.value);
+    const targetGroupIds = keepExistingRecipeGroups.value
+      ? [...new Set([...initialRecipeGroupIds.value, ...selectedActualGroupIds])]
+      : [];
+    if (!keepExistingRecipeGroups.value) {
+      const selectedSections = new Set(selectedLocationOptions.map(option => option.section));
+      const targetIds = new Set<string>();
+      for (const section of selectedSections) {
+        const sectionOptions = selectedLocationOptions.filter(option => option.section === section);
+        if (sectionOptions.some(option => option.isUncategorized)) continue;
+        const newlySelected = sectionOptions.filter(option => !option.isUncategorized && !initialGroupIds.has(option.value));
+        for (const option of (newlySelected.length ? newlySelected : sectionOptions)) {
+          if (!option.isUncategorized) targetIds.add(option.value);
+        }
+      }
+      targetGroupIds.push(...targetIds);
+    }
+    const selectedGroups = availableRecipeLocationCategories.value.filter(category => targetGroupIds.includes(category.id || ""));
+    const selectedLocationSections = recipeGroupLocationOptions.value
+      .filter(option => selectedLocationIds.includes(option.value))
+      .map(option => option.section);
     const effectiveSections = [...new Set([
       ...selectedRecipeSections.value,
+      ...selectedLocationSections,
       ...selectedGroups.map(recipeGroupSection),
     ])];
     if (!effectiveSections.length) return;
@@ -973,23 +1119,10 @@ async function moveRecipeToSection() {
     const primarySection = effectiveSections.includes(currentPrimary as RecipeLibrarySection)
       ? currentPrimary
       : effectiveSections[0];
-    const currentCategories = recipeRef.value.recipeCategory || [];
-    const regularCategories = currentCategories.filter(category => !category.isRecipeGroup);
-    const existingGroups = keepExistingRecipeGroups.value
-      ? currentCategories.filter(category => category.isRecipeGroup)
-      : [];
-    const categoryById = new Map(
-      [...regularCategories, ...existingGroups, ...selectedGroups]
-        .filter(category => category.id)
-        .map(category => [category.id!, category]),
-    );
-    const { data, error } = await api.recipes.updateOne(props.slug, {
-      ...recipeRef.value,
-      recipeSection: primarySection,
-      showInRecipes: effectiveSections.includes("recipes"),
-      showInBook: effectiveSections.includes("book"),
-      showInSauce: effectiveSections.includes("sauce"),
-      recipeCategory: [...categoryById.values()],
+    const { data, error } = await api.recipes.updateLibraryLocation(props.slug, {
+      sections: effectiveSections,
+      recipeGroupIds: targetGroupIds,
+      keepExistingRecipeGroups: keepExistingRecipeGroups.value,
     });
     if (error || !data) {
       alert.error(i18n.t("events.something-went-wrong"));
@@ -997,10 +1130,12 @@ async function moveRecipeToSection() {
     }
 
     recipeRef.value = data;
+    saveKeepExistingRecipeGroupsPreference(keepExistingRecipeGroups.value);
     recipeSectionDialog.value = false;
     alert.success(i18n.t("recipe.recipe-moved"));
     emit("sectionUpdated", { slug: props.slug, recipeSection: primarySection });
     window.dispatchEvent(new CustomEvent("mealie:recipes-updated"));
+    window.dispatchEvent(new CustomEvent("mealie:organizers-updated"));
   }
   finally {
     recipeSectionLoading.value = false;
@@ -1321,9 +1456,9 @@ const eventHandlers: { [key: string]: () => void | Promise<any> } = {
     imageUploadDialog.value = true;
   },
   section: async () => {
-    if (!recipeRef.value) {
-      await refreshRecipe();
-    }
+    // Load the complete recipe before opening the picker. Recipe cards only
+    // carry a summary and can otherwise show stale section/category state.
+    await refreshRecipe();
     const { data: recipeGroups, error: categoryError } = await api.categories.getRecipeGroups();
     if (!categoryError && recipeGroups) {
       recipeLocationCategories.value = recipeGroups;
@@ -1346,10 +1481,20 @@ const eventHandlers: { [key: string]: () => void | Promise<any> } = {
           ...((recipe?.showInSauce ?? props.showInSauce) ? ["sauce" as const] : []),
         ]
       : [(recipe?.recipeSection || props.recipeSection || "recipes") as "recipes" | "book" | "sauce"];
-    selectedRecipeGroupIds.value = (recipe?.recipeCategory || [])
+    initialRecipeGroupIds.value = (recipe?.recipeCategory || [])
       .filter(category => category.isRecipeGroup && category.id)
       .map(category => category.id!);
-    keepExistingRecipeGroups.value = true;
+    const currentGroupsBySection = new Set(
+      (recipe?.recipeCategory || [])
+        .filter(category => category.isRecipeGroup && category.id)
+        .map(category => recipeGroupSection(category)),
+    );
+    const defaultUncategorizedLocations = selectedRecipeSections.value
+      .filter(section => !currentGroupsBySection.has(section))
+      .map(recipeUncategorizedValue);
+    selectedRecipeGroupIds.value = [...initialRecipeGroupIds.value, ...defaultUncategorizedLocations];
+    recipeGroupLocationSearch.value = "";
+    keepExistingRecipeGroups.value = loadKeepExistingRecipeGroupsPreference();
     recipeSectionDialog.value = true;
   },
   markDone: markRecipeDone,

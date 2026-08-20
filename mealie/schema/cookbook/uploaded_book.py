@@ -237,6 +237,7 @@ class UploadedBookRecipeCatalogRequest(MealieModel):
     query: str = Field("", max_length=500)
     target_language: str = Field("Hebrew", min_length=2, max_length=80)
     refresh: bool = False
+    internet_only: bool = False
 
 
 class UploadedBookRecipeCandidate(MealieModel):
@@ -244,8 +245,10 @@ class UploadedBookRecipeCandidate(MealieModel):
     title: str
     source_title: str
     chapter: str | None = None
-    page_start: int = Field(..., ge=1)
-    page_end: int = Field(..., ge=1)
+    source: Literal["book", "internet"] = "book"
+    source_url: str | None = None
+    page_start: int | None = Field(None, ge=1)
+    page_end: int | None = Field(None, ge=1)
     reason: str | None = None
     imported_recipe_slug: str | None = None
 
@@ -253,7 +256,7 @@ class UploadedBookRecipeCandidate(MealieModel):
 class UploadedBookRecipeCatalogResponse(MealieModel):
     book_id: UUID4
     query: str = ""
-    source: Literal["contents", "headings", "full_text", "hybrid"]
+    source: Literal["contents", "headings", "full_text", "hybrid", "internet"]
     candidates: list[UploadedBookRecipeCandidate] = Field(default_factory=list)
     generated_at: str | None = None
     used_ai: bool = False

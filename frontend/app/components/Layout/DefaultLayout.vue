@@ -257,7 +257,7 @@
         :loading="uploadedBookUploading"
         :submit-text="$t('cookbook.upload-book')"
         :submit-icon="$globals.icons.upload"
-        :submit-disabled="!uploadedBookFiles.length || (uploadedBookAction !== 'none' && uploadedBookPageRangeInvalid)"
+        :submit-disabled="!uploadedBookFiles.length || (uploadedBookNeedsPageRange && uploadedBookPageRangeInvalid)"
         @submit="uploadBook"
         @close="resetUploadBookForm"
       >
@@ -321,6 +321,7 @@
             variant="outlined"
             density="comfortable"
             clearable
+            :menu-props="{ location: 'bottom', locationStrategy: 'connected', scrollStrategy: 'reposition', zIndex: 12000, maxHeight: 360, attach: 'body' }"
             :label="$t('cookbook.book-category')"
             :hint="$t('cookbook.upload-book-category-hint')"
             persistent-hint
@@ -360,16 +361,20 @@
               value="translate"
               :label="$t('cookbook.translate-book-after-upload')"
             />
+            <v-radio
+              value="catalog"
+              :label="$t('cookbook.recipe-names-from-internet-after-upload')"
+            />
           </v-radio-group>
           <v-combobox
-            v-if="uploadedBookAction === 'translate'"
+            v-if="uploadedBookAction === 'translate' || uploadedBookAction === 'catalog'"
             v-model="uploadedBookTargetLanguage"
             :items="uploadedBookTranslationLanguageOptions"
             variant="outlined"
             density="comfortable"
             :label="$t('cookbook.translation-language')"
           />
-          <div v-if="uploadedBookAction !== 'none'">
+          <div v-if="uploadedBookNeedsPageRange">
             <v-row dense>
               <v-col
                 cols="12"
@@ -404,6 +409,7 @@
             </v-row>
           </div>
           <v-text-field
+            v-if="uploadedBookNeedsPageRange"
             v-model.number="uploadedBookPagesPerChunk"
             type="number"
             min="1"
@@ -413,7 +419,15 @@
             :label="$t('cookbook.pages-per-ai-chunk')"
           />
           <v-alert
-            v-if="uploadedBookAction !== 'none'"
+            v-if="uploadedBookAction === 'catalog'"
+            density="compact"
+            variant="tonal"
+            type="info"
+          >
+            {{ $t("cookbook.recipe-catalog-online-help") }}
+          </v-alert>
+          <v-alert
+            v-else-if="uploadedBookAction !== 'none'"
             density="compact"
             variant="tonal"
             type="info"
@@ -1127,7 +1141,7 @@ const uploadedBookClassifyWithAi = ref(true);
 const uploadedBooks = ref<UploadedBook[]>([]);
 const uploadedBookCategories = ref<UploadedBookCategory[]>([]);
 const uploadedBookCategoryId = ref<string | null>(null);
-const uploadedBookAction = ref<"none" | "extract" | "translate">("none");
+const uploadedBookAction = ref<"none" | "extract" | "translate" | "catalog">("none");
 const uploadedBookPagesPerChunk = ref(10);
 const uploadedBookPageStart = ref<number | null>(null);
 const uploadedBookPageEnd = ref<number | null>(null);
@@ -1271,6 +1285,9 @@ const uploadedBookAccept = [
 const hasMultipleUploadedBookFiles = computed(() => uploadedBookFiles.value.length > 1);
 const uploadedBookNormalizedPageStart = computed(() => normalizeUploadedBookPage(uploadedBookPageStart.value));
 const uploadedBookNormalizedPageEnd = computed(() => normalizeUploadedBookPage(uploadedBookPageEnd.value));
+const uploadedBookNeedsPageRange = computed(() =>
+  uploadedBookAction.value === "extract" || uploadedBookAction.value === "translate",
+);
 const uploadedBookPageRangeInvalid = computed(() => {
   const pageStart = uploadedBookNormalizedPageStart.value;
   const pageEnd = uploadedBookNormalizedPageEnd.value;
@@ -1764,7 +1781,7 @@ async function uploadBook() {
     return;
   }
 
-  if (uploadedBookAction.value !== "none" && uploadedBookPageRangeInvalid.value) {
+  if (uploadedBookNeedsPageRange.value && uploadedBookPageRangeInvalid.value) {
     alert.error(i18n.t("cookbook.page-range-invalid"));
     return;
   }
@@ -1828,6 +1845,9 @@ async function uploadBook() {
   }
   else if (uploaded.length === 1 && uploadedBookAction.value === "translate") {
     await startUploadedBookTranslation(uploaded[0], false);
+  }
+  else if (uploaded.length === 1 && uploadedBookAction.value === "catalog") {
+    await startUploadedBookRecipeCatalog(uploaded[0]);
   }
 
   uploadedBookDialog.value = false;
@@ -2337,6 +2357,24 @@ async function startUploadedBookTranslation(book: UploadedBook, closeDialog: boo
     uploadedBookTranslationDialog.value = false;
   }
   await refreshUploadedBooks();
+}
+
+async function startUploadedBookRecipeCatalog(book: UploadedBook) {
+  const targetLanguage = (uploadedBookTargetLanguage.value || defaultUploadedBookTargetLanguage()).trim();
+  const { data, error } = await api.uploadedBooks.discoverRecipeCatalog(book.id, {
+    query: "",
+    targetLanguage,
+    refresh: true,
+    internetOnly: true,
+  });
+
+  if (!data) {
+    const detail = error?.response?.data?.detail;
+    alert.error(typeof detail === "string" ? detail : i18n.t("cookbook.recipe-catalog-online-failed"));
+    return;
+  }
+
+  alert.success(i18n.t("cookbook.recipe-catalog-online-started", { count: data.candidates.length }));
 }
 
 function defaultUploadedBookTargetLanguage() {

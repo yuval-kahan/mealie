@@ -1,6 +1,6 @@
 # שינויים שבוצעו ב-fork
 
-עודכן לאחרונה: 2026-08-11
+עודכן לאחרונה: 2026-08-16
 
 מסמך זה מתעד את ההתאמות שבוצעו ב-fork המקומי של Mealie, כדי שיהיה קל להבין מה נוסף לפני העלאה ל-GitHub.
 
@@ -29,9 +29,19 @@
 - ניתן ליצור קטגוריה ראשית או תת־קטגוריה ולבחור במפורש את קטגוריית האב. כל קטגוריה נשמרת עם אזור היעד שלה, למשל `מתכונים` או `רטבים`, ולכן תת־קטגוריה חדשה אינה יכולה להופיע בטעות באזור אחר.
 - קטגוריה קיימת בעלת אותו שם ממוחזרת ומסומנת כקטגוריית תצוגה במקום ליצור כפילות. מתכון יכול להישאר מתכון רגיל ובמקביל להשתייך לקטגוריה אחת או יותר באמצעות מנגנון הקטגוריות הקיים.
 - בחלון `יצירה עם AI` ניתן לסמן שיוך לקטגוריה קיימת או ליצור קטגוריה/תת־קטגוריה חדשה. המשתמש יכול לתת לה שם או לאפשר ל־AI לקבוע את השם מתוך המתכונים שנוצרו. השיוך מתבצע לאחר יצירה מטקסט, תמונה, קישור, קובץ או דרך bridge התוסף, בלי לשנות את מבנה המתכון.
+- ביצירה עם AI ללא בחירה ידנית, המערכת משתמשת בקטגוריות ובתגיות שהוחזרו מהמודל כדי לבחור קטגוריית אב ותת־קטגוריה. אם הן אינן קיימות, הן נוצרות אוטומטית באזור הנכון (`מתכונים` או `רטבים`); מתכונים מסוג רוטב מקבלים תמיד את `רטבים` כהורה. יצירת הקטגוריות מוגנת גם במקרה של שתי פעולות AI במקביל, כדי למנוע כפילויות או כשל שמבטל את יצירת המתכון.
+- שינוי שם של קטגוריה מקצה slug ייחודי גם כאשר slug שנוצר מהשם כבר קיים בקטגוריה אחרת, ולכן שינוי שם אינו נכשל עוד עם `An unexpected error occurred`.
 - מצב הקובץ בחלון `יצירה עם AI` מקבל PDF, ‏HTML, ‏EPUB, ‏DOCX, ‏ODT, ‏RTF, ‏FB2, ‏TXT, ‏Markdown, ‏CSV ו־JSON, מפריד עד 100 מתכונים שלמים ושומר את כולם באותה קטגוריה או תת־קטגוריה שנבחרה. קלט גדול מחולק למקטעים מוגבלים ומעובד בעד שלוש קריאות AI מקבילות.
 - קבוצות ספרים ב`מתכונים מספרים` וקבוצות הקטגוריות החדשות מתחילות ממוזערות כברירת מחדל, כך שרק הכותרת והכמות מוצגות עד שהמשתמש פותח אותן.
+- תצוגת קטגוריות המתכונים היא היררכית: קטגוריית אב מציגה את תתי־הקטגוריות שלה מתחתיה רק כאשר היא פתוחה, ותתי־קטגוריות מוצגות בהזחה במקום כשורות אחיות עם שם האב בתוך הכותרת.
+- בתוך קטגוריית אב, תתי־הקטגוריות והמתכונים שלהן מוצגים קודם; מתכונים שמשויכים ישירות לקטגוריית האב מוצגים אחריהם תחת `מתכונים ללא תת־קטגוריה`.
+- לפני המתכונים הישירים של קטגוריית האב מוצג פס הפרדה עדין, כדי להבדיל אותם מתתי־הקטגוריות בלי להוסיף קבוצה מתקפלת נוספת.
+- מצב הפתיחה נשמר לכל קטגוריה בנפרד. לכן אפשר לפתוח את `עוגות`, לפתוח בתוכה את `טירמיסו`, לסגור את `עוגות`, ולאחר פתיחה מחדש של `עוגות` תת־הקטגוריה `טירמיסו` תישאר פתוחה. הזיכרון נשמר גם ברענון ובמעבר בין אזורי מתכונים.
 - בהגדרות המשתמש ניתן לבחור בנפרד עבור מתכונים, רטבים ומתכונים מספרים אם הקבוצות תמיד ממוזערות או זוכרות את מצבן. זיכרון זה מוגבל ל־40 הקשרים ול־250 קבוצות בכל הקשר כדי שלא יצטבר localStorage ללא גבול.
+- תפריט שיוך מתכון לקטגוריות ותתי־קטגוריות נפתח מחוץ לאזור הגלילה של החלון הקופץ, עם שכבת תצוגה גבוהה, ולכן נשאר גלוי גם כאשר פותחים אותו מכרטיס שנמצא נמוך ברשימה.
+- ביצירה עם AI נוסף מצב `אוטומטי (AI)` מול `ידני (ללא קטגוריה)`. במצב האוטומטי ה־AI משייך או יוצר קטגוריית אב ותת־קטגוריה מתאימות; במצב הידני המתכון נשמר ללא קטגוריה כדי שהמשתמש ישייך אותו אחר כך.
+- הבחירה האחרונה של מצב שיוך הקטגוריה נשמרת ב־localStorage באתר וב־Chrome Storage בתוסף, ולכן היא נשמרת בפעם הבאה שפותחים את חלון היצירה. במצב ידני בחירת קטגוריה ידנית מוסתרת ומנוטרלת כדי למנוע שיוך בטעות.
+- אותה העדפה מועברת גם לייבוא מתכון מקישור דרך התוסף ולחילוץ מתכון מתוך מאמר, כך שהתנהגות האתר והתוסף אחידה.
 
 ## ספריית ספרים היררכית וכרטיס מאוחד
 
@@ -99,6 +109,8 @@
 - בתפריט שלוש הנקודות של כל כרטיס ניתן להעביר את המתכון בכל עת בין שלושת האזורים. לאחר ההעברה הרשימה הנוכחית מתרעננת והכרטיס מופיע באזור היעד.
 - מתכונים חדשים נשמרים ב־`מתכונים`; מתכון שחולץ מספר נשמר אוטומטית ב־`מתכונים מספרים`. המיגרציה מעבירה גם מתכוני ספר קיימים לפי `uploadedBookSourceId`, בלי לשנות מתכונים אחרים.
 - `מתכונים מספרים` מקבץ את הכרטיסים לפי ספר המקור. כל מקטע ספר ניתן לפתיחה ולמזעור, ומתכונים ללא שיוך ישיר נשמרים בקבוצה נפרדת וברורה.
+- אינדקס מתכוני הספר נשמר בתוך מטא־הנתונים של הספר: שמות מועמדים, פרק, טווח עמודים, מקור וסיבת הזיהוי. מועמד שעדיין לא חולץ מוצג ב`מתכונים מספרים` ככרטיס דמוי־מתכון, אבל הוא מסומן `אינדקס בלבד` ואינו קישור ואינו ניתן לפתיחה, עריכה או הוספה לרשימת קניות.
+- לאחר חילוץ מלא, אותו מועמד מקבל `imported_recipe_slug`, נעלם מתצוגת האינדקס ומופיע כמתכון אמיתי שניתן לפתוח. כך אין מתכוני דמה במסד הנתונים ואין הצגה של שם בלבד כאילו קיים מתכון מלא.
 - בתפריט שלוש הנקודות נוספה פעולה דו־כיוונית: `סמן כמתכון שהוכן` מתחלפת ב־`בטל סימון כמתכון שהוכן`. היא משתמשת בשדה `lastMade` הקיים, ולכן נשמר מועד ההכנה וניתן גם לאפס אותו בלי ליצור טבלה או cache נוסף.
 - לאחר הסימון מוצגת על תמונת הכרטיס מדבקת `DONE` ירוקה עם סימן ביקורת; ביטול הסימון מסיר אותה מיד. המדבקה היא שכבת overlay קבועה בכרטיסי desktop ובשתי פריסות mobile, ולכן אינה מזיזה את התמונה, הכותרת, הכפתורים או שלוש הנקודות.
 - חלון `יצירה עם AI` ותוסף הדפדפן מציעים כעת בחירה בין `מתכון מלא` ל־`רוטב בלבד`. מצב רוטב עובד עם טקסט, תמונה וקישור, מחלץ רק רוטב/רוטב לסלט/גלייז/מרינדה/מטבל/גרייבי ושומר את התוצאה ישירות בספריית `רטבים` העצמאית.
@@ -1352,4 +1364,20 @@
 - Gemini requests now rotate through all configured API keys when a key is denied, rate-limited, temporarily unavailable, or the provider returns a retryable server error. The active key index is logged without exposing the key value, and non-Gemini providers keep their existing single-key behavior.
 - Recipe-library category creation now prevents duplicate names in the same scope and generates collision-safe slugs for different categories that would otherwise produce the same transliterated slug. This fixes category creation failures caused by SQLite's unique `(slug, group_id)` constraint.
 - Uploaded-book category selectors no longer depend on a Vuetify overlay for book assignment. The assignment dialog uses an inline, keyboard-accessible, scrollable category picker, so the options cannot render behind the dialog or disappear at normal browser zoom. Existing parent and replacement selectors keep their bounded menus and stacking order.
+- Recipe, sauce, and book-recipe sections now expose four group controls: open or collapse nested subcategories, and open or collapse all groups at once. The controls reuse the existing per-section remembered expansion state, so the selected layout survives navigation and refresh without changing recipe assignments.
 - Static resource review was performed for these changes only. No live RAM/CPU sampling or load test was run. Python syntax checks, Docker production build, container health checks, and HTTP smoke checks passed.
+- Long dynamic dropdowns now use searchable controls and locale-aware alphabetical ordering. This covers recipe categories and subcategories, AI cookbook filters and transfer targets, book categories, book metadata, and the book assignment picker; recipe transfer uses a visible inline search bar with immediately filtered checkbox results, limited to the sections currently checked by the user, so it does not depend on a floating menu. Short fixed choices such as dates, counts, view modes, and meal types remain compact selects.
+- Recipe group pages now refresh their group-category index and recipe page when an organizer update is emitted. A newly AI-assigned recipe group therefore appears immediately in its matching group instead of temporarily falling into the uncategorized group; the refresh timer and browser listener are both cleaned up when the section unmounts.
+- Automatic recipe grouping now accepts only dish-type categories in Hebrew. Dietary labels and ingredient names such as `טבעוני`, `צמחוני`, `כשר`, `בריא`, `ללא גלוטן`, `מישלן`, `גורמה` and `טחינה` are kept as tags/attributes and are rejected as automatic parent or child groups. The AI schema explicitly asks for a dish format such as `סלטים`, `ממרחים`, `מרקים`, `פסטה` or `קינוחים`, while the recipe's core dish remains a useful subcategory when appropriate.
+### Google Gemini 3.7 Flash
+
+- Added `gemini-3.7-flash` to the Google Gemini provider model picker as the newest recommended Gemini model.
+- Kept Gemini's custom model field available, so users can enter newer or provider-specific model IDs manually.
+- The Gemini provider continues to use Google's OpenAI-compatible endpoint and existing API-key validation.
+## Online Cookbook Recipe Index
+
+- Added an explicit online-only cookbook action that finds recipe names after upload without extracting or translating the book.
+- Gemini uses its native `generateContent` API with Google Search grounding for this action, so the model performs the web search instead of the application guessing from local headings.
+- Online results are stored in the cookbook metadata as index-only entries with optional verified chapter, page, reason, and source URL fields.
+- Online index entries are visibly marked and cannot be imported as complete recipes until the recipe is extracted from the original uploaded book.
+- Existing local cookbook indexes preserve online entries, and the feature is available both immediately after upload and from an already uploaded book.

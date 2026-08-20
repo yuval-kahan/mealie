@@ -133,14 +133,15 @@
           counter
           :label="$t('cookbook.book-category-name')"
         />
-        <v-select
+        <v-autocomplete
           v-model="bookCategoryParentId"
           :items="topLevelBookCategoryOptions"
           item-title="title"
           item-value="value"
-          :menu-props="{ location: 'bottom', zIndex: 3000, maxHeight: 320, attach: 'body' }"
+          :menu-props="{ location: 'bottom', locationStrategy: 'connected', scrollStrategy: 'reposition', zIndex: 12000, maxHeight: 320, attach: 'body' }"
           variant="outlined"
           clearable
+          :custom-filter="normalizeFilter"
           :disabled="Boolean(bookCategoryEditing?.parentCategoryId)"
           :label="$t('cookbook.parent-book-category')"
           :hint="$t('cookbook.parent-book-category-hint')"
@@ -230,13 +231,14 @@
         <strong v-if="bookCategoryDeleteTarget" class="d-block my-3">
           {{ bookCategoryDeleteTarget.name }}
         </strong>
-        <v-select
+        <v-autocomplete
           v-model="bookCategoryReplacementId"
           :items="bookCategoryReplacementOptions"
           item-title="title"
           item-value="value"
-          :menu-props="{ location: 'bottom', zIndex: 3000, maxHeight: 320, attach: 'body' }"
+          :menu-props="{ location: 'bottom', locationStrategy: 'connected', scrollStrategy: 'reposition', zIndex: 12000, maxHeight: 320, attach: 'body' }"
           variant="outlined"
+          :custom-filter="normalizeFilter"
           :label="$t('cookbook.reassign-books-to')"
         />
       </v-card-text>
@@ -260,41 +262,68 @@
           <label class="book-category-picker__label" for="book-category-assignment-select">
             {{ $t("cookbook.book-category") }}
           </label>
-          <button
-            id="book-category-assignment-select"
-            type="button"
-            class="book-category-picker__trigger"
-            :aria-expanded="bookCategoryAssignmentMenuOpen"
-            aria-haspopup="listbox"
-            @click="bookCategoryAssignmentMenuOpen = !bookCategoryAssignmentMenuOpen"
+          <v-menu
+            v-model="bookCategoryAssignmentMenuOpen"
+            :close-on-content-click="false"
+            location="bottom"
+            location-strategy="connected"
+            scroll-strategy="reposition"
+            offset="6"
+            attach="body"
+            content-class="book-category-picker-overlay"
+            :z-index="10000"
           >
-            <span class="book-category-picker__value">
-              {{ selectedBookCategoryAssignmentTitle || $t("cookbook.book-category") }}
-            </span>
-            <v-icon
-              :icon="bookCategoryAssignmentMenuOpen ? $globals.icons.chevronDown : $globals.icons.chevronRight"
-              size="20"
-            />
-          </button>
-          <div
-            v-if="bookCategoryAssignmentMenuOpen"
-            class="book-category-picker__menu"
-            role="listbox"
-            :aria-label="$t('cookbook.book-category')"
-          >
-            <button
-              v-for="option in bookCategoryOptions"
-              :key="option.value"
-              type="button"
-              class="book-category-picker__option"
-              :class="{ 'book-category-picker__option--selected': option.value === bookCategoryAssignmentId }"
-              role="option"
-              :aria-selected="option.value === bookCategoryAssignmentId"
-              @click="selectBookCategoryAssignment(option.value)"
+            <template #activator="{ props: menuProps }">
+              <button
+                id="book-category-assignment-select"
+                v-bind="menuProps"
+                type="button"
+                class="book-category-picker__trigger"
+                :aria-expanded="bookCategoryAssignmentMenuOpen"
+                aria-haspopup="listbox"
+              >
+                <span class="book-category-picker__value">
+                  {{ selectedBookCategoryAssignmentTitle || $t("cookbook.book-category") }}
+                </span>
+                <v-icon
+                  :icon="bookCategoryAssignmentMenuOpen ? $globals.icons.chevronDown : $globals.icons.chevronRight"
+                  size="20"
+                />
+              </button>
+            </template>
+            <div
+              class="book-category-picker__menu"
+              role="listbox"
+              :aria-label="$t('cookbook.book-category')"
             >
-              {{ option.title }}
-            </button>
-          </div>
+              <v-text-field
+                v-model="bookCategoryAssignmentSearch"
+                class="book-category-picker__search"
+                variant="outlined"
+                density="compact"
+                hide-details
+                clearable
+                :prepend-inner-icon="$globals.icons.search"
+                :label="$t('search.search')"
+                @click.stop
+              />
+              <button
+                v-for="option in filteredBookCategoryOptions"
+                :key="option.value"
+                type="button"
+                class="book-category-picker__option"
+                :class="{ 'book-category-picker__option--selected': option.value === bookCategoryAssignmentId }"
+                role="option"
+                :aria-selected="option.value === bookCategoryAssignmentId"
+                @click="selectBookCategoryAssignment(option.value)"
+              >
+                {{ option.title }}
+              </button>
+              <p v-if="!filteredBookCategoryOptions.length" class="book-category-picker__empty text-medium-emphasis">
+                {{ $t("search.no-results") }}
+              </p>
+            </div>
+          </v-menu>
         </div>
       </v-card-text>
     </BaseDialog>
@@ -499,7 +528,7 @@
       keep-open
       :loading="bookRecipeCatalogImporting"
       :submit-text="$t('cookbook.import-selected-recipes')"
-      :submit-disabled="!bookRecipeCatalogTarget || !bookRecipeCatalogSelected.length"
+      :submit-disabled="!bookRecipeCatalogTarget || bookRecipeCatalogInternetOnly || !bookRecipeCatalogSelected.length"
       @submit="importSelectedBookRecipes"
     >
       <v-card-text v-if="bookRecipeCatalogTarget" class="pt-4">
@@ -535,6 +564,23 @@
             {{ $t("cookbook.find-recipes") }}
           </v-btn>
         </div>
+        <v-checkbox
+          v-model="bookRecipeCatalogInternetOnly"
+          class="mt-2"
+          color="primary"
+          density="compact"
+          hide-details
+          :label="$t('cookbook.recipe-catalog-online-only')"
+        />
+        <v-alert
+          v-if="bookRecipeCatalogInternetOnly"
+          type="info"
+          variant="tonal"
+          density="compact"
+          class="mt-2"
+        >
+          {{ $t("cookbook.recipe-catalog-online-help") }}
+        </v-alert>
         <v-alert
           v-if="bookRecipeCatalog?.warning"
           type="warning"
@@ -547,6 +593,7 @@
         <template v-if="bookRecipeCatalog">
           <div class="d-flex align-center mt-4">
             <v-checkbox
+              v-if="!bookRecipeCatalogInternetOnly"
               :model-value="allCatalogRecipesSelected"
               :indeterminate="someCatalogRecipesSelected"
               :label="$t('cookbook.select-all-recipes')"
@@ -566,6 +613,7 @@
               class="book-recipe-catalog__row"
             >
               <v-checkbox-btn
+                v-if="candidate.source !== 'internet'"
                 v-model="bookRecipeCatalogSelected"
                 :value="candidate.id"
                 :disabled="Boolean(candidate.importedRecipeSlug)"
@@ -574,10 +622,29 @@
                 <strong>{{ candidate.title }}</strong>
                 <small>
                   <span v-if="candidate.chapter">{{ candidate.chapter }} · </span>
-                  {{ $t("cookbook.pages") }} {{ candidate.pageStart }}–{{ candidate.pageEnd }}
+                  <template v-if="candidate.pageStart || candidate.pageEnd">
+                    {{ $t("cookbook.pages") }} {{ candidate.pageStart }}–{{ candidate.pageEnd || candidate.pageStart }}
+                  </template>
                 </small>
                 <small v-if="candidate.reason">{{ candidate.reason }}</small>
+                <a
+                  v-if="candidate.sourceUrl"
+                  :href="candidate.sourceUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-primary text-caption"
+                >
+                  {{ candidate.sourceUrl }}
+                </a>
               </span>
+              <v-chip
+                v-if="candidate.source === 'internet'"
+                color="info"
+                size="x-small"
+                class="mr-2"
+              >
+                {{ $t("cookbook.recipe-catalog-internet-entry") }}
+              </v-chip>
               <v-chip v-if="candidate.importedRecipeSlug" color="success" size="x-small">
                 {{ $t("cookbook.already-imported") }}
               </v-chip>
@@ -586,7 +653,7 @@
           <v-alert v-else type="info" variant="tonal" density="compact" class="mt-4">
             {{ $t("cookbook.no-matching-book-recipes") }}
           </v-alert>
-          <v-expansion-panels class="mt-4" variant="accordion">
+          <v-expansion-panels v-if="!bookRecipeCatalogInternetOnly" class="mt-4" variant="accordion">
             <v-expansion-panel>
               <v-expansion-panel-title>{{ $t("cookbook.import-options") }}</v-expansion-panel-title>
               <v-expansion-panel-text>
@@ -914,7 +981,7 @@
             hide-details
             :label="$t('cookbook.book-type')"
           />
-          <v-select
+          <v-autocomplete
             v-model="bookCategoryFilter"
             :items="bookCategoryFilterOptions"
             item-title="title"
@@ -922,6 +989,8 @@
             variant="outlined"
             density="comfortable"
             hide-details
+            clearable
+            :custom-filter="normalizeFilter"
             :label="$t('cookbook.book-category')"
           />
           <v-autocomplete
@@ -934,6 +1003,7 @@
             variant="outlined"
             density="comfortable"
             hide-details
+            :custom-filter="normalizeFilter"
             :label="$t('cookbook.categories-and-tags')"
           />
           <v-select
@@ -1592,6 +1662,7 @@ import type {
 } from "~/lib/api/types/uploaded-book";
 import { useUserApi } from "~/composables/api/api-client";
 import { alert } from "~/composables/use-toast";
+import { normalizeFilter } from "~/composables/use-utils";
 
 definePageMeta({
   middleware: ["group-only"],
@@ -1782,6 +1853,7 @@ const bookCategoryAssigning = ref(false);
 const bookCategoryAssignmentTarget = ref<UploadedBook | null>(null);
 const bookCategoryAssignmentId = ref<string | null>(null);
 const bookCategoryAssignmentMenuOpen = ref(false);
+const bookCategoryAssignmentSearch = ref("");
 const uploadedBookDeleteDialog = ref(false);
 const bookCoverDialog = ref(false);
 const bookCoverSaving = ref(false);
@@ -1817,6 +1889,7 @@ const bookRecipeCatalogTarget = ref<UploadedBook | null>(null);
 const bookRecipeCatalog = ref<UploadedBookRecipeCatalog | null>(null);
 const bookRecipeCatalogQuery = ref("");
 const bookRecipeCatalogLanguage = ref("Hebrew");
+const bookRecipeCatalogInternetOnly = ref(false);
 const bookRecipeCatalogSelected = ref<string[]>([]);
 const bookRecipeCatalogLoading = ref(false);
 const bookRecipeCatalogImporting = ref(false);
@@ -1884,7 +1957,7 @@ const bookTranslationLanguageOptions = computed(() => [
 ]);
 const selectableCatalogRecipeIds = computed(() =>
   (bookRecipeCatalog.value?.candidates || [])
-    .filter(candidate => !candidate.importedRecipeSlug)
+    .filter(candidate => candidate.source !== "internet" && !candidate.importedRecipeSlug)
     .map(candidate => candidate.id),
 );
 const allCatalogRecipesSelected = computed(() =>
@@ -1960,7 +2033,8 @@ const orderedUploadedBookCategories = computed(() => {
 const topLevelBookCategoryOptions = computed(() =>
   orderedUploadedBookCategories.value
     .filter(category => !category.parentCategoryId && category.id !== bookCategoryEditing.value?.id)
-    .map(category => ({ title: category.name, value: category.id })),
+    .map(category => ({ title: category.name, value: category.id }))
+    .sort((left, right) => left.title.localeCompare(right.title, i18n.locale.value, { numeric: true, sensitivity: "base" })),
 );
 const bookCategoryOptions = computed(() => {
   const byId = new Map(uploadedBookCategories.value.map(category => [category.id, category]));
@@ -1970,7 +2044,13 @@ const bookCategoryOptions = computed(() => {
       title: parent ? `${parent.name} / ${category.name}` : category.name,
       value: category.id,
     };
-  });
+  }).sort((left, right) => left.title.localeCompare(right.title, i18n.locale.value, { numeric: true, sensitivity: "base" }));
+});
+
+const filteredBookCategoryOptions = computed(() => {
+  const query = bookCategoryAssignmentSearch.value.trim();
+  if (!query) return bookCategoryOptions.value;
+  return bookCategoryOptions.value.filter(option => normalizeFilter(option.title, query));
 });
 
 const selectedBookCategoryAssignmentTitle = computed(() => {
@@ -2082,7 +2162,9 @@ function bookVariantLabel(book: UploadedBook) {
 }
 
 const bookMetadataOptions = computed(() =>
-  Array.from(new Set(logicalUploadedBooks.value.flatMap(bookLabels))).sort((a, b) => a.localeCompare(b)),
+  Array.from(new Set(logicalUploadedBooks.value.flatMap(bookLabels))).sort((a, b) =>
+    a.localeCompare(b, i18n.locale.value, { numeric: true, sensitivity: "base" }),
+  ),
 );
 
 function matchesBookType(book: UploadedBook) {
@@ -2097,7 +2179,7 @@ const filteredUploadedBooks = computed(() => {
   const query = bookSearch.value.trim().toLocaleLowerCase();
   return logicalUploadedBooks.value.filter((book) => {
     if (!matchesBookType(book)) return false;
-    if (bookCategoryFilter.value !== "all" && bookCategoryId(book) !== bookCategoryFilter.value) return false;
+    if (bookCategoryFilter.value && bookCategoryFilter.value !== "all" && bookCategoryId(book) !== bookCategoryFilter.value) return false;
     const labels = bookLabels(book);
     if (bookMetadataFilters.value.some(filter => !labels.includes(filter))) return false;
     if (!query) return true;
@@ -2434,12 +2516,14 @@ function openBookCategoryAssignment(book: UploadedBook) {
   bookCategoryAssignmentId.value = bookCategoryId(book)
     || uploadedBookCategories.value.find(category => category.isProtected)?.id
     || null;
+  bookCategoryAssignmentSearch.value = "";
   bookCategoryAssignmentMenuOpen.value = false;
   bookCategoryAssignmentDialog.value = true;
 }
 
 function selectBookCategoryAssignment(categoryId: string) {
   bookCategoryAssignmentId.value = categoryId;
+  bookCategoryAssignmentSearch.value = "";
   bookCategoryAssignmentMenuOpen.value = false;
 }
 
@@ -2687,6 +2771,7 @@ function openBookRecipeCatalogDialog(book: UploadedBook) {
   bookRecipeCatalogLanguage.value = String(i18n.locale.value || "").toLowerCase().startsWith("he")
     ? "Hebrew"
     : "English";
+  bookRecipeCatalogInternetOnly.value = false;
   bookRecipeCatalogSelected.value = [];
   bookRecipeCatalogCreateLists.value = true;
   bookRecipeCatalogOrganizeLists.value = true;
@@ -2709,6 +2794,7 @@ async function discoverBookRecipes() {
       {
         query: bookRecipeCatalogQuery.value.trim(),
         targetLanguage: bookRecipeCatalogLanguage.value,
+        internetOnly: bookRecipeCatalogInternetOnly.value,
       },
     );
     if (error || !data) {
@@ -2717,7 +2803,7 @@ async function discoverBookRecipes() {
     }
     bookRecipeCatalog.value = data;
     bookRecipeCatalogSelected.value = data.candidates
-      .filter(candidate => !candidate.importedRecipeSlug)
+      .filter(candidate => candidate.source !== "internet" && !candidate.importedRecipeSlug)
       .map(candidate => candidate.id);
   }
   finally {
@@ -3063,12 +3149,28 @@ onBeforeUnmount(() => {
   border-radius: 4px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
   display: grid;
-  margin-top: 4px;
-  max-height: 320px;
+  max-height: min(360px, calc(100vh - 32px));
   overflow-y: auto;
   padding: 4px 0;
   position: relative;
-  z-index: 10;
+  width: min(420px, calc(100vw - 32px));
+}
+
+:global(.book-category-picker-overlay) {
+  z-index: 10000 !important;
+  pointer-events: auto !important;
+}
+
+.book-category-picker__search {
+  margin: 4px 8px 8px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.book-category-picker__empty {
+  margin: 8px 14px;
+  text-align: center;
 }
 
 .book-category-picker__option {

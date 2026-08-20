@@ -150,6 +150,7 @@ class CreateRecipeFromText(MealieModel):
     auto_image: bool = True
     include_item_images: bool = True
     recipe_section: Literal["recipes", "sauce"] = "recipes"
+    category_assignment_mode: Literal["auto", "manual"] = "auto"
 
 
 class RecipeIngredientsAdjustWithAIRequest(MealieModel):
@@ -179,6 +180,12 @@ class RecipeMergeRequest(MealieModel):
     name: str | None = Field(None, max_length=255)
     keep_originals: bool = True
     use_ai: bool = False
+
+
+class RecipeLibraryLocationUpdate(MealieModel):
+    sections: list[Literal["recipes", "book", "sauce"]] = Field(..., min_length=1, max_length=3)
+    recipe_group_ids: list[UUID4] = Field(default_factory=list, max_length=100)
+    keep_existing_recipe_groups: bool = False
 
 
 class RecipeMergeResponse(MealieModel):
@@ -600,6 +607,9 @@ class RecipeController(BaseRecipeController):
 
         new_recipe = self.service.create_one(recipe)
 
+        if isinstance(req, ScrapeRecipe) and req.use_openai and req.category_assignment_mode == "auto":
+            new_recipe = self.service.auto_assign_recipe_group(new_recipe, req.recipe_section)
+
         if new_recipe:
             self.publish_event(
                 event_type=EventTypes.recipe_created,
@@ -725,6 +735,7 @@ class RecipeController(BaseRecipeController):
         include_mise_en_place: bool = Query(True, alias="includeMiseEnPlace"),
         include_item_images: bool = Query(True, alias="includeItemImages"),
         recipe_section: Literal["recipes", "sauce"] = Query("recipes", alias="recipeSection"),
+        category_assignment_mode: Literal["auto", "manual"] = Query("auto", alias="categoryAssignmentMode"),
     ):
         """
         Create a recipe from an image using OpenAI.
@@ -745,6 +756,7 @@ class RecipeController(BaseRecipeController):
                 notes,
                 include_mise_en_place=include_mise_en_place,
                 recipe_section=recipe_section,
+                category_assignment_mode=category_assignment_mode,
             )
         except exceptions.NotARecipe as e:
             raise HTTPException(
@@ -785,6 +797,7 @@ class RecipeController(BaseRecipeController):
         auto_image: bool = Query(True, alias="autoImage"),
         include_item_images: bool = Query(True, alias="includeItemImages"),
         recipe_section: Literal["recipes", "sauce"] = Query("recipes", alias="recipeSection"),
+        category_assignment_mode: Literal["auto", "manual"] = Query("auto", alias="categoryAssignmentMode"),
     ):
         """Extract and create every complete recipe found in a bounded document upload."""
 
@@ -845,6 +858,7 @@ class RecipeController(BaseRecipeController):
                 include_mise_en_place=include_mise_en_place,
                 auto_image=auto_image,
                 recipe_section=recipe_section,
+                category_assignment_mode=category_assignment_mode,
             )
             for recipe in recipes:
                 if include_item_images:
@@ -901,6 +915,7 @@ class RecipeController(BaseRecipeController):
                 include_mise_en_place=data.include_mise_en_place,
                 auto_image=data.auto_image,
                 recipe_section=data.recipe_section,
+                category_assignment_mode=data.category_assignment_mode,
             )
             if data.include_item_images:
                 await self._ensure_recipe_item_images(recipe)
@@ -961,7 +976,7 @@ class RecipeController(BaseRecipeController):
             )
 
         recipe_group_category = None
-        if data.recipe_group_category_id:
+        if data.recipe_group_category_id and data.category_assignment_mode == "auto":
             category = self.repos.categories.get_one(data.recipe_group_category_id)
             if (
                 category is None
@@ -983,6 +998,7 @@ class RecipeController(BaseRecipeController):
                 include_mise_en_place=data.include_mise_en_place,
                 auto_image=not data.image_url,
                 recipe_section=data.recipe_section,
+                category_assignment_mode=data.category_assignment_mode,
             )
             recipe = self.service.apply_source_metadata(
                 recipe,
@@ -2296,6 +2312,29 @@ class RecipeController(BaseRecipeController):
                     name=recipe.name,
                     url=urls.recipe_url(self.group.slug, recipe.slug, self.settings.BASE_URL),
                 ),
+            )
+
+        return recipe
+
+    @router.patch("/{slug}/library-location")
+    def update_library_location(self, slug: str, data: RecipeLibraryLocationUpdate):
+        """Move a recipe between library sections and recipe-group categories."""
+        try:
+            recipe = self.service.update_library_location(
+                slug,
+                data.sections,
+                data.recipe_group_ids,
+                data.keep_existing_recipe_groups,
+            )
+        except Exception as e:
+            self.handle_exceptions(e)
+
+        if recipe:
+            self.publish_event(
+                event_type=EventTypes.recipe_updated,
+                document_data=EventRecipeData(operation=EventOperation.update, recipe_slug=recipe.slug),
+                group_id=recipe.group_id,
+                household_id=recipe.household_id,
             )
 
         return recipe

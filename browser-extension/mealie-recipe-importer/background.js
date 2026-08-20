@@ -546,6 +546,7 @@ async function importRecipePage(mealieUrl, authToken, payload, extraction, t) {
       create_shopping_list: payload.createShoppingList !== false,
       organize_shopping_list_with_ai: payload.organizeShoppingList !== false,
       recipe_section: payload.extractMode === "sauce" ? "sauce" : "recipes",
+      category_assignment_mode: payload.categoryAssignmentMode === "manual" ? "manual" : "auto",
       recipe_group_category_id: payload.recipeGroupCategoryId || null,
     }),
   });
@@ -588,6 +589,7 @@ async function importArticlePage(mealieUrl, authToken, payload, extraction, t) {
       include_mise_en_place: payload.includeMiseEnPlace !== false,
       include_item_images: payload.includeItemImages !== false,
       recipe_section: payload.extractMode === "sauce" ? "sauce" : "recipes",
+      category_assignment_mode: payload.categoryAssignmentMode === "manual" ? "manual" : "auto",
       recipe_group_category_id: payload.recipeGroupCategoryId || null,
     }),
   });

@@ -41,6 +41,7 @@ export interface CreateRecipeFromText {
   autoImage?: boolean;
   includeItemImages?: boolean;
   recipeSection?: "recipes" | "sauce";
+  categoryAssignmentMode?: "auto" | "manual";
 }
 
 export interface RecipeAIShoppingListRequest {
@@ -122,6 +123,12 @@ export interface RecipeDeletePreview {
   websiteNames: string[];
 }
 
+export interface RecipeLibraryLocationUpdate {
+  sections: Array<"recipes" | "book" | "sauce">;
+  recipeGroupIds: string[];
+  keepExistingRecipeGroups: boolean;
+}
+
 const prefix = "/api";
 
 const routes = {
@@ -144,6 +151,7 @@ const routes = {
   recipesTimelineEvent: `${prefix}/recipes/timeline/events`,
 
   recipesRecipeSlug: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}`,
+  recipesRecipeSlugLibraryLocation: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/library-location`,
   recipesRecipeSlugShoppingListAi: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/shopping-list-ai`,
   recipesRecipeSlugShoppingListOpenOrCreate: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/shopping-list/open-or-create`,
   recipesRecipeSlugImage: (recipe_slug: string) => `${prefix}/recipes/${recipe_slug}/image`,
@@ -271,6 +279,14 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
     return await this.requests.get<RecipeDeletePreview>(routes.recipesRecipeSlugDeletePreview(slug));
   }
 
+  async updateLibraryLocation(slug: string, payload: RecipeLibraryLocationUpdate) {
+    return await this.requests.patch<Recipe, RecipeLibraryLocationUpdate>(
+      routes.recipesRecipeSlugLibraryLocation(slug),
+      payload,
+      { suppressAlert: true },
+    );
+  }
+
   async deleteWithLinks(slug: string, shoppingListIds: string[], websiteIds: string[]) {
     return await this.requests.delete<Recipe>(route(routes.recipesRecipeSlug(slug), {
       deleteShoppingListIds: shoppingListIds,
@@ -392,10 +408,11 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
     useOpenAI = false,
     translateLanguage: string | null = null,
     recipeSection: "recipes" | "sauce" = "recipes",
+    categoryAssignmentMode: "auto" | "manual" = "auto",
   ): Promise<RequestResponse<string>> {
     return this.streamRecipeCreate(
       routes.recipesCreateUrl,
-      { url, includeTags, includeCategories, useOpenAI, translateLanguage, recipeSection },
+      { url, includeTags, includeCategories, useOpenAI, translateLanguage, recipeSection, categoryAssignmentMode },
       onProgress,
     );
   }
@@ -426,6 +443,7 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
     notes: string | null = null,
     includeMiseEnPlace = true,
     recipeSection: "recipes" | "sauce" = "recipes",
+    categoryAssignmentMode: "auto" | "manual" = "auto",
   ) {
     const formData = new FormData();
 
@@ -445,6 +463,7 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
     query.set("includeMiseEnPlace", String(includeMiseEnPlace));
     query.set("includeItemImages", String(includeItemImages));
     query.set("recipeSection", recipeSection);
+    query.set("categoryAssignmentMode", categoryAssignmentMode);
     const queryString = query.toString();
     if (queryString) {
       apiRoute = `${apiRoute}?${queryString}`;
@@ -469,6 +488,7 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
       autoImage: String(options.autoImage !== false),
       includeItemImages: String(options.includeItemImages !== false),
       recipeSection: options.recipeSection || "recipes",
+      categoryAssignmentMode: options.categoryAssignmentMode || "auto",
     });
     if (options.translateLanguage) query.set("translateLanguage", options.translateLanguage);
     return await this.requests.post<string[]>(`${routes.recipesCreateFromFile}?${query}`, formData, { suppressAlert: true });

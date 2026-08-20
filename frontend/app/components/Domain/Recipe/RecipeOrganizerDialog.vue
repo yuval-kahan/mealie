@@ -17,7 +17,7 @@
             :rules="[rules.required]"
             autofocus
           />
-          <v-select
+          <v-autocomplete
             v-if="itemType === Organizer.Category && recipeGroup"
             v-model="selectedParentCategoryId"
             :items="parentCategoryOptions"
@@ -25,6 +25,7 @@
             clearable
             density="comfortable"
             variant="outlined"
+            :custom-filter="normalizeFilter"
           />
           <v-checkbox
             v-if="itemType === Organizer.Tool"
@@ -42,6 +43,7 @@ import { useUserApi } from "~/composables/api";
 import { useCategoryStore, useTagStore, useToolStore } from "~/composables/store";
 import type { RecipeCategory } from "~/lib/api/types/recipe";
 import { type RecipeOrganizer, Organizer } from "~/lib/api/types/non-generated";
+import { normalizeFilter } from "~/composables/use-utils";
 
 const { $globals } = useNuxtApp();
 
@@ -115,7 +117,8 @@ const parentCategoryOptions = computed(() => availableRecipeGroupCategories.valu
     && item.id
     && item.id !== props.editCategory?.id
     && !item.parentCategoryId)
-  .map(item => ({ title: item.name, value: item.id! })));
+  .map(item => ({ title: item.name, value: item.id! }))
+  .sort((left, right) => left.title.localeCompare(right.title, i18n.locale.value, { numeric: true, sensitivity: "base" })));
 
 const store = (() => {
   switch (props.itemType) {

@@ -59,6 +59,28 @@
             </v-btn>
           </v-btn-toggle>
         </div>
+        <template v-if="['recipes', 'sauce'].includes(recipeSection)">
+          <div class="d-flex flex-wrap align-center ga-3 mb-3">
+            <span class="text-body-2 font-weight-medium">
+              {{ $t("recipe.ai-category-assignment-mode") }}
+            </span>
+            <v-btn-toggle
+              v-model="categoryAssignmentMode"
+              mandatory
+              divided
+              density="compact"
+              color="primary"
+              :disabled="state.loading"
+            >
+              <v-btn value="auto">
+                {{ $t("recipe.ai-category-assignment-auto") }}
+              </v-btn>
+              <v-btn value="manual">
+                {{ $t("recipe.ai-category-assignment-manual") }}
+              </v-btn>
+            </v-btn-toggle>
+          </div>
+        </template>
         <v-textarea
           v-if="createMode === 'text'"
           v-model="recipeText"
@@ -185,14 +207,31 @@
           :disabled="state.loading"
         />
         <template v-if="['recipes', 'sauce'].includes(recipeSection)">
+          <v-alert
+            v-if="categoryAssignmentMode === 'auto'"
+            density="compact"
+            variant="tonal"
+            type="info"
+            class="mb-2"
+            :text="$t('recipe.ai-auto-recipe-category-description')"
+          />
+          <v-alert
+            v-else
+            density="compact"
+            variant="tonal"
+            type="info"
+            class="mb-2"
+            :text="$t('recipe.ai-category-assignment-manual-description')"
+          />
           <v-checkbox
+            v-if="categoryAssignmentMode === 'auto'"
             v-model="assignToRecipeGroup"
             color="primary"
             hide-details
             :label="$t('recipe.ai-assign-to-recipe-category')"
             :disabled="state.loading"
           />
-          <template v-if="assignToRecipeGroup">
+          <template v-if="categoryAssignmentMode === 'auto' && assignToRecipeGroup">
             <v-btn-toggle
               v-model="recipeGroupAssignmentMode"
               mandatory
@@ -207,23 +246,26 @@
                 {{ $t("recipe.new-recipe-category") }}
               </v-btn>
             </v-btn-toggle>
-            <v-select
+            <v-autocomplete
               v-if="recipeGroupAssignmentMode === 'existing'"
               v-model="selectedRecipeGroupId"
               :items="recipeGroupOptions"
               :label="$t('recipe.ai-recipe-category')"
               variant="outlined"
               density="compact"
+              clearable
+              :custom-filter="normalizeFilter"
               :disabled="state.loading"
             />
             <template v-else>
-              <v-select
+              <v-autocomplete
                 v-model="newRecipeGroupParentId"
                 :items="recipeGroupParentOptions"
                 :label="$t('recipe.parent-recipe-category')"
                 variant="outlined"
                 density="compact"
                 clearable
+                :custom-filter="normalizeFilter"
                 :disabled="state.loading"
               />
               <v-checkbox
@@ -287,11 +329,15 @@ import { useTagStore } from "~/composables/store/use-tag-store";
 import { useNewRecipeOptions } from "~/composables/use-new-recipe-options";
 import { useRecipeCreatePreferences } from "~/composables/use-users/preferences";
 import { alert } from "~/composables/use-toast";
+import { normalizeFilter } from "~/composables/use-utils";
 import { validators } from "~/composables/use-validators";
 import type { RecipeCategory } from "~/lib/api/types/recipe";
 import type { VForm } from "~/types/auto-forms";
 
 type CreateMode = "text" | "url" | "image" | "file";
+type CategoryAssignmentMode = "auto" | "manual";
+
+const CATEGORY_ASSIGNMENT_MODE_STORAGE_KEY = "mealie.recipe-ai-category-assignment-mode";
 
 type ExtensionRecipeImportResponse = {
   ok?: boolean;
@@ -343,10 +389,15 @@ const recipeImageFile = ref<File | null>(null);
 const additionalImageFiles = ref<File[]>([]);
 const videoFile = ref<File | null>(null);
 const createStatus = ref<string | null>(null);
+const categoryAssignmentMode = ref<CategoryAssignmentMode>("auto");
 const pendingExtensionRequestCancellations = new Set<() => void>();
 const { attachVideoToRecipe } = useRecipeVideoAsset();
 
 onMounted(() => {
+  const savedMode = window.localStorage.getItem(CATEGORY_ASSIGNMENT_MODE_STORAGE_KEY);
+  if (savedMode === "auto" || savedMode === "manual") {
+    categoryAssignmentMode.value = savedMode;
+  }
   void refreshRecipeOrganizers();
 });
 
@@ -389,6 +440,18 @@ const letAiNameRecipeGroup = ref(false);
 const newRecipeGroupName = ref("");
 const newRecipeGroupParentId = ref<string | null>(null);
 const allRecipeGroupCategories = ref<RecipeCategory[]>([]);
+
+watch(categoryAssignmentMode, (mode) => {
+  if (import.meta.client) {
+    window.localStorage.setItem(CATEGORY_ASSIGNMENT_MODE_STORAGE_KEY, mode);
+  }
+
+  if (mode === "manual") {
+    assignToRecipeGroup.value = false;
+    selectedRecipeGroupId.value = null;
+    newRecipeGroupParentId.value = null;
+  }
+});
 const recipeGroupCategories = computed(() => allRecipeGroupCategories.value
   .filter(category => category.isRecipeGroup
     && (category.recipeGroupSection || "recipes") === recipeSection.value
@@ -400,10 +463,12 @@ const recipeGroupOptions = computed(() => recipeGroupCategories.value
       title: parent ? `${parent.name} / ${category.name}` : category.name,
       value: category.id!,
     };
-  }));
+  })
+  .sort((left, right) => left.title.localeCompare(right.title, i18n.locale.value, { numeric: true, sensitivity: "base" })));
 const recipeGroupParentOptions = computed(() => recipeGroupCategories.value
   .filter(category => !category.parentCategoryId)
-  .map(category => ({ title: category.name, value: category.id! })));
+  .map(category => ({ title: category.name, value: category.id! }))
+  .sort((left, right) => left.title.localeCompare(right.title, i18n.locale.value, { numeric: true, sensitivity: "base" })));
 
 watch(recipeGroupOptions, (options) => {
   if (selectedRecipeGroupId.value && !options.some(option => option.value === selectedRecipeGroupId.value)) {
@@ -590,6 +655,7 @@ async function createRecipesFromFile() {
     autoImage: true,
     includeItemImages: includeItemImages.value,
     recipeSection: recipeSection.value,
+    categoryAssignmentMode: categoryAssignmentMode.value,
   });
   const slugs = data?.filter(Boolean) || [];
   if (error || !slugs.length) {
@@ -623,6 +689,7 @@ async function createRecipeFromText() {
     autoImage: true,
     includeItemImages: includeItemImages.value,
     recipeSection: recipeSection.value,
+    categoryAssignmentMode: categoryAssignmentMode.value,
   });
 
   if (error || !data) {
@@ -655,6 +722,7 @@ async function createRecipeFromImages() {
     imageNotes.value.trim() || null,
     includeMiseEnPlace.value,
     recipeSection.value,
+    categoryAssignmentMode.value,
   );
 
   if (error || !data) {
@@ -688,6 +756,7 @@ async function createRecipeFromUrl() {
     true,
     shouldTranslate.value ? i18n.locale.value : null,
     recipeSection.value,
+    categoryAssignmentMode.value,
   );
   createStatus.value = null;
 
@@ -804,6 +873,7 @@ async function createRecipeFromUrlViaExtension(url: string): Promise<ExtensionRe
           includeMiseEnPlace: includeMiseEnPlace.value,
           includeItemImages: includeItemImages.value,
           extractMode: recipeSection.value === "sauce" ? "sauce" : "recipe",
+          categoryAssignmentMode: categoryAssignmentMode.value,
         },
       },
       window.location.origin,
@@ -838,7 +908,7 @@ async function refreshRecipeOrganizers() {
 }
 
 async function resolveRecipeGroup(recipeSlugs: string[]) {
-  if (!assignToRecipeGroup.value) {
+  if (categoryAssignmentMode.value !== "auto" || !assignToRecipeGroup.value) {
     return null;
   }
 
@@ -880,7 +950,7 @@ async function resolveRecipeGroup(recipeSlugs: string[]) {
 }
 
 async function assignRecipesToSelectedGroup(recipeSlugs: string[]) {
-  if (!assignToRecipeGroup.value || !recipeSlugs.length) {
+  if (categoryAssignmentMode.value !== "auto" || !assignToRecipeGroup.value || !recipeSlugs.length) {
     return;
   }
 
@@ -896,7 +966,7 @@ async function assignRecipesToSelectedGroup(recipeSlugs: string[]) {
         throw recipeError || new Error("Recipe could not be loaded after creation");
       }
 
-      const existingCategories = recipe.recipeCategory || [];
+      const existingCategories = (recipe.recipeCategory || []).filter(category => !category.isRecipeGroup);
       if (existingCategories.some(category => category.id === target.id)) {
         continue;
       }

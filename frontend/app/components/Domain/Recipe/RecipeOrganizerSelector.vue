@@ -182,14 +182,26 @@ const activeStore = computed(() => {
 
 const items = computed<any[]>(() => {
   const list = (activeStore.value as unknown as any[]) ?? [];
+  const sortedList = [...list].sort((left, right) => {
+    const leftName = props.selectorType === Organizer.User ? left?.fullName ?? left?.name : left?.name;
+    const rightName = props.selectorType === Organizer.User ? right?.fullName ?? right?.name : right?.name;
+    return String(leftName || "").localeCompare(String(rightName || ""), i18n.locale.value, {
+      numeric: true,
+      sensitivity: "base",
+    });
+  });
   if (![Organizer.Category, Organizer.Tag, Organizer.Tool].includes(props.selectorType as Organizer)) {
-    return list;
+    return sortedList;
   }
 
-  const existingNames = new Set(list.map(item => String(item?.name || "").trim().toLocaleLowerCase()).filter(Boolean));
+  const existingNames = new Set(sortedList.map(item => String(item?.name || "").trim().toLocaleLowerCase()).filter(Boolean));
   const presets = organizerSuggestions(props.selectorType, i18n.locale.value)
     .filter(item => !existingNames.has(item.name.toLocaleLowerCase()));
-  return [...list, ...presets];
+  return [...sortedList, ...presets].sort((left, right) =>
+    String(left?.name || "").localeCompare(String(right?.name || ""), i18n.locale.value, {
+      numeric: true,
+      sensitivity: "base",
+    }));
 });
 
 let selectionUpdateSequence = 0;

@@ -27,6 +27,7 @@ from sqlalchemy.orm import selectinload
 from mealie.core import exceptions
 from mealie.core.dependencies.dependencies import get_temporary_path
 from mealie.db.models.recipe.ai_search_index import RecipeAISearchIndex
+from mealie.db.models.recipe.category import Category, recipes_to_categories
 from mealie.db.models.recipe.ingredient import RecipeIngredientModel
 from mealie.lang.locale_config import LOCALE_CONFIG
 from mealie.lang.providers import Translator
@@ -46,7 +47,7 @@ from mealie.schema.openai.general import OpenAIText
 from mealie.schema.openai.meal_plan import OpenAIMealPlanResponse
 from mealie.schema.openai.recipe import OpenAIBookRecipeChunkParse, OpenAIRecipe, OpenAIRecipeTextParse
 from mealie.schema.openai.recipe_search import OpenAIRecipeSearchResponse
-from mealie.schema.recipe.recipe import CreateRecipe, Recipe, RecipeSummary, create_recipe_slug
+from mealie.schema.recipe.recipe import CreateRecipe, Recipe, RecipeCategory, RecipeSummary, create_recipe_slug
 from mealie.schema.recipe.recipe_ai_search import RecipeAISearchResponse, RecipeAISearchResult
 from mealie.schema.recipe.recipe_category import CategorySave, TagSave
 from mealie.schema.recipe.recipe_ingredient import RecipeIngredient
@@ -155,6 +156,120 @@ MEAL_PERIOD_TAGS = {
     "dinner": "ארוחת ערב",
 }
 
+AUTO_RECIPE_GROUP_GENERIC_NAMES = {
+    "מתכון",
+    "מתכונים",
+    "רטב",
+    "רטבים",
+    "כללי",
+    "אחר",
+    "אחרים",
+    "מנה",
+    "מנות",
+    "ארוחה",
+    "ארוחות",
+    "מישלן",
+    "גורמה",
+    "בוקר",
+    "צהריים",
+    "ערב",
+    "ארוחת בוקר",
+    "ארוחת צהריים",
+    "ארוחת ערב",
+    "טלוויזיה",
+    "אינסטגרם",
+    "יוטיוב",
+    "טיקטוק",
+    "אתר אינטרנט",
+    "ספר בישול",
+}
+
+# These are useful attributes for search and tags, but they are not dish-type
+# groups. Keeping them out of automatic grouping prevents results such as
+# "טבעוני / טחינה" from becoming the recipe library hierarchy.
+AUTO_RECIPE_GROUP_ATTRIBUTE_NAMES = {
+    "טבעוני",
+    "טבעונית",
+    "טבעוניים",
+    "טבעוניות",
+    "צמחוני",
+    "צמחונית",
+    "צמחוניים",
+    "צמחוניות",
+    "כשר",
+    "כשרה",
+    "בריא",
+    "בריאה",
+    "ללא גלוטן",
+    "ללא חלב",
+    "ללא מוצרי חלב",
+    "ללא לקטוז",
+    "דל פחמימה",
+    "קטוגני",
+    "מהיר",
+    "קל",
+    "טחינה",
+    "טחינות",
+    "תבלין",
+    "תבלינים",
+}
+
+AUTO_RECIPE_GROUP_DISH_TYPES = {
+    "סלט",
+    "סלטים",
+    "מרק",
+    "מרקים",
+    "פסטה",
+    "אורז",
+    "ריזוטו",
+    "קינוח",
+    "קינוחים",
+    "עוגה",
+    "עוגות",
+    "עוגייה",
+    "עוגיות",
+    "מאפה",
+    "מאפים",
+    "לחם",
+    "לחמים",
+    "פיצה",
+    "פשטידה",
+    "פשטידות",
+    "קיש",
+    "קישים",
+    "טארט",
+    "טארטים",
+    "תבשיל",
+    "תבשילים",
+    "ממרח",
+    "ממרחים",
+    "ממרחים ומטבלים",
+    "מטבל",
+    "מטבלים",
+    "כיסונים",
+    "ניוקי",
+    "קרפ",
+    "קרפים",
+    "פנקייק",
+    "פנקייקים",
+    "כריך",
+    "כריכים",
+    "דגים",
+    "בשר",
+    "עוף",
+    "תוספות",
+    "מנות פתיחה",
+    "מנות עיקריות",
+    "משקאות",
+    "קציצות",
+    "קדרה",
+    "חמוצים",
+    "שימורים",
+    "מרקים ותבשילים",
+    "לחמים ומאפים",
+    "קינוחים ועוגות",
+}
+
 
 def is_external_recipe_image(image: object) -> bool:
     return isinstance(image, str) and image.lower().startswith(("http://", "https://"))
@@ -202,6 +317,174 @@ class RecipeService(RecipeServiceBase):
         recipe.show_in_book = primary_section == "book"
         recipe.show_in_sauce = primary_section == "sauce"
         return recipe
+
+    @staticmethod
+    def _auto_recipe_group_name(value: object) -> str:
+        return " ".join(str(value or "").split()).strip(" #|,.;:()[]{}")[:100]
+
+    @classmethod
+    def _is_useful_auto_recipe_group_name(cls, value: object) -> bool:
+        name = cls._auto_recipe_group_name(value)
+        normalized = name.casefold()
+        return bool(
+            name
+            and normalized not in AUTO_RECIPE_GROUP_GENERIC_NAMES
+            and normalized not in AUTO_RECIPE_GROUP_ATTRIBUTE_NAMES
+            and slugify(name)
+        )
+
+    @classmethod
+    def _is_auto_recipe_dish_type(cls, value: object) -> bool:
+        return cls._auto_recipe_group_name(value).casefold() in AUTO_RECIPE_GROUP_DISH_TYPES
+
+    @classmethod
+    def _auto_recipe_group_names(cls, recipe: Recipe, section: Literal["recipes", "sauce"]) -> tuple[str, str | None]:
+        """Choose a stable parent/subcategory from the structured AI organizers.
+
+        The recipe parser already asks the provider for Hebrew categories and a core dish tag. Reusing
+        those fields keeps placement deterministic and avoids a second provider request for every recipe.
+        """
+
+        category_names = [
+            cls._auto_recipe_group_name(category.name)
+            for category in (recipe.recipe_category or [])
+            if cls._auto_recipe_group_name(getattr(category, "name", None))
+        ]
+        tag_names = [
+            cls._auto_recipe_group_name(tag.name)
+            for tag in (recipe.tags or [])
+            if cls._auto_recipe_group_name(getattr(tag, "name", None))
+        ]
+
+        if section == "sauce":
+            parent_name = "רטבים"
+        else:
+            parent_name = next(
+                (
+                    name
+                    for name in [*category_names, *tag_names]
+                    if cls._is_auto_recipe_dish_type(name)
+                ),
+                "מתכונים",
+            )
+
+        # The core dish tag is normally the first useful tag returned by the
+        # parser. Prefer it over an ingredient or dietary attribute such as
+        # "טחינה" or "טבעוני" when choosing the child group.
+        candidates = [*tag_names, *category_names, cls._auto_recipe_group_name(recipe.name)]
+        child_name = next(
+            (
+                name
+                for name in candidates
+                if cls._is_useful_auto_recipe_group_name(name)
+                and name.casefold() != parent_name.casefold()
+            ),
+            None,
+        )
+        return parent_name, child_name
+
+    def _get_or_create_auto_recipe_group_category(
+        self,
+        name: str,
+        section: Literal["recipes", "sauce"],
+        parent_category_id: UUID | None = None,
+        cache: dict[tuple[str, str, UUID | None], RecipeCategory] | None = None,
+    ) -> RecipeCategory:
+        normalized_name = self._auto_recipe_group_name(name)
+        cache_key = (section, normalized_name.casefold(), parent_category_id)
+        if cache and cache_key in cache:
+            return cache[cache_key]
+
+        existing_categories = self.repos.categories.multi_query(
+            {
+                "is_recipe_group": True,
+                "recipe_group_section": section,
+                "parent_category_id": parent_category_id,
+            },
+            limit=None,
+        )
+        existing = next(
+            (category for category in existing_categories if category.name.strip().casefold() == normalized_name.casefold()),
+            None,
+        )
+        if existing:
+            result = RecipeCategory.model_validate(existing)
+        else:
+            # Category slugs are unique across the group, including ordinary
+            # categories that are not recipe-library groups.
+            used_slugs = {category.slug for category in self.repos.categories.get_all() if category.slug}
+            base_slug = slugify(normalized_name) or "category"
+            unique_slug = base_slug
+            suffix = 2
+            while unique_slug in used_slugs:
+                unique_slug = f"{base_slug}-{suffix}"
+                suffix += 1
+
+            try:
+                created = self.repos.categories.create(
+                    CategorySave(
+                        name=normalized_name,
+                        group_id=self.user.group_id,
+                        slug=unique_slug,
+                        is_recipe_group=True,
+                        recipe_group_section=section,
+                        parent_category_id=parent_category_id,
+                    )
+                )
+            except sa.exc.IntegrityError:
+                # Another AI import may have created the same group between the
+                # lookup and insert. Re-read it instead of failing the recipe.
+                existing = next(
+                    (
+                        category
+                        for category in self.repos.categories.multi_query(
+                            {
+                                "is_recipe_group": True,
+                                "recipe_group_section": section,
+                                "parent_category_id": parent_category_id,
+                            },
+                            limit=None,
+                        )
+                        if category.name.strip().casefold() == normalized_name.casefold()
+                    ),
+                    None,
+                )
+                if existing is None:
+                    raise
+                result = RecipeCategory.model_validate(existing)
+            else:
+                result = RecipeCategory.model_validate(created)
+
+        if cache is not None:
+            cache[cache_key] = result
+        return result
+
+    def auto_assign_recipe_group(
+        self,
+        recipe: Recipe,
+        section: Literal["recipes", "sauce"] = "recipes",
+        cache: dict[tuple[str, str, UUID | None], RecipeCategory] | None = None,
+    ) -> Recipe:
+        """Place an AI-created recipe into an inferred parent and optional child group."""
+
+        if section not in ("recipes", "sauce"):
+            return recipe
+
+        parent_name, child_name = self._auto_recipe_group_names(recipe, section)
+        parent = self._get_or_create_auto_recipe_group_category(parent_name, section, cache=cache)
+        target = parent
+        if child_name:
+            target = self._get_or_create_auto_recipe_group_category(
+                child_name,
+                section,
+                parent_category_id=parent.id,
+                cache=cache,
+            )
+
+        recipe.recipe_category = [
+            category for category in (recipe.recipe_category or []) if not category.is_recipe_group
+        ] + [target]
+        return self.update_one(recipe.slug, recipe)
 
     def apply_source_metadata(
         self,
@@ -605,6 +888,7 @@ class RecipeService(RecipeServiceBase):
         notes: str | None = None,
         include_mise_en_place: bool = True,
         recipe_section: Literal["recipes", "sauce"] = "recipes",
+        category_assignment_mode: Literal["auto", "manual"] = "auto",
     ) -> Recipe:
         openai_recipe_service = OpenAIRecipeService(self.repos, self.user, self.household, self.translator)
         with get_temporary_path() as temp_path:
@@ -627,6 +911,8 @@ class RecipeService(RecipeServiceBase):
 
             recipe_data = self._apply_primary_library_membership(recipe_data, recipe_section)
             recipe = self.create_one(self.apply_ai_recipe_attribution(recipe_data))
+            if category_assignment_mode == "auto":
+                recipe = self.auto_assign_recipe_group(recipe, recipe_section)
 
             # Prefer a representative recipe photo discovered from the parsed
             # recipe. The uploaded image is often a scan or screenshot, so it is
@@ -665,6 +951,7 @@ class RecipeService(RecipeServiceBase):
         include_mise_en_place: bool = True,
         auto_image: bool = True,
         recipe_section: Literal["recipes", "sauce"] = "recipes",
+        category_assignment_mode: Literal["auto", "manual"] = "auto",
     ) -> Recipe:
         openai_recipe_service = OpenAIRecipeService(self.repos, self.user, self.household, self.translator)
         recipe_data = await openai_recipe_service.build_recipe_from_text(
@@ -676,6 +963,8 @@ class RecipeService(RecipeServiceBase):
         )
         recipe_data = self._apply_primary_library_membership(recipe_data, recipe_section)
         recipe = self.create_one(self.apply_ai_recipe_attribution(recipe_data))
+        if category_assignment_mode == "auto":
+            recipe = self.auto_assign_recipe_group(recipe, recipe_section)
         if auto_image:
             await self.attach_best_effort_image(recipe, search_query=recipe.name)
         return recipe
@@ -688,6 +977,7 @@ class RecipeService(RecipeServiceBase):
         include_mise_en_place: bool = True,
         auto_image: bool = True,
         recipe_section: Literal["recipes", "sauce"] = "recipes",
+        category_assignment_mode: Literal["auto", "manual"] = "auto",
     ) -> list[Recipe]:
         """Create every complete recipe found in bounded document chunks."""
 
@@ -700,9 +990,12 @@ class RecipeService(RecipeServiceBase):
             recipe_section=recipe_section,
         )
         created: list[Recipe] = []
+        recipe_group_cache: dict[tuple[str, str, UUID | None], RecipeCategory] = {}
         for recipe_data in recipe_data_items[:100]:
             recipe_data = self._apply_primary_library_membership(recipe_data, recipe_section)
             recipe = self.create_one(self.apply_ai_recipe_attribution(recipe_data))
+            if category_assignment_mode == "auto":
+                recipe = self.auto_assign_recipe_group(recipe, recipe_section, cache=recipe_group_cache)
             if auto_image:
                 await self.attach_best_effort_image(recipe, search_query=recipe.name)
             created.append(recipe)
@@ -1376,6 +1669,85 @@ class RecipeService(RecipeServiceBase):
 
         self.check_assets(new_data, recipe.slug)
         return new_data
+
+    def update_library_location(
+        self,
+        slug_or_id: str | UUID,
+        sections: list[str],
+        recipe_group_ids: list[UUID],
+        keep_existing_recipe_groups: bool,
+    ) -> Recipe:
+        """Update library placement without sending relationships through full recipe patching."""
+        recipe = self.get_one(slug_or_id)
+        if recipe is None or not self.can_update([recipe.slug]):
+            raise exceptions.PermissionDenied("You do not have permission to edit this recipe.")
+
+        normalized_sections = list(dict.fromkeys(sections))
+        requested_ids = list(dict.fromkeys(recipe_group_ids))
+        selected_groups: list[Category] = []
+        if requested_ids:
+            selected_groups = list(
+                self.repos.session.scalars(
+                    sa.select(Category).where(
+                        Category.group_id == self.user.group_id,
+                        Category.id.in_(requested_ids),
+                        Category.is_recipe_group.is_(True),
+                    )
+                ).all()
+            )
+            if len(selected_groups) != len(requested_ids):
+                raise exceptions.NoEntryFound("One or more selected recipe categories were not found.")
+
+        recipe_model = self.repos.session.scalar(
+            sa.select(self.group_recipes.model)
+            .options(selectinload(self.group_recipes.model.recipe_category))
+            .where(
+                self.group_recipes.model.id == recipe.id,
+                self.group_recipes.model.group_id == self.user.group_id,
+            )
+        )
+        if recipe_model is None:
+            raise exceptions.NoEntryFound("Recipe not found.")
+
+        existing_categories = list(recipe_model.recipe_category or [])
+        retained_categories = [category for category in existing_categories if not category.is_recipe_group]
+        if keep_existing_recipe_groups:
+            retained_categories.extend(category for category in existing_categories if category.is_recipe_group)
+
+        categories_by_id = {category.id: category for category in retained_categories}
+        categories_by_id.update({category.id: category for category in selected_groups})
+        category_ids = [category_id for category_id in categories_by_id if category_id is not None]
+
+        # Update the association table explicitly. Assigning the relationship
+        # alone can leave a stale collection in a long-lived SQLAlchemy session,
+        # which made the UI show the old category after a successful move.
+        self.repos.session.execute(
+            sa.delete(recipes_to_categories).where(recipes_to_categories.c.recipe_id == recipe_model.id)
+        )
+        if category_ids:
+            self.repos.session.execute(
+                sa.insert(recipes_to_categories),
+                [
+                    {"recipe_id": recipe_model.id, "category_id": category_id}
+                    for category_id in category_ids
+                ],
+            )
+
+        current_section = recipe_model.recipe_section if recipe_model.recipe_section in normalized_sections else normalized_sections[0]
+        recipe_model.recipe_section = current_section
+        recipe_model.show_in_recipes = "recipes" in normalized_sections
+        recipe_model.show_in_book = "book" in normalized_sections
+        recipe_model.show_in_sauce = "sauce" in normalized_sections
+
+        try:
+            self.repos.session.flush()
+            self.repos.session.commit()
+        except Exception:
+            self.repos.session.rollback()
+            raise
+
+        self.repos.session.expire(recipe_model, ["recipe_category"])
+        return self.get_one(recipe_model.slug)
 
     def update_last_made(self, slug_or_id: str | UUID, timestamp: datetime | None) -> Recipe:
         # we bypass the pre update check since any user can update a recipe's last made date, even if it's locked,
@@ -2186,10 +2558,12 @@ class OpenAIRecipeService(RecipeServiceBase):
             if not cleaned_name:
                 continue
             if hebrew_name := cls._hebrew_only_label(cleaned_name):
-                categories.append(hebrew_name)
+                if hebrew_name.casefold() not in AUTO_RECIPE_GROUP_ATTRIBUTE_NAMES:
+                    categories.append(hebrew_name)
                 continue
             if translated := HEBREW_CATEGORY_TRANSLATIONS.get(cleaned_name.casefold()):
-                categories.append(translated)
+                if translated.casefold() not in AUTO_RECIPE_GROUP_ATTRIBUTE_NAMES:
+                    categories.append(translated)
 
         return categories or ["מתכונים"]
 

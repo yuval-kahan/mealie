@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from textwrap import dedent
 from typing import Any, TypeVar
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import quote, urlsplit, urlunsplit
 
 import httpx
 import openai
@@ -521,6 +521,111 @@ class OpenAIService(BaseService):
             return None
 
         return response_schema.parse_openai_response(text_response)
+
+    async def get_google_grounded_response(
+        self,
+        prompt: str,
+        message: str,
+        *,
+        response_schema: type[T],
+        provider: AIProviderOut | None = None,
+    ) -> T | None:
+        """Call Gemini's native API with Google Search grounding enabled."""
+
+        provider = provider or self.default_provider
+        if provider is None:
+            raise OpenAINotEnabledException("No default AI provider configured")
+        if not self._is_gemini_provider_data(provider):
+            raise ValueError("Online cookbook search requires a Google Gemini provider")
+
+        api_keys = self._split_api_keys(provider.api_key)
+        if not api_keys:
+            raise ValueError("Google Gemini API key is not configured")
+
+        model = provider.model.removeprefix("models/").strip()
+        if not model:
+            raise ValueError("Google Gemini model is not configured")
+
+        models_url = self._gemini_models_url(provider)
+        base_url = models_url.rsplit("/models", 1)[0]
+        url = f"{base_url}/models/{quote(model, safe='')}:generateContent"
+        schema_json = json.dumps(response_schema.model_json_schema(), ensure_ascii=False)
+        grounded_message = f"{prompt}\n\nReturn JSON matching this schema:\n{schema_json}\n\n{message}"
+        payload = {
+            "contents": [{"role": "user", "parts": [{"text": grounded_message}]}],
+            "tools": [{"google_search": {}}],
+            "generationConfig": {"responseMimeType": "application/json"},
+        }
+
+        last_error: Exception | None = None
+        async with httpx.AsyncClient(timeout=provider.timeout) as client:
+            for index, api_key in enumerate(api_keys, start=1):
+                headers = {
+                    "content-type": "application/json",
+                    "x-goog-api-key": api_key,
+                    **(provider.request_headers or {}),
+                }
+                try:
+                    response = await client.post(
+                        url,
+                        headers=headers,
+                        params=provider.request_params or None,
+                        json=payload,
+                    )
+                except httpx.TimeoutException:
+                    last_error = ValueError(f"Gemini grounded search timed out for API key #{index}")
+                    continue
+                except httpx.RequestError as error:
+                    last_error = ValueError(f"Gemini grounded search could not reach Google: {error}")
+                    continue
+
+                if response.status_code >= 400:
+                    provider_message = self._redact_secret(self._provider_error_message(response), api_key)
+                    last_error = ValueError(
+                        f"Gemini grounded search failed for API key #{index} ({response.status_code}): "
+                        f"{provider_message}"
+                    )
+                    if response.status_code in {401, 403, 408, 409, 429} or response.status_code >= 500:
+                        continue
+                    raise last_error
+
+                try:
+                    response_data = response.json()
+                except ValueError:
+                    last_error = ValueError("Gemini returned an invalid grounded-search response")
+                    continue
+
+                response_parts: list[str] = []
+                for candidate in response_data.get("candidates", []):
+                    content = candidate.get("content") if isinstance(candidate, dict) else None
+                    parts = content.get("parts", []) if isinstance(content, dict) else []
+                    response_parts.extend(
+                        part.get("text", "")
+                        for part in parts
+                        if isinstance(part, dict) and part.get("text")
+                    )
+                text_response = "\n".join(response_parts).strip()
+                if not text_response:
+                    last_error = ValueError("Gemini returned no grounded recipe index")
+                    continue
+
+                if text_response.startswith("```"):
+                    lines = text_response.splitlines()
+                    if lines and lines[0].startswith("```"):
+                        lines = lines[1:]
+                    if lines and lines[-1].strip() == "```":
+                        lines = lines[:-1]
+                    text_response = "\n".join(lines).strip()
+
+                try:
+                    return response_schema.parse_openai_response(text_response)
+                except Exception as error:
+                    last_error = ValueError(f"Gemini returned invalid grounded recipe JSON: {error}")
+                    continue
+
+        if last_error:
+            raise last_error
+        return None
 
     async def get_response(
         self,

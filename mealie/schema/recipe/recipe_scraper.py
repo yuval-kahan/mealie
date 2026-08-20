@@ -15,6 +15,7 @@ class ScrapeRecipeBase(MealieModel):
     include_categories: bool = False
     translate_language: str | None = Field(None, alias="translateLanguage")
     recipe_section: Literal["recipes", "sauce"] = Field("recipes", alias="recipeSection")
+    category_assignment_mode: Literal["auto", "manual"] = Field("auto", alias="categoryAssignmentMode")
 
 
 class ScrapeRecipe(ScrapeRecipeBase):

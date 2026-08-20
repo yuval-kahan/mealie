@@ -121,8 +121,11 @@ class OpenAIRecipe(OpenAIBase):
     categories: list[str] = Field(
         default_factory=list,
         description=(
-            "A short list of obvious recipe categories written in Hebrew only, regardless of the recipe output "
-            "language. Examples: מנה עיקרית, קינוחים, פסטה, רטבים. Never return English category names."
+            "A short list of dish-type or format categories written in Hebrew only, regardless of the recipe output "
+            "language. Examples: סלטים, מרקים, פסטה, ממרחים, קינוחים, רטבים, מאפים. "
+            "Categories must describe what kind of dish this is. Do not use dietary or descriptive attributes "
+            "such as טבעוני, צמחוני, כשר, בריא, ללא גלוטן, מישלן, גורמה, מהיר, קל, or an ingredient such as "
+            "טחינה; those belong in tags. Never return English category names."
         ),
     )
 
@@ -146,8 +149,10 @@ class OpenAIRecipe(OpenAIBase):
     primary_category: str | None = Field(
         None,
         description=(
-            "One broad, useful recipe category written in Hebrew only, such as מנה עיקרית, תוספות, קינוחים, "
-            "פסטה, מרקים, רטבים, לחמים, ארוחות בוקר, or משקאות."
+            "One broad dish-type category written in Hebrew only, such as סלטים, תוספות, קינוחים, פסטה, "
+            "מרקים, ממרחים, רטבים, לחמים, עוגות, or משקאות. It must describe the dish format, not a dietary "
+            "attribute or ingredient: never choose טבעוני, צמחוני, כשר, בריא, ללא גלוטן, מישלן, גורמה, מהיר, "
+            "קל, or טחינה as the primary category."
         ),
     )
 
@@ -398,6 +403,19 @@ class OpenAIBookRecipeCatalogParse(OpenAIBase):
         default_factory=list,
         description="One classification result for every supplied entry_index.",
     )
+
+
+class OpenAIBookOnlineRecipeCandidate(OpenAIBase):
+    title: str = Field(..., min_length=1, max_length=300)
+    chapter: str | None = Field(None, max_length=300)
+    page_start: int | None = Field(None, ge=1)
+    page_end: int | None = Field(None, ge=1)
+    source_url: str | None = Field(None, max_length=2000)
+    reason: str | None = Field(None, max_length=600)
+
+
+class OpenAIBookOnlineRecipeCatalogParse(OpenAIBase):
+    recipes: list[OpenAIBookOnlineRecipeCandidate] = Field(default_factory=list, max_length=500)
 
 
 class OpenAIBookRecipeSearchHint(OpenAIBase):

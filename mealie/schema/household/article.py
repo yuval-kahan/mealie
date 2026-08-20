@@ -39,6 +39,7 @@ class ArticleAIRequest(MealieModel):
     text: str | None = Field(None, max_length=250000)
     url: str | None = Field(None, max_length=2000)
     translate_language: str | None = None
+    category_assignment_mode: Literal["auto", "manual"] = "auto"
     create_recipe_if_present: bool = True
     create_shopping_list: bool = True
     organize_shopping_list_with_ai: bool = True

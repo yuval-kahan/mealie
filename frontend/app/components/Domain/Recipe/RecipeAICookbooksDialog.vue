@@ -17,12 +17,13 @@
           :prepend-inner-icon="$globals.icons.search"
           :label="$t('search.search')"
         />
-        <v-select
+        <v-autocomplete
           v-model="organizerFilter"
           density="compact"
           hide-details
           clearable
           :items="organizerOptions"
+          :custom-filter="normalizeFilter"
           :label="$t('cookbook.categories-and-tags')"
         />
       </div>
@@ -61,22 +62,26 @@
       <template v-if="moveSourceOptions.length && moveTargetOptions.length">
         <v-divider class="my-4" />
         <div class="recipe-book-transfer">
-          <v-select
+          <v-autocomplete
             v-model="moveSourceId"
             density="compact"
             hide-details
+            clearable
             :items="moveSourceOptions"
             item-title="title"
             item-value="value"
+            :custom-filter="normalizeFilter"
             :label="`${$t('recipe.source')}: ${$t('cookbook.ai-generated-books')}`"
           />
-          <v-select
+          <v-autocomplete
             v-model="moveTargetId"
             density="compact"
             hide-details
+            clearable
             :items="moveTargetOptions"
             item-title="title"
             item-value="value"
+            :custom-filter="normalizeFilter"
             :label="`${$t('general.transfer')}: ${$t('cookbook.ai-generated-books')}`"
           />
           <v-btn
@@ -98,6 +103,7 @@
 import type { UploadedBook } from "~/lib/api/types/uploaded-book";
 import { useUserApi } from "~/composables/api/api-client";
 import { alert } from "~/composables/use-toast";
+import { normalizeFilter } from "~/composables/use-utils";
 
 interface Props {
   modelValue: boolean;
@@ -125,7 +131,8 @@ const movingRecipe = ref(false);
 let loadVersion = 0;
 
 const aiBooks = computed(() => books.value.filter(book => Boolean(book.bookMetadata?.generated_by_ai)));
-const organizerOptions = computed(() => Array.from(new Set(aiBooks.value.flatMap(bookOrganizers))).sort());
+const organizerOptions = computed(() => Array.from(new Set(aiBooks.value.flatMap(bookOrganizers)))
+  .sort((left, right) => left.localeCompare(right, i18n.locale.value, { numeric: true, sensitivity: "base" })));
 const filteredBooks = computed(() => {
   const term = search.value.trim().toLocaleLowerCase();
   return aiBooks.value.filter((book) => {
@@ -136,10 +143,12 @@ const filteredBooks = computed(() => {
 });
 const moveSourceOptions = computed(() => aiBooks.value
   .filter(bookIncludesRecipe)
-  .map(book => ({ title: book.name, value: book.id })));
+  .map(book => ({ title: book.name, value: book.id }))
+  .sort((left, right) => left.title.localeCompare(right.title, i18n.locale.value, { numeric: true, sensitivity: "base" })));
 const moveTargetOptions = computed(() => aiBooks.value
   .filter(book => book.id !== moveSourceId.value)
-  .map(book => ({ title: book.name, value: book.id })));
+  .map(book => ({ title: book.name, value: book.id }))
+  .sort((left, right) => left.title.localeCompare(right.title, i18n.locale.value, { numeric: true, sensitivity: "base" })));
 
 watch(
   () => props.modelValue,

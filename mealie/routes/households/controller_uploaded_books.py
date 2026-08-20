@@ -1612,6 +1612,7 @@ class UploadedBooksController(BasePublicController):
                 data.query,
                 data.target_language,
                 data.refresh,
+                data.internet_only,
             )
         except ValueError as error:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
@@ -1634,6 +1635,22 @@ class UploadedBooksController(BasePublicController):
             if requested_book.is_translated_book and requested_book.translated_from_book_id
             else requested_book
         )
+        try:
+            metadata = json.loads(source_book.book_metadata_json or "{}")
+        except (TypeError, json.JSONDecodeError):
+            metadata = {}
+        online_candidate_ids = {
+            str(candidate.get("id"))
+            for candidate in metadata.get("recipe_catalog_candidates", [])
+            if isinstance(candidate, dict)
+            and candidate.get("source") == "internet"
+            and candidate.get("id")
+        }
+        if any(str(candidate_id) in online_candidate_ids for candidate_id in data.candidate_ids):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="Online recipe index entries contain names only. Extract the full recipe from the original book first.",
+            )
         if source_book.extraction_status in {"processing", "retrying"}:
             raise HTTPException(status.HTTP_409_CONFLICT, detail="Book extraction is already running")
         if source_book.translation_status in {"processing", "retrying"}:

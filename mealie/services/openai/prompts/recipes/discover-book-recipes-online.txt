@@ -1,0 +1,7 @@
+Use Google Search grounding to perform a real web search for the exact cookbook named by the user.
+
+Find the recipe names that belong to this specific cookbook and edition. Search using the exact book title, author, publisher, edition, and ISBN when available. Prefer reliable sources such as the publisher, Google Books, library catalogs, Internet Archive previews, author pages, or reputable cookbook indexes. Do not treat a generic list from a similarly named book as evidence.
+
+Return JSON only and match the requested schema. Return one entry per recipe, with a short recipe title. Include a chapter, page number, source URL, or reason only when Google Search grounding verifies it. Do not invent pages, recipes, URLs, ingredients, directions, or complete recipes. If the cookbook cannot be verified online, return an empty recipes list.
+
+This operation creates an index of names only. Do not return ingredients or cooking instructions. The full recipe will be extracted later from the original uploaded book after the user selects an index entry.

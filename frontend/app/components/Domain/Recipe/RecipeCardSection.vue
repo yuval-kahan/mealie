@@ -243,6 +243,65 @@
         @toggle-dense-view="toggleMobileCards()"
       />
     </v-row>
+    <div
+      v-if="showRecipeGroups"
+      class="recipe-group-expansion-controls d-flex align-center flex-wrap ga-2 mb-2"
+    >
+      <v-btn
+        size="small"
+        variant="outlined"
+        :icon="$vuetify.display.xs"
+        :disabled="nestedRecipeGroupKeys.length === 0"
+        :title="$t('recipe.open-subcategories')"
+        :aria-label="$t('recipe.open-subcategories')"
+        @click="openRecipeSubcategories"
+      >
+        <v-icon :start="!$vuetify.display.xs">
+          {{ $globals.icons.chevronDown }}
+        </v-icon>
+        {{ $vuetify.display.xs ? null : $t("recipe.open-subcategories") }}
+      </v-btn>
+      <v-btn
+        size="small"
+        variant="outlined"
+        :icon="$vuetify.display.xs"
+        :disabled="nestedRecipeGroupKeys.length === 0"
+        :title="$t('recipe.collapse-subcategories')"
+        :aria-label="$t('recipe.collapse-subcategories')"
+        @click="collapseRecipeSubcategories"
+      >
+        <v-icon :start="!$vuetify.display.xs">
+          {{ $globals.icons.chevronRight }}
+        </v-icon>
+        {{ $vuetify.display.xs ? null : $t("recipe.collapse-subcategories") }}
+      </v-btn>
+      <v-btn
+        size="small"
+        variant="outlined"
+        :icon="$vuetify.display.xs"
+        :title="$t('recipe.open-all-groups')"
+        :aria-label="$t('recipe.open-all-groups')"
+        @click="openAllRecipeGroups"
+      >
+        <v-icon :start="!$vuetify.display.xs">
+          {{ $globals.icons.chevronDown }}
+        </v-icon>
+        {{ $vuetify.display.xs ? null : $t("recipe.open-all-groups") }}
+      </v-btn>
+      <v-btn
+        size="small"
+        variant="outlined"
+        :icon="$vuetify.display.xs"
+        :title="$t('recipe.collapse-all-groups')"
+        :aria-label="$t('recipe.collapse-all-groups')"
+        @click="collapseAllRecipeGroups"
+      >
+        <v-icon :start="!$vuetify.display.xs">
+          {{ $globals.icons.chevronRight }}
+        </v-icon>
+        {{ $vuetify.display.xs ? null : $t("recipe.collapse-all-groups") }}
+      </v-btn>
+    </div>
     <v-sheet
       v-if="bulkDeleteMode"
       class="recipe-bulk-selection-bar d-flex align-center flex-wrap ga-2 pa-2 mb-3"
@@ -293,12 +352,14 @@
     <div v-if="recipes && ready">
       <div class="mt-2">
         <template
-          v-for="group in recipeGroups"
+          v-for="group in visibleRecipeGroups"
           :key="group.key"
         >
           <div
-            v-if="showRecipeGroups"
+            v-if="showRecipeGroups && !group.hideHeader"
             class="recipe-book-group-row"
+            :class="{ 'recipe-book-group-row--nested': group.depth > 0 }"
+            :style="{ '--recipe-group-depth': group.depth }"
           >
             <button
               type="button"
@@ -311,7 +372,7 @@
               </v-icon>
               <v-icon>{{ groupIcon(group) }}</v-icon>
               <strong>{{ group.title }}</strong>
-              <span>{{ group.recipes.length }}</span>
+              <span>{{ group.recipeCount ?? group.recipes.length }}</span>
             </button>
             <div v-if="group.bookId" class="recipe-book-group-actions">
               <v-btn
@@ -360,9 +421,25 @@
               </v-btn>
             </div>
           </div>
+          <div
+            v-if="showRecipeGroups && group.isDirectRecipesGroup"
+            class="recipe-group-direct-recipes-separator"
+          >
+            <span>{{ group.title }}</span>
+          </div>
           <v-expand-transition>
-            <div v-show="!showRecipeGroups || isRecipeGroupExpanded(group.key)">
+            <div v-show="!showRecipeGroups || group.hideHeader || isRecipeGroupExpanded(group.key)">
               <v-row v-if="!useMobileCards">
+                <v-col
+                  v-for="candidate in group.indexCandidates || []"
+                  :key="`index-${candidate.id}`"
+                  :sm="6"
+                  :md="6"
+                  :lg="4"
+                  :xl="3"
+                >
+                  <RecipeIndexCandidateCard :candidate="candidate" />
+                </v-col>
                 <v-col
                   v-for="recipe in group.recipes"
                   :key="recipe.id!"
@@ -392,7 +469,7 @@
                     @bulk-delete-requested="startBulkDelete"
                     @toggle-bulk-selected="toggleBulkSelected"
                     @renamed="$emit('renamed', $event)"
-                    @section-updated="loadRecipePage"
+                    @section-updated="scheduleRecipeRefresh"
                   />
                 </v-col>
               </v-row>
@@ -400,6 +477,17 @@
                 v-else
                 density="comfortable"
               >
+                <v-col
+                  v-for="candidate in group.indexCandidates || []"
+                  :key="`index-mobile-${candidate.id}`"
+                  cols="12"
+                  :sm="singleColumn ? '12' : '12'"
+                  :md="singleColumn ? '12' : '6'"
+                  :lg="singleColumn ? '12' : '4'"
+                  :xl="singleColumn ? '12' : '3'"
+                >
+                  <RecipeIndexCandidateCard :candidate="candidate" />
+                </v-col>
                 <v-col
                   v-for="recipe in group.recipes"
                   :key="recipe.id!"
@@ -430,7 +518,7 @@
                     @bulk-delete-requested="startBulkDelete"
                     @toggle-bulk-selected="toggleBulkSelected"
                     @renamed="$emit('renamed', $event)"
-                    @section-updated="loadRecipePage"
+                    @section-updated="scheduleRecipeRefresh"
                   />
                 </v-col>
               </v-row>
@@ -459,13 +547,14 @@
 <script setup lang="ts">
 import RecipeCard from "./RecipeCard.vue";
 import RecipeCardMobile from "./RecipeCardMobile.vue";
+import RecipeIndexCandidateCard from "./RecipeIndexCandidateCard.vue";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import { useLazyRecipes } from "~/composables/recipes";
 import type { Recipe, RecipeCategory } from "~/lib/api/types/recipe";
 import { useUserExperiencePreferences, useUserSortPreferences } from "~/composables/use-users/preferences";
 import type { RecipeSearchQuery } from "~/lib/api/user/recipes/recipe";
 import { useUserApi } from "~/composables/api/api-client";
-import type { UploadedBook, UploadedBookRecipeSource } from "~/lib/api/types/uploaded-book";
+import type { UploadedBook, UploadedBookRecipeCandidate, UploadedBookRecipeSource } from "~/lib/api/types/uploaded-book";
 import { usePersistedListPageSize } from "~/composables/use-list-pagination";
 import { alert } from "~/composables/use-toast";
 import { useCategoryStore } from "~/composables/store/use-category-store";
@@ -568,6 +657,8 @@ const totalRecipes = ref(0);
 const ready = ref(false);
 const loading = ref(false);
 let recipeRequestId = 0;
+let organizerRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+let recipeRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
 interface RecipeDisplayGroup {
   key: string;
@@ -576,17 +667,21 @@ interface RecipeDisplayGroup {
   title: string;
   sourceName: string | null;
   recipes: Recipe[];
+  indexCandidates?: UploadedBookRecipeCandidate[];
+  parentCategoryId?: string | null;
+  children: RecipeDisplayGroup[];
+  depth: number;
+  hideHeader?: boolean;
+  isDirectRecipesGroup?: boolean;
+  recipeCount?: number;
 }
 
 const recipeGroupCategories = computed(() => recipeLocationCategories.value.filter(category => category.isRecipeGroup
   && (category.recipeGroupSection || "recipes") === props.section));
-const recipeGroupCategoryNames = computed(() => new Map(recipeGroupCategories.value
-  .filter(category => category.id)
-  .map(category => [category.id!, category.name])));
 
 const recipeGroups = computed<RecipeDisplayGroup[]>(() => {
   if (!props.groupByBook && !props.groupByCategory) {
-    return [{ key: "all", bookId: null, categoryId: null, title: props.title || "", sourceName: null, recipes: props.recipes }];
+    return [{ key: "all", bookId: null, categoryId: null, title: props.title || "", sourceName: null, recipes: props.recipes, children: [], depth: 0 }];
   }
 
   if (props.groupByCategory && recipeGroupCategories.value.length) {
@@ -594,47 +689,100 @@ const recipeGroups = computed<RecipeDisplayGroup[]>(() => {
       key: `category:${category.id || category.slug}`,
       bookId: null,
       categoryId: category.id || null,
-      title: i18n.t("recipe.recipes-in-category", {
-        category: category.parentCategoryId
-          ? `${recipeGroupCategoryNames.value.get(category.parentCategoryId) || i18n.t("recipe.recipe-category")} / ${category.name}`
-          : category.name,
-      }),
+      title: i18n.t("recipe.recipes-in-category", { category: category.name }),
       sourceName: null,
       recipes: [] as Recipe[],
-    })).sort((left, right) => left.title.localeCompare(right.title));
+      parentCategoryId: category.parentCategoryId || null,
+      children: [] as RecipeDisplayGroup[],
+      depth: 0,
+    }));
     const groupsById = new Map(groups.filter(group => group.categoryId).map(group => [group.categoryId!, group]));
+    const groupsByName = new Map<string, RecipeDisplayGroup>();
+    for (const category of recipeGroupCategories.value) {
+      const group = category.id ? groupsById.get(category.id) : null;
+      if (group) groupsByName.set(category.name.trim().toLocaleLowerCase(), group);
+    }
+    const categoryDepth = (group: { parentCategoryId?: string | null }) => {
+      let depth = 0;
+      let parentId = group.parentCategoryId || null;
+      const visited = new Set<string>();
+      while (parentId && !visited.has(parentId)) {
+        visited.add(parentId);
+        const parent = groupsById.get(parentId);
+        if (!parent) break;
+        depth++;
+        parentId = parent.parentCategoryId || null;
+      }
+      return depth;
+    };
+    const rootGroups: RecipeDisplayGroup[] = [];
+    for (const group of groups) {
+      const parent = group.parentCategoryId ? groupsById.get(group.parentCategoryId) : null;
+      if (parent && parent !== group) parent.children.push(group);
+      else rootGroups.push(group);
+    }
+    const sortGroups = (items: RecipeDisplayGroup[]) => {
+      items.sort((left, right) => left.title.localeCompare(right.title));
+      for (const item of items) sortGroups(item.children);
+    };
+    sortGroups(rootGroups);
     const ungrouped: Recipe[] = [];
 
     for (const recipe of props.recipes) {
-      let assigned = false;
-      for (const category of recipe.recipeCategory || []) {
-        if (!category.id) continue;
-        const group = groupsById.get(category.id);
-        if (!group) continue;
-        group.recipes.push(recipe);
-        assigned = true;
+      const matchingGroups = (recipe.recipeCategory || [])
+        .map((category) => {
+          const categoryName = category.name.trim().toLocaleLowerCase();
+          // A freshly-created group can briefly have a different serialized
+          // id between the recipe response and the group index. The name is
+          // the stable fallback during that synchronization window.
+          return (category.id ? groupsById.get(category.id) : null)
+            || groupsByName.get(categoryName)
+            || null;
+        })
+        .filter((group): group is RecipeDisplayGroup => Boolean(group));
+      const deepestDepth = matchingGroups.length
+        ? Math.max(...matchingGroups.map(group => categoryDepth(group)))
+        : -1;
+      const deepestGroups = matchingGroups.filter(group => categoryDepth(group) === deepestDepth);
+      if (deepestGroups.length) {
+        // A recipe may intentionally remain in its old group while also being
+        // moved/copied to a new group. Show it in every selected group at the
+        // same depth, while still keeping a child category exclusive of its
+        // parent category.
+        for (const group of deepestGroups) {
+          if (!group.recipes.some(item => item.id === recipe.id || item.slug === recipe.slug)) {
+            group.recipes.push(recipe);
+          }
+        }
       }
-      if (!assigned) ungrouped.push(recipe);
+      else {
+        ungrouped.push(recipe);
+      }
     }
 
     if (ungrouped.length) {
-      groups.push({
+      rootGroups.push({
         key: "category:unassigned",
         bookId: null,
         categoryId: null,
         title: i18n.t("recipe.recipes-without-custom-category"),
         sourceName: null,
         recipes: ungrouped,
+        children: [],
+        depth: 0,
       });
     }
-    return groups;
+    return rootGroups;
   }
 
   if (!props.groupByBook) {
-    return [{ key: "all", bookId: null, categoryId: null, title: props.title || "", sourceName: null, recipes: props.recipes }];
+    return [{ key: "all", bookId: null, categoryId: null, title: props.title || "", sourceName: null, recipes: props.recipes, children: [], depth: 0 }];
   }
 
   const bookNames = new Map(uploadedBooks.value.map(book => [book.id, book.name]));
+  const bookIndexCandidates = new Map(
+    uploadedBooks.value.map(book => [book.id, bookRecipeIndexCandidates(book)]),
+  );
   const groups = new Map<string, RecipeDisplayGroup>();
   const unlinked: Recipe[] = [];
 
@@ -660,10 +808,37 @@ const recipeGroups = computed<RecipeDisplayGroup[]>(() => {
         }),
         sourceName,
         recipes: [],
+        indexCandidates: [],
+        children: [],
+        depth: 0,
       };
       groups.set(bookId, group);
     }
     group.recipes.push(recipe);
+  }
+
+  // Catalog entries are persisted in uploaded-book metadata. They remain
+  // index-only records until the user imports the recipe pages, so they must
+  // never be represented as fake Recipe entities.
+  for (const [bookId, candidates] of bookIndexCandidates) {
+    if (!candidates.length) continue;
+    let group = groups.get(bookId);
+    if (!group) {
+      const sourceName = bookNames.get(bookId) || i18n.t("cookbook.cookbook");
+      group = {
+        key: `book:${bookId}`,
+        bookId,
+        categoryId: null,
+        title: i18n.t("recipe.recipes-from-book", { book: sourceName }),
+        sourceName,
+        recipes: [],
+        indexCandidates: [],
+        children: [],
+        depth: 0,
+      };
+      groups.set(bookId, group);
+    }
+    group.indexCandidates = candidates;
   }
 
   const result = Array.from(groups.values());
@@ -675,6 +850,8 @@ const recipeGroups = computed<RecipeDisplayGroup[]>(() => {
       title: i18n.t("recipe.recipes-not-from-book"),
       sourceName: null,
       recipes: unlinked,
+      children: [],
+      depth: 0,
     });
   }
   return result;
@@ -683,6 +860,55 @@ const showRecipeGroups = computed(() => {
   return (props.groupByBook || (props.groupByCategory && recipeGroupCategories.value.length > 0))
     && recipeGroups.value.length > 0;
 });
+function flattenVisibleRecipeGroups(groups: RecipeDisplayGroup[], depth = 0): RecipeDisplayGroup[] {
+  const visible: RecipeDisplayGroup[] = [];
+  for (const group of groups) {
+    const hasChildren = group.children.length > 0;
+    visible.push({
+      ...group,
+      recipes: hasChildren ? [] : group.recipes,
+      recipeCount: group.recipes.length + (group.indexCandidates?.length || 0),
+      depth,
+    });
+    if (group.children.length && isRecipeGroupExpanded(group.key)) {
+      visible.push(...flattenVisibleRecipeGroups(group.children, depth + 1));
+      // Keep recipes assigned directly to a parent category after all of its children.
+      if (group.recipes.length) {
+        visible.push({
+          ...group,
+          key: `${group.key}:direct`,
+          title: i18n.t("recipe.recipes-without-subcategory"),
+          recipes: group.recipes,
+          children: [],
+          depth: depth + 1,
+          hideHeader: true,
+          isDirectRecipesGroup: true,
+          recipeCount: group.recipes.length,
+        });
+      }
+    }
+  }
+  return visible;
+}
+const visibleRecipeGroups = computed(() => showRecipeGroups.value
+  ? flattenVisibleRecipeGroups(recipeGroups.value)
+  : recipeGroups.value);
+function flattenRecipeGroupKeys(groups: RecipeDisplayGroup[]): string[] {
+  return groups.flatMap(group => [group.key, ...flattenRecipeGroupKeys(group.children)]);
+}
+const recipeGroupKeys = computed(() => flattenRecipeGroupKeys(recipeGroups.value));
+function flattenNestedRecipeGroupKeys(groups: RecipeDisplayGroup[]): string[] {
+  return groups.flatMap(group => [
+    ...group.children.flatMap(child => [child.key, ...flattenNestedRecipeGroupKeys(child.children)]),
+  ]);
+}
+const nestedRecipeGroupKeys = computed(() => flattenNestedRecipeGroupKeys(recipeGroups.value));
+function flattenSubcategoryExpansionKeys(groups: RecipeDisplayGroup[]): string[] {
+  return groups.flatMap(group => group.children.length
+    ? [group.key, ...flattenRecipeGroupKeys(group.children)]
+    : []);
+}
+const subcategoryExpansionKeys = computed(() => flattenSubcategoryExpansionKeys(recipeGroups.value));
 const allVisibleRecipesSelected = computed(() => {
   return props.recipes.length > 0 && props.recipes.every(recipe => Boolean(recipe.slug) && selectedRecipeSlugs.value.has(recipe.slug!));
 });
@@ -713,7 +939,7 @@ watch(
       return;
     }
     if (behavior === "expanded") {
-      expandedRecipeGroups.value = new Set(recipeGroups.value.map(group => group.key));
+      expandedRecipeGroups.value = new Set(recipeGroupKeys.value);
       return;
     }
     // Keep saved keys even while the async recipe/category request is still empty.
@@ -724,11 +950,11 @@ watch(
 );
 
 watch(
-  () => recipeGroups.value.map(group => group.key).join("|"),
+  () => recipeGroupKeys.value.join("|"),
   () => {
     if (loadedExpansionScope !== expansionStorageScope.value) return;
     if (collapseBehavior.value === "expanded") {
-      expandedRecipeGroups.value = new Set(recipeGroups.value.map(group => group.key));
+      expandedRecipeGroups.value = new Set(recipeGroupKeys.value);
     }
     else if (collapseBehavior.value === "collapsed") {
       expandedRecipeGroups.value = new Set();
@@ -784,6 +1010,12 @@ async function fetchRecipes() {
 }
 
 onMounted(async () => {
+  if (import.meta.client && isOwnGroup.value) {
+    window.addEventListener("mealie:recipes-updated", scheduleRecipeRefresh);
+  }
+  if (import.meta.client && isOwnGroup.value && props.groupByCategory) {
+    window.addEventListener("mealie:organizers-updated", scheduleOrganizerRefresh);
+  }
   if (isOwnGroup.value && props.groupByBook) {
     void loadUploadedBooks();
   }
@@ -804,14 +1036,105 @@ onMounted(async () => {
   }
 });
 
+// The auth state can finish hydrating after this component mounts. In that
+// case the initial request is public and the private recipe-group index is
+// never loaded unless we react to the transition explicitly.
+watch(isOwnGroup, async (own) => {
+  if (!own) return;
+  if (import.meta.client) {
+    window.addEventListener("mealie:recipes-updated", scheduleRecipeRefresh);
+  }
+  if (!props.groupByCategory) return;
+  if (import.meta.client) {
+    window.addEventListener("mealie:organizers-updated", scheduleOrganizerRefresh);
+  }
+  await loadRecipeGroupCategories();
+  await loadRecipePage();
+});
+
+onBeforeUnmount(() => {
+  if (organizerRefreshTimer) {
+    clearTimeout(organizerRefreshTimer);
+    organizerRefreshTimer = null;
+  }
+  if (recipeRefreshTimer) {
+    clearTimeout(recipeRefreshTimer);
+    recipeRefreshTimer = null;
+  }
+  if (import.meta.client) {
+    window.removeEventListener("mealie:recipes-updated", scheduleRecipeRefresh);
+    window.removeEventListener("mealie:organizers-updated", scheduleOrganizerRefresh);
+  }
+});
+
 async function loadRecipeGroupCategories() {
   const { data, error } = await api.categories.getRecipeGroups();
-  if (!error && data) {
+  if (!error && data?.length) {
     recipeLocationCategories.value = data;
+    mergeRecipeGroupCategoriesFromRecipes();
     return;
   }
+
+  // Keep the category view working with older API images that do not yet
+  // expose /categories/recipe-groups. The regular categories endpoint still
+  // contains the recipe-group metadata and is a safe compatibility fallback.
+  const { data: allCategories } = await api.categories.getAll(1, -1);
+  const recipeGroups = (allCategories?.items || []).filter(category => category.isRecipeGroup);
+  if (recipeGroups.length) {
+    recipeLocationCategories.value = recipeGroups;
+    mergeRecipeGroupCategoriesFromRecipes();
+    return;
+  }
+
   await categoryStore.actions.refresh();
   recipeLocationCategories.value = [...categoryStore.store.value];
+  mergeRecipeGroupCategoriesFromRecipes();
+}
+
+watch(
+  () => props.recipes,
+  (recipes) => {
+    if (props.groupByCategory) mergeRecipeGroupCategoriesFromRecipes(recipes);
+  },
+);
+
+function mergeRecipeGroupCategoriesFromRecipes(recipes: Recipe[] = props.recipes) {
+  if (!props.groupByCategory) return;
+
+  const categoriesById = new Map(
+    recipeLocationCategories.value
+      .filter(category => category.id)
+      .map(category => [category.id!, category]),
+  );
+  for (const recipe of recipes) {
+    for (const category of recipe.recipeCategory || []) {
+      if (!category.id || !category.isRecipeGroup) continue;
+      if ((category.recipeGroupSection || "recipes") !== props.section) continue;
+      if (!categoriesById.has(category.id)) categoriesById.set(category.id, category);
+    }
+  }
+  recipeLocationCategories.value = [...categoriesById.values()];
+}
+
+function scheduleOrganizerRefresh() {
+  if (!import.meta.client || !isOwnGroup.value || !props.groupByCategory) return;
+  if (organizerRefreshTimer) clearTimeout(organizerRefreshTimer);
+  organizerRefreshTimer = setTimeout(() => {
+    organizerRefreshTimer = null;
+    void (async () => {
+      await loadRecipeGroupCategories();
+      await loadRecipePage();
+    })();
+  }, 0);
+}
+
+function scheduleRecipeRefresh() {
+  if (!import.meta.client || !isOwnGroup.value) return;
+  if (recipeRefreshTimer) clearTimeout(recipeRefreshTimer);
+  recipeRefreshTimer = setTimeout(() => {
+    recipeRefreshTimer = null;
+    void loadRecipePage();
+  }, 0);
 }
 
 async function loadUploadedBooks() {
@@ -829,11 +1152,7 @@ function isRecipeGroupExpanded(key: string) {
   return expandedRecipeGroups.value.has(key);
 }
 
-function toggleRecipeGroup(key: string) {
-  const next = new Set(expandedRecipeGroups.value);
-  if (next.has(key)) next.delete(key);
-  else next.add(key);
-  expandedRecipeGroups.value = next;
+function rememberRecipeGroupExpansion(next: Set<string>) {
   if (collapseBehavior.value === "remember") {
     const scope = expansionStorageScope.value;
     const entries = Object.entries(expandedRecipeGroupStorage.value)
@@ -843,10 +1162,73 @@ function toggleRecipeGroup(key: string) {
   }
 }
 
+function setExpandedRecipeGroups(keys: Iterable<string>) {
+  const validKeys = new Set(recipeGroupKeys.value);
+  const next = new Set([...keys].filter(key => validKeys.has(key)));
+  expandedRecipeGroups.value = next;
+  rememberRecipeGroupExpansion(next);
+}
+
+function toggleRecipeGroup(key: string) {
+  const next = new Set(expandedRecipeGroups.value);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  setExpandedRecipeGroups(next);
+}
+
+function openRecipeSubcategories() {
+  setExpandedRecipeGroups(new Set([...expandedRecipeGroups.value, ...subcategoryExpansionKeys.value]));
+}
+
+function collapseRecipeSubcategories() {
+  const nestedKeys = new Set(nestedRecipeGroupKeys.value);
+  setExpandedRecipeGroups([...expandedRecipeGroups.value].filter(key => !nestedKeys.has(key)));
+}
+
+function openAllRecipeGroups() {
+  setExpandedRecipeGroups(recipeGroupKeys.value);
+}
+
+function collapseAllRecipeGroups() {
+  setExpandedRecipeGroups([]);
+}
+
 function groupIcon(group: RecipeDisplayGroup) {
   if (group.bookId) return $globals.icons.book;
   if (group.categoryId) return $globals.icons.categories;
   return $globals.icons.silverwareForkKnife;
+}
+
+function bookRecipeIndexCandidates(book: UploadedBook): UploadedBookRecipeCandidate[] {
+  const raw = book.bookMetadata?.recipe_catalog_candidates;
+  if (!Array.isArray(raw)) return [];
+
+  const optionalPage = (value: unknown) => {
+    const page = Number(value);
+    return Number.isFinite(page) && page >= 1 ? Math.floor(page) : null;
+  };
+
+  return raw
+    .map((candidate) => {
+      const value = candidate as unknown as Record<string, unknown>;
+      const id = String(value.id || "").trim();
+      const title = String(value.title || "").trim();
+      const importedRecipeSlug = String(value.imported_recipe_slug || value.importedRecipeSlug || "").trim();
+      if (!id || !title || importedRecipeSlug) return null;
+      return {
+        id,
+        title,
+        sourceTitle: String(value.source_title || value.sourceTitle || title),
+        chapter: value.chapter ? String(value.chapter) : null,
+        source: value.source === "internet" ? "internet" : "book",
+        sourceUrl: String(value.source_url || value.sourceUrl || "").trim() || null,
+        pageStart: optionalPage(value.page_start ?? value.pageStart),
+        pageEnd: optionalPage(value.page_end ?? value.pageEnd),
+        reason: value.reason ? String(value.reason) : null,
+        importedRecipeSlug: null,
+      } satisfies UploadedBookRecipeCandidate;
+    })
+    .filter((candidate): candidate is UploadedBookRecipeCandidate => Boolean(candidate));
 }
 
 async function handleRecipeCategoryCreated() {
@@ -1044,7 +1426,9 @@ async function loadRecipePage() {
     const result = await fetchRecipes();
     if (requestId !== recipeRequestId) return;
     totalRecipes.value = result?.total ?? 0;
-    emit(REPLACE_RECIPES_EVENT, result?.items ?? []);
+    const items = result?.items ?? [];
+    mergeRecipeGroupCategoriesFromRecipes(items);
+    emit(REPLACE_RECIPES_EVENT, items);
   }
   finally {
     if (requestId === recipeRequestId) {
@@ -1173,6 +1557,13 @@ function toggleMobileCards() {
   width: 100%;
 }
 
+.recipe-book-group-row--nested {
+  border-block-start: 0;
+  margin-block-start: 0;
+  margin-inline-start: calc(var(--recipe-group-depth, 0) * 24px);
+  width: calc(100% - (var(--recipe-group-depth, 0) * 24px));
+}
+
 .recipe-book-group {
   align-items: center;
   background: transparent;
@@ -1203,6 +1594,28 @@ function toggleMobileCards() {
   display: flex;
   flex: 0 0 auto;
   padding-inline: 2px;
+}
+
+.recipe-group-expansion-controls {
+  border-block-start: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  padding-block-start: 8px;
+}
+
+.recipe-group-direct-recipes-separator {
+  align-items: center;
+  color: rgba(var(--v-theme-on-surface), 0.58);
+  display: flex;
+  font-size: 0.82rem;
+  gap: 12px;
+  margin: 10px 0 4px;
+}
+
+.recipe-group-direct-recipes-separator::before,
+.recipe-group-direct-recipes-separator::after {
+  background: rgba(var(--v-theme-on-surface), 0.16);
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
 }
 
 .recipe-bulk-selection-bar {

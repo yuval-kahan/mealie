@@ -1,6 +1,7 @@
 const STORAGE_KEYS = {
   mealieUrl: "mealieUrl",
   extractMode: "extractMode",
+  categoryAssignmentMode: "categoryAssignmentMode",
   recipeGroupCategoryId: "recipeGroupCategoryId",
   interfaceLanguage: "interfaceLanguage",
   translateLanguage: "translateLanguage",
@@ -28,6 +29,7 @@ const LEGACY_DEFAULT_MEALIE_URL = "http://localhost:3000";
 const DEFAULT_SETTINGS = {
   mealieUrl: "http://localhost:9925",
   extractMode: "auto",
+  categoryAssignmentMode: "auto",
   recipeGroupCategoryId: "",
   interfaceLanguage: "auto",
   translateLanguage: "he-IL",
@@ -64,6 +66,7 @@ const extensionI18n = globalThis.MealieExtensionI18n;
 const elements = {
   mealieUrl: document.getElementById("mealieUrl"),
   extractMode: document.getElementById("extractMode"),
+  categoryAssignmentMode: document.getElementById("categoryAssignmentMode"),
   recipeGroupField: document.getElementById("recipeGroupField"),
   recipeGroupCategory: document.getElementById("recipeGroupCategory"),
   interfaceLanguage: document.getElementById("interfaceLanguage"),
@@ -123,6 +126,7 @@ async function init() {
   [
     elements.mealieUrl,
     elements.extractMode,
+    elements.categoryAssignmentMode,
     elements.recipeGroupCategory,
     elements.interfaceLanguage,
     elements.translateLanguage,
@@ -158,6 +162,7 @@ async function init() {
   elements.saveVideoSettings.addEventListener("click", handleSaveVideoSettings);
   elements.connectMealie.addEventListener("click", handleConnectMealie);
   elements.extractMode.addEventListener("change", updateModeText);
+  elements.categoryAssignmentMode.addEventListener("change", updateModeText);
   elements.recipeGroupCategory.addEventListener("change", () => {
     selectedRecipeGroupCategoryId = elements.recipeGroupCategory.value;
   });
@@ -235,6 +240,7 @@ function languageDisplayName(code, displayNames) {
 function applySettings(settings) {
   elements.mealieUrl.value = settings.mealieUrl || DEFAULT_SETTINGS.mealieUrl;
   elements.extractMode.value = settings.extractMode || DEFAULT_SETTINGS.extractMode;
+  elements.categoryAssignmentMode.value = settings.categoryAssignmentMode || DEFAULT_SETTINGS.categoryAssignmentMode;
   selectedRecipeGroupCategoryId = settings.recipeGroupCategoryId || "";
   elements.interfaceLanguage.value = settings.interfaceLanguage || DEFAULT_SETTINGS.interfaceLanguage;
   elements.translateLanguage.value = settings.translateLanguage || DEFAULT_SETTINGS.translateLanguage;
@@ -294,6 +300,7 @@ function currentSettings() {
   return {
     mealieUrl: normalizeBaseUrl(elements.mealieUrl.value || DEFAULT_SETTINGS.mealieUrl),
     extractMode: elements.extractMode.value || DEFAULT_SETTINGS.extractMode,
+    categoryAssignmentMode: elements.categoryAssignmentMode.value || DEFAULT_SETTINGS.categoryAssignmentMode,
     recipeGroupCategoryId: elements.recipeGroupCategory.value || selectedRecipeGroupCategoryId || "",
     interfaceLanguage: elements.interfaceLanguage.value || DEFAULT_SETTINGS.interfaceLanguage,
     translateLanguage: elements.translateLanguage.value,
@@ -342,7 +349,10 @@ function categoryValue(category, snakeName, camelName, fallback = null) {
 function renderRecipeGroupCategories() {
   const mode = elements.extractMode.value;
   const section = mode === "sauce" ? "sauce" : "recipes";
-  elements.recipeGroupField.hidden = mode === "article";
+  elements.recipeGroupField.hidden = mode === "article" || elements.categoryAssignmentMode.value !== "auto";
+  if (elements.categoryAssignmentMode.value === "manual") {
+    selectedRecipeGroupCategoryId = "";
+  }
 
   const byId = new Map(recipeGroupCategories.map(category => [String(category.id), category]));
   const options = recipeGroupCategories
@@ -1003,6 +1013,7 @@ async function createRecipeFromBrowserPage(settings, extraction) {
       create_shopping_list: settings.createShoppingList,
       organize_shopping_list_with_ai: settings.organizeShoppingList,
       recipe_section: settings.extractMode === "sauce" ? "sauce" : "recipes",
+      category_assignment_mode: settings.categoryAssignmentMode === "manual" ? "manual" : "auto",
       recipe_group_category_id: settings.recipeGroupCategoryId || null,
     }),
   });
@@ -1043,6 +1054,7 @@ async function createArticleFromBrowserPage(settings, extraction) {
       include_mise_en_place: settings.includeMiseEnPlace !== false,
       include_item_images: settings.includeItemImages !== false,
       recipe_section: settings.extractMode === "sauce" ? "sauce" : "recipes",
+      category_assignment_mode: settings.categoryAssignmentMode === "manual" ? "manual" : "auto",
       recipe_group_category_id: settings.recipeGroupCategoryId || null,
     }),
   });

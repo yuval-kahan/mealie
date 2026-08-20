@@ -37,6 +37,7 @@ from mealie.schema.household.household import HouseholdInDB
 from mealie.schema.openai.recipe import (
     OpenAIBookRecipeCatalogParse,
     OpenAIBookRecipeChunkParse,
+    OpenAIBookOnlineRecipeCatalogParse,
     OpenAIBookRecipeSearchPlan,
     OpenAIBookTranslationChunkParse,
     OpenAIRecipe,
@@ -825,9 +826,17 @@ class UploadedBookRecipeExtractor(BaseService):
         query: str = "",
         target_language: str = "Hebrew",
         refresh: bool = False,
+        internet_only: bool = False,
     ) -> dict:
         requested_book = self._get_book(book_id)
         book = self._catalog_source_book(requested_book)
+        if internet_only:
+            return await self.discover_online_recipe_catalog(
+                requested_book,
+                target_language=target_language,
+                query=query,
+                refresh=refresh,
+            )
         normalized_query = self._catalog_text_key(query)
         plan: OpenAIBookRecipeSearchPlan | None = None
         plan_warning: str | None = None
@@ -891,6 +900,11 @@ class UploadedBookRecipeExtractor(BaseService):
             for candidate in metadata.get("recipe_catalog_candidates", [])
             if isinstance(candidate, dict) and candidate.get("id")
         }
+        prior_online_candidates = [
+            candidate
+            for candidate in prior_candidates.values()
+            if candidate.get("source") == "internet"
+        ]
         raw_imported_recipes = metadata.get("recipe_catalog_imported", {})
         if not isinstance(raw_imported_recipes, dict):
             raw_imported_recipes = {}
@@ -939,7 +953,7 @@ class UploadedBookRecipeExtractor(BaseService):
                 }
             )
 
-        metadata["recipe_catalog_candidates"] = candidates
+        metadata["recipe_catalog_candidates"] = [*candidates, *prior_online_candidates]
         metadata["recipe_catalog_last_query"] = query
         metadata["recipe_catalog_generated_at"] = datetime.now(UTC).isoformat()
         book.book_metadata_json = json.dumps(metadata, ensure_ascii=False)
@@ -948,10 +962,133 @@ class UploadedBookRecipeExtractor(BaseService):
             "book_id": requested_book.id,
             "query": query,
             "source": source,
-            "candidates": candidates,
+            "candidates": [*candidates, *prior_online_candidates],
             "generated_at": metadata["recipe_catalog_generated_at"],
             "used_ai": used_ai,
             "warning": warning,
+        }
+
+    async def discover_online_recipe_catalog(
+        self,
+        requested_book: UploadedBook,
+        *,
+        target_language: str = "Hebrew",
+        query: str = "",
+        refresh: bool = False,
+    ) -> dict:
+        """Find recipe names through Gemini Google Search grounding.
+
+        The result is an index only. It never creates recipe records and can
+        only be imported after pages from the original book are selected.
+        """
+
+        book = self._catalog_source_book(requested_book)
+        metadata = self._book_metadata(book)
+        cached_candidates = [
+            candidate
+            for candidate in metadata.get("recipe_catalog_candidates", [])
+            if isinstance(candidate, dict) and candidate.get("source") == "internet"
+        ]
+        normalized_query = self._catalog_text_key(query)
+        if (
+            not refresh
+            and cached_candidates
+            and self._catalog_text_key(metadata.get("recipe_catalog_last_query")) == normalized_query
+        ):
+            return {
+                "book_id": requested_book.id,
+                "query": query,
+                "source": "internet",
+                "candidates": cached_candidates,
+                "generated_at": metadata.get("recipe_catalog_generated_at"),
+                "used_ai": True,
+                "warning": None,
+            }
+
+        openai_service = OpenAIService(self.repos)
+        provider = openai_service.default_provider
+        if provider is None or not openai_service.provider_settings or not openai_service.provider_settings.ai_enabled:
+            raise ValueError("Online recipe indexing requires an enabled Google Gemini provider")
+        if not OpenAIService._is_gemini_provider_data(provider):
+            raise ValueError("Online recipe indexing requires Google Gemini with Google Search grounding")
+
+        prompt = openai_service.get_prompt("recipes.discover-book-recipes-online")
+        message = (
+            f"Cookbook title: {book.name}\n"
+            f"Original file name: {book.original_file_name}\n"
+            f"Requested answer language: {target_language}\n"
+            f"Recipe filter: {query.strip() or '[all recipes in this cookbook]'}\n"
+            "Return only recipes that belong to this exact cookbook, not similar recipes from other books."
+        )
+        response = await openai_service.get_google_grounded_response(
+            prompt,
+            message,
+            response_schema=OpenAIBookOnlineRecipeCatalogParse,
+            provider=provider,
+        )
+        if response is None:
+            raise ValueError("Gemini returned no online recipe index")
+
+        raw_imported_recipes = metadata.get("recipe_catalog_imported", {})
+        imported_recipes = raw_imported_recipes if isinstance(raw_imported_recipes, dict) else {}
+        existing_book_candidates = [
+            candidate
+            for candidate in metadata.get("recipe_catalog_candidates", [])
+            if isinstance(candidate, dict) and candidate.get("source", "book") != "internet"
+        ]
+        candidates: list[dict] = []
+        seen: set[tuple[str, str]] = set()
+        for online_candidate in response.recipes:
+            title = " ".join(online_candidate.title.split()).strip()
+            if not title:
+                continue
+            source_url = (online_candidate.source_url or "").strip() or None
+            key = (self._catalog_text_key(title), self._catalog_text_key(source_url))
+            if key in seen:
+                continue
+            seen.add(key)
+            candidate_id = "internet-" + hashlib.sha256(
+                f"{book.id}|{title}|{source_url or ''}".encode("utf-8", errors="ignore")
+            ).hexdigest()[:24]
+            candidates.append(
+                {
+                    "id": candidate_id,
+                    "title": title,
+                    "source_title": title,
+                    "chapter": online_candidate.chapter,
+                    "source": "internet",
+                    "source_url": source_url,
+                    "page_start": online_candidate.page_start,
+                    "page_end": online_candidate.page_end or online_candidate.page_start,
+                    "reason": online_candidate.reason,
+                    "imported_recipe_slug": imported_recipes.get(candidate_id),
+                }
+            )
+            if len(candidates) >= 500:
+                break
+
+        if not candidates:
+            raise ValueError("Gemini did not find verified recipe names for this cookbook")
+
+        metadata["recipe_catalog_candidates"] = [*existing_book_candidates, *candidates]
+        metadata["recipe_catalog_source"] = "internet"
+        metadata["recipe_catalog_last_query"] = query
+        metadata["recipe_catalog_generated_at"] = datetime.now(UTC).isoformat()
+        metadata["recipe_catalog_online_search"] = {
+            "provider": provider.name or provider.model,
+            "grounding": "google_search",
+            "target_language": target_language,
+        }
+        book.book_metadata_json = json.dumps(metadata, ensure_ascii=False)
+        self._save_book(book)
+        return {
+            "book_id": requested_book.id,
+            "query": query,
+            "source": "internet",
+            "candidates": candidates,
+            "generated_at": metadata["recipe_catalog_generated_at"],
+            "used_ai": True,
+            "warning": None,
         }
 
     @staticmethod

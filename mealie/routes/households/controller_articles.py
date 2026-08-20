@@ -285,6 +285,7 @@ class ArticlesController(BaseUserController):
             url=data.url,
             source_url=data.url,
             translate_language=data.translate_language,
+            category_assignment_mode=data.category_assignment_mode,
             create_recipe_if_present=data.create_recipe_if_present,
             create_shopping_list=data.create_shopping_list,
             organize_shopping_list_with_ai=data.organize_shopping_list_with_ai,
@@ -327,7 +328,7 @@ class ArticlesController(BaseUserController):
             )
 
         recipe_group_category = None
-        if data.recipe_group_category_id:
+        if data.recipe_group_category_id and data.category_assignment_mode == "auto":
             category = self.repos.categories.get_one(data.recipe_group_category_id)
             if (
                 category is None
@@ -370,6 +371,7 @@ class ArticlesController(BaseUserController):
                         data.include_mise_en_place,
                         auto_image=not data.image_url,
                         recipe_section=data.recipe_section,
+                        category_assignment_mode=data.category_assignment_mode,
                     )
                     recipe = recipe_service.apply_source_metadata(
                         recipe,
